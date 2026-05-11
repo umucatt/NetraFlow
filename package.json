@@ -1,0 +1,110 @@
+{
+  "name": "netraflow",
+  "version": "0.9.1",
+  "private": true,
+  "productName": "NetraFlow",
+  "description": "资产变化记录工具",
+  "type": "module",
+  "main": "dist-electron/main.js",
+  "build": {
+    "appId": "com.netraflow.app",
+    "productName": "NetraFlow",
+    "icon": "public/icons/netraflow",
+    "asar": false,
+    "directories": {
+      "output": "release/installer"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "public/**/*",
+      "package.json",
+      "!**/userData/**",
+      "!**/Local Storage/**",
+      "!**/IndexedDB/**",
+      "!**/Cache/**",
+      "!**/Code Cache/**",
+      "!**/GPUCache/**",
+      "!**/Session Storage/**",
+      "!**/Preferences",
+      "!**/Local State",
+      "!**/blob_storage/**",
+      "!**/DawnCache/**",
+      "!**/DawnWebGPUCache/**",
+      "!**/Network/**",
+      "!**/Shared Dictionary/**",
+      "!release/**",
+      "!**/AppData/**"
+    ],
+    "extraMetadata": {
+      "main": "dist-electron/main.js"
+    },
+    "afterPack": "scripts/after-pack-installer.mjs",
+    "extraFiles": [
+      {
+        "from": "build/licenses",
+        "to": "licenses",
+        "filter": [
+          "LICENSE.NotoSansCJK.txt",
+          "LICENSE.NotoSansSymbols2.txt"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/icons/netraflow.ico",
+      "artifactName": "NetraFlow_${version}_Setup.${ext}",
+      "executableName": "NetraFlow",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "NetraFlow",
+      "uninstallDisplayName": "NetraFlow",
+      "installerIcon": "public/icons/netraflow.ico",
+      "uninstallerIcon": "public/icons/netraflow.ico",
+      "include": "build/installer/installer.nsh"
+    }
+  },
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev:renderer": "vite",
+    "dev:electron": "npm run clean:electron && tsc -p tsconfig.node.json && wait-on tcp:5174 && cross-env VITE_DEV_SERVER_URL=http://localhost:5174 electron .",
+    "clean:electron": "node -e \"require('node:fs').rmSync('dist-electron', { recursive: true, force: true })\"",
+    "build": "tsc --noEmit -p tsconfig.json && vite build && npm run clean:electron && tsc -p tsconfig.node.json",
+    "test": "node scripts/run-tests.mjs",
+    "start": "npm run build && electron .",
+    "dist": "node scripts/package-win.mjs",
+    "dist:installer": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false ELECTRON_BUILDER_DISABLE_BUILD_CACHE=true electron-builder --win nsis --x64 --publish never",
+    "dist:portable": "npm run build && node scripts/package-portable.mjs",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^9.0.1",
+    "cross-env": "^7.0.3",
+    "electron": "^37.0.0",
+    "electron-builder": "^26.0.12",
+    "typescript": "^5.8.3",
+    "vite": "^7.0.0",
+    "wait-on": "^8.0.1"
+  }
+}

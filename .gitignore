@@ -1,0 +1,53 @@
+node_modules/
+dist/
+dist-electron/
+release/
+out/
+.cache/
+tmp/
+temp/
+logs/
+*.log
+
+userData/
+**/userData/
+Local Storage/
+IndexedDB/
+Cache/
+Code Cache/
+GPUCache/
+Session Storage/
+blob_storage/
+DawnCache/
+DawnWebGPUCache/
+Network/
+Shared Dictionary/
+Preferences
+Local State
+netraflow-updater/
+
+.env
+.env.*
+*.key
+*.pem
+*.pfx
+*.p12
+
+*.exe
+*.zip
+*.7z
+*.rar
+*.msi
+*.dmg
+*.AppImage
+*.blockmap
+*.asar
+
+.DS_Store
+Thumbs.db
+
+.tools/
+.tmp-dev-check/
+.tmp-tests/
+.tmp-package-win/
+build-errors.tmp
