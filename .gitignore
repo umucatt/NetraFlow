@@ -1,0 +1,9 @@
+node_modules
+dist
+dist-electron
+.tools
+.tmp-dev-check
+.tmp-tests
+.tmp-package-win
+release
+build-errors.tmp
