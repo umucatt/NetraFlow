@@ -23,6 +23,7 @@ test('global settings chart labels keep only the intended chart controls', () =>
 
 test('global settings security and about copy match the current release text', () => {
   const appSource = readProjectFile('src/App.tsx');
+  const aboutPanelSource = readProjectFile('src/features/settings/AboutNetraFlowPanel.tsx');
   const packageJson = JSON.parse(readProjectFile('package.json')) as { version?: string };
   const packageLockJson = JSON.parse(readProjectFile('package-lock.json')) as {
     version?: string;
@@ -35,11 +36,99 @@ test('global settings security and about copy match the current release text', (
   assert.equal(packageLockJson.packages?.['']?.version, '0.9.2');
   assert.equal(appSource.includes('APP_VERSION'), true);
   assert.equal(appSource.includes('0.9.1'), false);
-  assert.equal(appSource.includes('获取信息'), true);
+  assert.equal(aboutPanelSource.includes('获取信息'), true);
   assert.equal(appSource.includes(GITHUB_RELEASES_URL), true);
-  assert.equal(appSource.includes('联系我'), false);
-  assert.equal(appSource.includes('碎碎念'), false);
-  assert.equal(appSource.includes('最后，也是很重要的一点'), false);
+  assert.equal(`${appSource}\n${aboutPanelSource}`.includes('联系我'), false);
+  assert.equal(`${appSource}\n${aboutPanelSource}`.includes('碎碎念'), false);
+  assert.equal(`${appSource}\n${aboutPanelSource}`.includes('最后，也是很重要的一点'), false);
+});
+
+test('page surfaces and right panel page frames stay scoped', () => {
+  const appSource = readProjectFile('src/App.tsx');
+  const stylesSource = readProjectFile('src/styles.css');
+  const searchPreviewPanelSource = readProjectFile('src/components/search/SearchPreviewPanel.tsx');
+  const accountActionsSource = readProjectFile('src/features/account/AccountActionsPanel.tsx');
+  const dangerActionsSource = readProjectFile('src/features/account/AccountDangerActionsPanel.tsx');
+  const globalSettingsPageSource = appSource.slice(
+    appSource.indexOf('const renderGlobalSettingsPage'),
+    appSource.indexOf('const renderGlobalSettingsNavigation')
+  );
+  const mainPanelSource = appSource.slice(
+    appSource.indexOf('const isSecuritySettingsPageDisabled'),
+    appSource.indexOf('{isFlashNoteOpen ? null : (')
+  );
+  const historyActionsSource = appSource.slice(
+    appSource.indexOf('const renderHistoryActions'),
+    appSource.indexOf('const renderSnapshotActions')
+  );
+  const snapshotActionsSource = appSource.slice(
+    appSource.indexOf('const renderSnapshotActions'),
+    appSource.indexOf('const renderArchivedActions')
+  );
+  const globalSettingsNavSource = appSource.slice(
+    appSource.indexOf('const renderGlobalSettingsNavigation'),
+    appSource.indexOf('const getRollupRiskLabel')
+  );
+  const rollupActionsSource = appSource.slice(
+    appSource.indexOf('const renderRollupImportActions'),
+    appSource.indexOf('const renderHomeActions')
+  );
+  const homeActionsSource = appSource.slice(
+    appSource.indexOf('const renderHomeActions'),
+    appSource.indexOf('const renderPasswordDisableConfirm')
+  );
+  const cardBlock = stylesSource.match(/\.card\s*\{[^}]*\}/s)?.[0] ?? '';
+  const rightActionPanelBlocks = Array.from(
+    stylesSource.matchAll(/\.right-action-panel\s*\{[^}]*\}/gs),
+    (match) => match[0]
+  ).join('\n');
+  const layerPanelBlock = stylesSource.slice(
+    stylesSource.indexOf('.layout-layer--left > section,'),
+    stylesSource.indexOf('.layout-layer--search .search-panel')
+  );
+  const modalBackdropBlock = stylesSource.match(/\.modal-backdrop\s*\{[^}]*\}/s)?.[0] ?? '';
+  const disabledLeftPageBlock =
+    stylesSource.match(/\.left-browse-panel\.example-mode-disabled-panel\s*\{[^}]*\}/s)?.[0] ??
+    '';
+
+  assert.equal(mainPanelSource.includes("globalSettingsSection === 'security' && isExampleMode"), true);
+  assert.equal(
+    mainPanelSource.includes('example-mode-disabled-panel example-mode-disabled-panel--left-page'),
+    true
+  );
+  assert.equal(globalSettingsPageSource.includes('example-mode-disabled-panel'), false);
+  assert.equal(
+    mainPanelSource.indexOf('renderGlobalSettingsPage()') <
+      mainPanelSource.indexOf('example-mode-disabled-panel__banner'),
+    true
+  );
+  assert.match(disabledLeftPageBlock, /border-radius: 28px;/);
+
+  assert.equal(homeActionsSource.includes('renderRightPanelPage('), true);
+  assert.equal(historyActionsSource.includes('renderRightPanelPage('), true);
+  assert.equal(snapshotActionsSource.includes('right-panel-page right-panel-page--snapshot'), true);
+  assert.equal(snapshotActionsSource.includes('right-panel-spacer'), false);
+  assert.equal(snapshotActionsSource.includes('返回历史记录'), true);
+  assert.equal(appSource.includes(['backup', 'Rem', 'inderPrompt'].join('')), false);
+  [
+    '\u5feb\u7167\u63d0\u9192',
+    '\u63d0\u9192\u5468\u671f',
+    '\u66f4\u6539\u63d0\u9192\u5468\u671f'
+  ].forEach((removedText) => assert.equal(appSource.includes(removedText), false));
+  assert.equal(globalSettingsNavSource.includes('renderRightPanelPage('), true);
+  assert.equal(rollupActionsSource.includes('right-panel-page--rollup-import-actions'), true);
+  assert.equal(searchPreviewPanelSource.includes('right-panel-page--search-preview'), true);
+  assert.equal(searchPreviewPanelSource.includes('RightPanelSection'), false);
+  assert.equal(accountActionsSource.includes('RightPanelSection'), false);
+  assert.equal(dangerActionsSource.includes('RightPanelSection'), false);
+
+  assert.equal(stylesSource.includes('--panel-bg: rgba('), false);
+  assert.equal(stylesSource.includes('--surface-bg: rgba('), false);
+  assert.equal(cardBlock.includes('backdrop-filter'), false);
+  assert.equal(rightActionPanelBlocks.includes('backdrop-filter'), false);
+  assert.equal(layerPanelBlock.includes('backdrop-filter'), false);
+  assert.equal(layerPanelBlock.includes('background: var(--panel-bg) !important;'), true);
+  assert.equal(modalBackdropBlock.includes('backdrop-filter'), true);
 });
 
 test('about GitHub link uses the shared external IPC allowlist without user-facing failure toast', () => {
@@ -109,12 +198,13 @@ test('home account type swatches and source icons are wired through source', () 
 
 test('chart visual text selection rules stay scoped away from legends', () => {
   const appSource = readProjectFile('src/App.tsx');
+  const allocationPanelSource = readProjectFile('src/features/charts/AssetAllocationPanel.tsx');
+  const trendPanelSource = readProjectFile('src/features/charts/AssetTrendPanel.tsx');
+  const legendSource = readProjectFile('src/features/charts/ChartLegendList.tsx');
   const stylesSource = readProjectFile('src/styles.css');
-  const legendStart = appSource.indexOf('function ChartLegendList');
-  const legendEnd = appSource.indexOf('const useMeasuredWidth');
-  const legendSource = appSource.slice(legendStart, legendEnd);
-  const svgTextNodeCount = appSource.match(/<text(?:\s|>)/g)?.length ?? 0;
-  const chartSvgTextClassCount = appSource.match(/chart-svg-text/g)?.length ?? 0;
+  const chartSource = [appSource, allocationPanelSource, trendPanelSource].join('\n');
+  const svgTextNodeCount = chartSource.match(/<text(?:\s|>)/g)?.length ?? 0;
+  const chartSvgTextClassCount = chartSource.match(/chart-svg-text/g)?.length ?? 0;
 
   assert.match(
     stylesSource,
@@ -130,7 +220,8 @@ test('chart visual text selection rules stay scoped away from legends', () => {
 });
 
 test('rollup prompt display stays selectable without touching paste input', () => {
-  const appSource = readProjectFile('src/App.tsx');
+  const promptPanelSource = readProjectFile('src/features/rollupImport/RollupPromptPanel.tsx');
+  const dropzoneSource = readProjectFile('src/features/rollupImport/RollupImportDropzone.tsx');
   const stylesSource = readProjectFile('src/styles.css');
   const promptDisplayBlock = stylesSource.match(/\.rollup-prompt-display,\s*\.rollup-prompt-display \*\s*\{[^}]*\}/s)?.[0] ?? '';
 
@@ -139,9 +230,9 @@ test('rollup prompt display stays selectable without touching paste input', () =
     /\.rollup-prompt-display,\s*\.rollup-prompt-display \*\s*\{[^}]*user-select: text;[^}]*-webkit-user-select: text;[^}]*cursor: text;[^}]*\}/s
   );
   assert.equal(promptDisplayBlock.includes('pointer-events'), false);
-  assert.equal(appSource.includes('className="rollup-import-display rollup-prompt-display"'), true);
-  assert.equal(appSource.includes('className="rollup-import-textarea"'), true);
-  assert.equal(appSource.includes('rollup-import-textarea rollup-prompt-display'), false);
+  assert.equal(promptPanelSource.includes('className="rollup-import-display rollup-prompt-display"'), true);
+  assert.equal(dropzoneSource.includes('className="rollup-import-textarea"'), true);
+  assert.equal(dropzoneSource.includes('rollup-import-textarea rollup-prompt-display'), false);
 });
 
 test('app-wide selection is disabled except editable and copyable text areas', () => {
@@ -164,17 +255,26 @@ test('rollup import page copy, confirmation layout, and account picker use curre
   const appSource = readProjectFile('src/App.tsx');
   const stylesSource = readProjectFile('src/styles.css');
   const rollupLogicSource = readProjectFile('src/rollupImportLogic.ts');
-  const rollupPageSource = appSource.slice(
-    appSource.indexOf('const renderRollupPromptPanel'),
+  const rollupPageSource = [
+    readProjectFile('src/features/rollupImport/RollupImportPage.tsx'),
+    readProjectFile('src/features/rollupImport/RollupPromptPanel.tsx'),
+    readProjectFile('src/features/rollupImport/RollupImportDropzone.tsx'),
+    readProjectFile('src/features/rollupImport/RollupRiskSummary.tsx'),
+    readProjectFile('src/features/rollupImport/RollupReviewPanel.tsx'),
+    readProjectFile('src/features/rollupImport/RollupAccountAssignmentList.tsx'),
+    readProjectFile('src/features/rollupImport/RollupRecordGroupList.tsx')
+  ].join('\n');
+  const rollupActionsSource = appSource.slice(
+    appSource.indexOf('const renderRollupImportActions'),
     appSource.indexOf('const renderHomeActions')
   );
 
   assert.equal(rollupPageSource.includes('<p className="eyebrow">汇总导入</p>'), false);
   assert.equal(rollupPageSource.includes('<h1>汇总记录导入</h1>'), true);
-  assert.equal(rollupPageSource.includes("'操作区'"), false);
-  assert.equal(rollupPageSource.includes("'汇总导入'"), true);
+  assert.equal(rollupActionsSource.includes("'操作区'"), false);
+  assert.equal(rollupActionsSource.includes("'汇总导入'"), true);
   assert.equal(
-    rollupPageSource.match(/null,\s*'right-panel-section--rollup-import-actions'/g)?.length ?? 0,
+    rollupActionsSource.match(/null,\s*'right-panel-page--rollup-import-actions'/g)?.length ?? 0,
     2
   );
   assert.equal(
@@ -188,6 +288,7 @@ test('rollup import page copy, confirmation layout, and account picker use curre
     appSource.includes('风险等级只表示 NetraFlow 是否发现明显格式或结构问题，不代表外部整理结果已经被证明正确。'),
     false
   );
+  assert.equal(appSource.includes('高风险汇总导入'), false);
   assert.equal(rollupLogicSource.includes('这个汇总文件内容已经导入过。'), false);
   assert.equal(rollupPageSource.includes('<span>mode</span>'), false);
   assert.equal(rollupPageSource.includes('<span>模式</span>'), true);
@@ -211,14 +312,17 @@ test('overview return entries stay wired from about and rollup import', () => {
     appSource.indexOf('const renderRollupImportActions'),
     appSource.indexOf('const renderHomeActions')
   );
+  const rollupReviewPanelSource = readProjectFile('src/features/rollupImport/RollupReviewPanel.tsx');
 
   assert.equal(globalNavSource.includes('关于净流'), true);
   assert.equal(globalNavSource.includes('global-settings-nav__return'), true);
   assert.equal(globalNavSource.indexOf('关于净流') < globalNavSource.indexOf('返回资产总览'), true);
   assert.equal(globalNavSource.includes('onClick={closeGlobalSettings}'), true);
-  assert.equal(rollupActionsSource.match(/label: '返回资产总览'/g)?.length ?? 0, 2);
+  assert.equal(rollupActionsSource.match(/label: '返回资产总览'/g)?.length ?? 0, 1);
+  assert.equal(rollupReviewPanelSource.includes('label="返回资产总览"'), true);
   assert.equal(rollupActionsSource.includes('onClick: closeRollupImport'), true);
-  assert.equal(stylesSource.includes('right-panel-section--rollup-import-actions'), true);
+  assert.equal(rollupActionsSource.includes('onClose={closeRollupImport}'), true);
+  assert.equal(stylesSource.includes('right-panel-page--rollup-import-actions'), true);
 });
 
 test('global search includes manual settings category without old result containers', () => {
@@ -226,6 +330,7 @@ test('global search includes manual settings category without old result contain
   const stylesSource = readProjectFile('src/styles.css');
   const searchTypesSource = readProjectFile('src/search/searchTypes.ts');
   const searchPanelSource = readProjectFile('src/components/search/GlobalSearchPanel.tsx');
+  const searchPreviewPanelSource = readProjectFile('src/components/search/SearchPreviewPanel.tsx');
   const searchTabsSource = readProjectFile('src/components/search/SearchCategoryTabs.tsx');
   const searchItemSource = readProjectFile('src/components/search/SearchResultItem.tsx');
   const searchListSource = readProjectFile('src/components/search/SearchResultList.tsx');
@@ -270,14 +375,15 @@ test('global search includes manual settings category without old result contain
     appSource.includes(['在左侧输入关键词后，', '这里会显示当前结果摘要。'].join('')),
     false
   );
-  assert.equal(appSource.includes('键入关键词开始搜索'), true);
-  assert.equal(appSource.includes('暂无预览项'), true);
-  assert.equal(appSource.includes('global-search-preview-empty'), true);
+  assert.equal(appSource.includes('<SearchPreviewPanel'), true);
+  assert.equal(searchPreviewPanelSource.includes('键入关键词开始搜索'), true);
+  assert.equal(searchPreviewPanelSource.includes('暂无预览项'), true);
+  assert.equal(searchPreviewPanelSource.includes('global-search-preview-empty'), true);
   assert.equal(
-    appSource.match(/className="right-panel-preview right-panel-preview--search-empty"/g)?.length ?? 0,
+    searchPreviewPanelSource.match(/className="right-panel-preview right-panel-preview--search-empty"/g)?.length ?? 0,
     2
   );
-  assert.equal(appSource.includes('right-panel-preview--search-empty'), true);
+  assert.equal(searchPreviewPanelSource.includes('right-panel-preview--search-empty'), true);
   assert.match(
     stylesSource,
     /\.global-search-preview-empty\s*\{[^}]*font-size: 0\.9em;[^}]*color: var\(--text-subtle\);[^}]*font-weight: 400;[^}]*\}/s
@@ -294,10 +400,7 @@ test('global search includes manual settings category without old result contain
   assert.equal(searchListSource.includes('AssetStructurePanel'), false);
   assert.equal(searchListSource.includes('AssetTrendPanel'), false);
   assert.equal(searchListSource.includes('l0-chart'), false);
-  const searchPreviewSource = appSource.slice(
-    appSource.indexOf('const getSearchPreviewTypeLabel'),
-    appSource.indexOf('const renderSearchPreview =')
-  );
+  const searchPreviewSource = searchPreviewPanelSource;
   assert.equal(searchPreviewSource.includes("return '历史记录';"), true);
   assert.equal(searchPreviewSource.includes('const getHistoryPreviewTypeModeLabel'), true);
   assert.equal(searchPreviewSource.includes('return `${result.record.type}-${mode}`;'), true);
@@ -350,15 +453,15 @@ test('theme bootstrap resolves first frame before React mounts', () => {
 
 test('page position memory copy and settings search keywords stay wired', () => {
   const appSource = readProjectFile('src/App.tsx');
+  const appearanceSettingsPanelSource = readProjectFile(
+    'src/features/settings/AppearanceSettingsPanel.tsx'
+  );
   const pagePositionSearchItemStart = appSource.indexOf("id: 'appearance-page-position-memory'");
   const searchItemSource = appSource.slice(
     pagePositionSearchItemStart,
     appSource.indexOf("id: 'charts'", pagePositionSearchItemStart)
   );
-  const settingsControlSource = appSource.slice(
-    appSource.indexOf('<div id="global-settings-page-position-memory">'),
-    appSource.indexOf("if (globalSettingsSection === 'charts')")
-  );
+  const settingsControlSource = appearanceSettingsPanelSource;
 
   assert.equal(searchItemSource.includes("group: '显示与界面'"), true);
   assert.equal(searchItemSource.includes("section: 'appearance'"), true);
@@ -379,12 +482,14 @@ test('page position memory copy and settings search keywords stay wired', () => 
   assert.equal(settingsControlSource.includes('<br />'), true);
   assert.equal(settingsControlSource.includes('全局记忆：切换页面保留滚动位置和堆叠组状态。'), false);
   assert.equal(settingsControlSource.includes('覆盖后重置：页面被覆盖将重置滚动位置和堆叠组状态。'), false);
-  assert.equal(settingsControlSource.includes("globalSettings.pagePositionMemoryMode"), true);
-  assert.equal(settingsControlSource.includes("updatePagePositionMemoryMode"), true);
+  assert.equal(settingsControlSource.includes('pagePositionMemoryMode'), true);
+  assert.equal(appSource.includes('onPagePositionMemoryModeChange={updatePagePositionMemoryMode}'), true);
 });
 
 test('confirmation dialog and Windows app identity use restrained UI and NetraFlow metadata', () => {
   const appSource = readProjectFile('src/App.tsx');
+  const confirmDialogSource = readProjectFile('src/components/dialogs/ConfirmDialog.tsx');
+  const dialogShellSource = readProjectFile('src/components/dialogs/DialogShell.tsx');
   const stylesSource = readProjectFile('src/styles.css');
   const mainSource = readProjectFile('electron/main.ts');
   const packageScriptSource = readProjectFile('scripts/package-win.mjs');
@@ -423,17 +528,14 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
       };
     };
   };
-  const dialogSource = appSource.slice(
-    appSource.indexOf('{confirmationDialog ? ('),
-    appSource.indexOf('{resetConfirmation ? (')
-  );
-
   assert.equal(appSource.includes("eyebrow: '放弃编辑'"), false);
   assert.equal(appSource.includes('eyebrow: null'), false);
-  assert.equal(dialogSource.includes('{confirmationDialog.eyebrow ? ('), true);
-  assert.equal(dialogSource.includes('modal-button--primary'), false);
-  assert.equal(dialogSource.includes('modal-button modal-button--secondary'), true);
-  assert.equal(dialogSource.includes('confirmationDialog.tone === \'danger\''), true);
+  assert.equal(appSource.includes('<ConfirmDialog'), true);
+  assert.equal(confirmDialogSource.includes('eyebrow={eyebrow}'), true);
+  assert.equal(dialogShellSource.includes('eyebrow ? ('), true);
+  assert.equal(confirmDialogSource.includes('modal-button--primary'), false);
+  assert.equal(confirmDialogSource.includes('modal-button modal-button--secondary'), true);
+  assert.equal(confirmDialogSource.includes("tone === 'danger'"), true);
   assert.match(stylesSource, /\.modal-button--danger\s*\{[^}]*border-color: var\(--danger-border\);[^}]*background: var\(--surface-strong\);[^}]*color: var\(--danger-text\);[^}]*\}/s);
   assert.match(stylesSource, /\.modal-button:hover:not\(:disabled\),\s*\.modal-button:focus-visible:not\(:disabled\)\s*\{[^}]*background: var\(--surface-hover\);[^}]*transform: translateY\(-1px\);[^}]*\}/s);
   assert.match(stylesSource, /\.modal-button:active:not\(:disabled\)\s*\{[^}]*transform: translateY\(1px\);[^}]*\}/s);
@@ -738,13 +840,24 @@ test('Windows taskbar lock uses Jump List IPC without tray or background hiding'
 
 test('history panel opacity and two-column title alignment use shared structure classes', () => {
   const appSource = readProjectFile('src/App.tsx');
+  const historyPanelSource = readProjectFile('src/features/history/HistoryPanel.tsx');
+  const historyFilterSource = readProjectFile('src/features/history/HistoryFilterToolbar.tsx');
+  const historyCalendarSource = readProjectFile('src/features/history/HistoryCalendarPanel.tsx');
+  const historyListSource = readProjectFile('src/features/history/HistoryRecordList.tsx');
+  const historySource = [
+    appSource,
+    historyPanelSource,
+    historyFilterSource,
+    historyCalendarSource,
+    historyListSource
+  ].join('\n');
   const stylesSource = readProjectFile('src/styles.css');
 
-  assert.equal(appSource.includes('className="history-browse-panel two-column-page-panel"'), true);
-  assert.equal(appSource.includes('className="history-filter-panel"'), true);
-  assert.equal(appSource.includes('className="history-calendar-panel"'), true);
-  assert.equal(appSource.includes('className="history-result-list-panel"'), true);
-  assert.equal(appSource.includes("background: 'var(--panel-bg-strong)'"), true);
+  assert.equal(historySource.includes('className="history-browse-panel two-column-page-panel"'), true);
+  assert.equal(historySource.includes('className="history-filter-panel"'), true);
+  assert.equal(historySource.includes('className="history-calendar-panel"'), true);
+  assert.equal(historySource.includes('className="history-result-list-panel"'), true);
+  assert.equal(historySource.includes("background: 'var(--panel-bg-strong)'"), true);
   assert.equal(stylesSource.includes('--two-column-panel-padding: 22px;'), true);
   assert.equal(stylesSource.includes('--right-panel-padding: var(--two-column-panel-padding);'), true);
   assert.match(stylesSource, /\.left-browse-panel\.card\s*\{[^}]*padding: var\(--two-column-panel-padding\);[^}]*\}/s);
@@ -754,6 +867,7 @@ test('history panel opacity and two-column title alignment use shared structure 
 
 test('local Noto fonts, emoji fallback, and about-page license copy stay wired', () => {
   const appSource = readProjectFile('src/App.tsx');
+  const aboutPanelSource = readProjectFile('src/features/settings/AboutNetraFlowPanel.tsx');
   const stylesSource = readProjectFile('src/styles.css');
 
   assert.match(stylesSource, /^@font-face\s*\{[\s\S]*font-family: 'NF Noto Sans CJK SC';/);
@@ -766,34 +880,31 @@ test('local Noto fonts, emoji fallback, and about-page license copy stay wired',
     /--nf-font-sans:[\s\S]*'NF Noto Sans CJK SC'[\s\S]*'NF Noto Symbols 2'[\s\S]*'Segoe UI Emoji'[\s\S]*'Apple Color Emoji'[\s\S]*'Noto Color Emoji'[\s\S]*sans-serif;/
   );
   assert.match(stylesSource, /body\s*\{[^}]*font-family: var\(--nf-font-sans\);[^}]*\}/s);
-  assert.equal(appSource.includes('开源许可'), true);
-  assert.equal(appSource.includes('className="about-netraflow__license-label">字体</p>'), true);
-  assert.equal(appSource.includes('<h3 id="netraflow-font-license-title">字体</h3>'), false);
-  assert.equal(appSource.includes('NetraFlow 内置使用 Noto Sans CJK SC 与 Noto Sans Symbols 2'), true);
-  assert.equal(appSource.includes('NetraFlow 内置使用 Noto Sans CJK SC 与 Noto Sans Symbols 2。'), false);
-  assert.equal(appSource.includes('Noto Fonts 由 The Noto Project Authors 提供'), true);
-  assert.equal(appSource.includes('授权使用。'), false);
+  assert.equal(aboutPanelSource.includes('开源许可'), true);
+  assert.equal(aboutPanelSource.includes('className="about-netraflow__license-label">字体</p>'), true);
+  assert.equal(aboutPanelSource.includes('<h3 id="netraflow-font-license-title">字体</h3>'), false);
+  assert.equal(aboutPanelSource.includes('NetraFlow 内置使用 Noto Sans CJK SC 与 Noto Sans Symbols 2'), true);
+  assert.equal(aboutPanelSource.includes('NetraFlow 内置使用 Noto Sans CJK SC 与 Noto Sans Symbols 2。'), false);
+  assert.equal(aboutPanelSource.includes('Noto Fonts 由 The Noto Project Authors 提供'), true);
+  assert.equal(aboutPanelSource.includes('授权使用。'), false);
   assert.ok(
-    appSource.indexOf('about-netraflow__license') <
-      appSource.indexOf('about-netraflow__contact')
+    aboutPanelSource.indexOf('about-netraflow__license') <
+      aboutPanelSource.indexOf('about-netraflow__contact')
   );
-  const aboutPageSource = appSource.slice(
-    appSource.indexOf('<section className="about-netraflow">'),
-    appSource.indexOf('const renderGlobalSettingsPage')
-  );
+  const aboutPageSource = aboutPanelSource;
   const contactToCatSource = aboutPageSource.slice(
     aboutPageSource.indexOf('about-netraflow__contact'),
     aboutPageSource.indexOf('className="about-netraflow__cat"')
   );
   assert.equal(appSource.includes('NETRAFLOW_MEMO_PARAGRAPHS'), false);
-  assert.equal(appSource.includes('about-netraflow__memo'), false);
+  assert.equal(`${appSource}\n${aboutPanelSource}`.includes('about-netraflow__memo'), false);
   assert.equal(stylesSource.includes('about-netraflow__memo'), false);
-  assert.equal(appSource.includes('<strong>净流 NetraFlow</strong>'), false);
-  assert.equal(appSource.includes('借助 ChatGPT 和 Codex、Windsurf'), false);
-  assert.equal(appSource.includes('<h3 id="netraflow-contact-title">获取信息</h3>'), true);
-  assert.equal(appSource.includes('about-netraflow__info-button--bilibili'), true);
-  assert.equal(appSource.includes('about-netraflow__info-button--github'), true);
-  assert.equal(appSource.includes('NfGithubIcon'), true);
+  assert.equal(`${appSource}\n${aboutPanelSource}`.includes('<strong>净流 NetraFlow</strong>'), false);
+  assert.equal(`${appSource}\n${aboutPanelSource}`.includes('借助 ChatGPT 和 Codex、Windsurf'), false);
+  assert.equal(aboutPanelSource.includes('<h3 id="netraflow-contact-title">获取信息</h3>'), true);
+  assert.equal(aboutPanelSource.includes('about-netraflow__info-button--bilibili'), true);
+  assert.equal(aboutPanelSource.includes('about-netraflow__info-button--github'), true);
+  assert.equal(aboutPanelSource.includes('NfGithubIcon'), true);
   assert.equal(appSource.includes(GITHUB_RELEASES_URL), true);
   assert.equal(existsSync(new URL('../../../src/assets/icons/common/nf-github.svg', import.meta.url)), true);
   assert.equal(contactToCatSource.includes('</section>'), true);
@@ -813,26 +924,28 @@ test('local Noto fonts, emoji fallback, and about-page license copy stay wired',
 
 test('account add and restore page copy uses archived metadata without extra title text', () => {
   const appSource = readProjectFile('src/App.tsx');
+  const accountEditorSource = readProjectFile('src/features/account/AccountEditorDialog.tsx');
   const stylesSource = readProjectFile('src/styles.css');
-  const restorePanelSource = appSource.slice(
-    appSource.indexOf('className="account-add-restore-panel"'),
-    appSource.indexOf('className="account-add-restore-panel account-add-restore-panel--form"')
+  const restorePanelSource = accountEditorSource.slice(
+    accountEditorSource.indexOf('className="account-add-restore-panel"'),
+    accountEditorSource.indexOf('className="account-add-restore-panel account-add-restore-panel--form"')
   );
 
   assert.equal(restorePanelSource.includes('账户新增 / 恢复'), false);
   assert.equal(restorePanelSource.includes('简易搜索'), false);
   assert.equal(appSource.includes('归档旧账户'), false);
   assert.equal(appSource.includes('归档旧帐户'), false);
-  assert.equal(restorePanelSource.includes('getArchivedAccountRestoreTitle(account)'), true);
+  assert.equal(appSource.includes('<AccountRestoreDialog'), true);
+  assert.equal(restorePanelSource.includes('getRestoreTitle(account)'), true);
   assert.equal(
-    restorePanelSource.includes('getArchivedAccountArchivedAtLabel(account.archivedAt)'),
+    restorePanelSource.includes('getArchivedAtLabel(account.archivedAt)'),
     true
   );
   assert.equal(
     restorePanelSource.includes('account-operation-button account-restore-card__restore-button'),
     true
   );
-  assert.equal(stylesSource.includes('--account-add-panel-bg: var(--panel-bg-strong);'), true);
+  assert.equal(stylesSource.includes('--account-add-panel-bg: var(--panel-bg);'), true);
   assert.equal(stylesSource.includes('.account-restore-card__restore-button'), true);
 });
 
@@ -840,21 +953,25 @@ test('quick entry picker and example account aliases use current title and mark 
   const appSource = readProjectFile('src/App.tsx');
   const stylesSource = readProjectFile('src/styles.css');
   const exampleDataSource = readProjectFile('src/exampleData.ts');
-  const quickPickerSource = appSource.slice(
+  const quickEntryHostSource = appSource.slice(
     appSource.indexOf('{isQuickSingleEntryAccountPickerOpen ? ('),
     appSource.indexOf('{editingAccount && currentAccount ? (')
   );
+  const quickPanelSource = readProjectFile('src/features/quickEntry/QuickEntryPanel.tsx');
+  const quickPickerSource = readProjectFile('src/features/quickEntry/QuickEntryAccountPicker.tsx');
 
-  assert.equal(quickPickerSource.includes('<p className="eyebrow">记一笔</p>'), false);
-  assert.equal(quickPickerSource.includes('<h2 id="quick-single-entry-title">选择账户</h2>'), true);
-  assert.equal(appSource.includes('quick-single-entry-account-group'), true);
+  assert.equal(quickEntryHostSource.includes('<QuickEntryPanel'), true);
+  assert.equal(`${quickEntryHostSource}\n${quickPanelSource}`.includes('<p className="eyebrow">记一笔</p>'), false);
+  assert.equal(quickPanelSource.includes("<h2 id={titleId}>{title}</h2>"), true);
+  assert.equal(quickPanelSource.includes("title = '选择账户'"), true);
+  assert.equal(quickPickerSource.includes('quick-single-entry-account-group'), true);
   assert.match(
     stylesSource,
     /\.quick-single-entry-account-picker\s*\{[^}]*gap: 0;[^}]*\}/s
   );
   assert.match(
     stylesSource,
-    /\.quick-single-entry-account-picker \.flash-note-account-group\s*\{[^}]*align-items: center;[^}]*min-height: 54px;[^}]*padding-block: 10px;[^}]*\}/s
+    /\.quick-single-entry-account-picker \.flash-note-account-group\s*\{[^}]*align-items: center;[^}]*min-height: 46px;[^}]*padding-block: 7px;[^}]*\}/s
   );
   const quickEntryDividerBlock =
     stylesSource.match(
@@ -873,47 +990,75 @@ test('quick entry picker and example account aliases use current title and mark 
 
 test('account detail operation copy and editor previews stay visually scoped', () => {
   const appSource = readProjectFile('src/App.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
-  const accountDetailSource = appSource.slice(
-    appSource.indexOf('selectedAccount && selectedAccountEntry ? ('),
-    appSource.indexOf('<h2 style={{ margin: 0, fontSize: \'1.2rem\' }}>账户变动记录</h2>')
+  const accountDetailPanelSource = readProjectFile(
+    'src/features/account/AccountDetailPanel.tsx'
   );
+  const accountHistoryListSource = readProjectFile(
+    'src/features/account/AccountHistoryList.tsx'
+  );
+  const accountHistoryItemSource = readProjectFile(
+    'src/features/account/AccountHistoryItem.tsx'
+  );
+  const accountActionsSource = readProjectFile(
+    'src/features/account/AccountActionsPanel.tsx'
+  );
+  const accountChartSettingsSource = readProjectFile(
+    'src/features/account/AccountChartSettingsPanel.tsx'
+  );
+  const dangerActionsSource = readProjectFile(
+    'src/features/account/AccountDangerActionsPanel.tsx'
+  );
+  const accountEditorSource = readProjectFile('src/features/account/AccountEditorDialog.tsx');
+  const quickFormSource = readProjectFile('src/features/quickEntry/QuickEntryForm.tsx');
+  const accountInfoEditorSource = readProjectFile(
+    'src/features/account/AccountInfoEditorDialog.tsx'
+  );
+  const stylesSource = readProjectFile('src/styles.css');
   const accountTrendPanelSource = appSource.slice(
     appSource.indexOf('function AccountTrendPanel'),
     appSource.indexOf('function GroupDetailStructurePanel')
   );
-  const accountActionsSource = appSource.slice(
-    appSource.indexOf('const renderAccountActions'),
-    appSource.indexOf('const renderDangerActions')
-  );
-  const dangerActionsSource = appSource.slice(
-    appSource.indexOf('const renderDangerActions'),
-    appSource.indexOf('const renderHistoryActions')
-  );
-  const amountEditorSource = appSource.slice(
-    appSource.indexOf('{editingAccount && currentAccount ? ('),
-    appSource.indexOf('{editingAccountInfo && accountInfoEntry ? (')
-  );
-  const accountInfoEditorSource = appSource.slice(
-    appSource.indexOf('{editingAccountInfo && accountInfoEntry ? ('),
-    appSource.indexOf('{isAddingAccount ? (')
-  );
+  const amountEditorSource = `${accountEditorSource}\n${quickFormSource}`;
 
-  assert.equal(accountDetailSource.includes('<p className="eyebrow"'), false);
-  assert.equal(accountDetailSource.includes('className="account-detail-title">{selectedAccountTitle}</h1>'), true);
-  assert.equal(accountDetailSource.includes('l0-chart-button l0-chart-button--trend account-detail-chart-thumbnail'), true);
+  assert.equal(appSource.includes('<AccountDetailPanel'), true);
+  assert.equal(appSource.includes('<AccountHistoryList'), true);
+  assert.equal(appSource.includes('<AccountAmountEditorDialog'), true);
+  assert.equal(appSource.includes('<AccountInfoEditorDialog'), true);
+  assert.equal(accountDetailPanelSource.includes('<p className="eyebrow"'), false);
+  assert.equal(accountDetailPanelSource.includes('className="account-detail-title">{title}</h1>'), true);
+  assert.equal(accountDetailPanelSource.includes('l0-chart-button l0-chart-button--trend account-detail-chart-thumbnail'), true);
+  assert.equal(accountHistoryListSource.includes('AccountHistoryGroup'), true);
+  assert.equal(accountHistoryItemSource.includes('compareRecords'), true);
   assert.match(stylesSource, /\.account-detail-title\s*\{[^}]*font-size: var\(--chart-page-title-size\);[^}]*\}/s);
   assert.equal(accountTrendPanelSource.includes('ChartLegendList'), false);
   assert.equal(accountTrendPanelSource.includes('accountName'), false);
   assert.match(stylesSource, /\.account-detail-header\s*\{[^}]*display: flex;[^}]*justify-content: space-between;[^}]*\}/s);
   assert.match(stylesSource, /\.account-detail-chart-thumbnail\s*\{[^}]*flex: 0 1 min\(292px, 42%\);[^}]*width: min\(292px, 100%\);[^}]*\}/s);
   assert.match(stylesSource, /@media \(max-width: 760px\)\s*\{[\s\S]*\.account-detail-header\s*\{[^}]*flex-wrap: wrap;[^}]*\}[\s\S]*\.account-detail-chart-thumbnail\s*\{[^}]*flex-basis: min\(292px, 100%\);[^}]*\}/);
-  assert.equal(accountActionsSource.includes("'账户变更'"), true);
-  assert.equal(accountActionsSource.includes("'账户操作'"), false);
-  assert.equal(accountActionsSource.includes("label: '账户图表'"), false);
+  assert.equal(accountActionsSource.includes('className="right-panel-page"'), true);
+  assert.equal(accountActionsSource.includes('<h2 className="right-panel-title">账户变更</h2>'), true);
+  assert.equal(accountActionsSource.includes('RightPanelSection'), false);
+  assert.equal(accountActionsSource.includes('账户操作'), false);
+  assert.equal(accountActionsSource.includes('账户图表'), false);
   assert.equal(accountActionsSource.includes('openAccountChartsPage'), false);
   assert.equal(accountActionsSource.includes('className="right-panel-preview"'), false);
+  assert.equal(accountChartSettingsSource.includes('title="图表参数设置"'), true);
+  assert.equal(accountChartSettingsSource.includes('由全局图表设置锁定'), true);
+  assert.equal(accountChartSettingsSource.includes('contentOverlay'), true);
+  assert.equal(accountChartSettingsSource.includes('chart-settings-lock-note'), false);
+  assert.equal(accountChartSettingsSource.includes('className="right-panel-page"'), true);
+  assert.equal(accountChartSettingsSource.includes('className="right-panel-page-action"'), true);
+  assert.equal(accountChartSettingsSource.includes('footer={<RightPanelActionButton'), false);
+  assert.equal(
+    accountChartSettingsSource.indexOf('</RightPanelSection>') <
+      accountChartSettingsSource.indexOf('className="right-panel-page-action"'),
+    true
+  );
+  assert.equal(stylesSource.includes('.chart-settings-locked-panel'), true);
+  assert.equal(accountChartSettingsSource.includes('renderSegmentedControl'), true);
+  assert.equal(accountChartSettingsSource.includes('updateLocalAccountDetailChartSettings'), false);
   assert.equal(dangerActionsSource.includes('归档与删除需要再次确认'), false);
+  assert.equal(dangerActionsSource.includes('RightPanelSection'), false);
   assert.equal(dangerActionsSource.includes('归档后可在账户新增 / 恢复中重新启用'), false);
   assert.equal(dangerActionsSource.includes('删除后不可恢复'), false);
   assert.equal(amountEditorSource.includes('<p className="eyebrow"'), false);
@@ -987,11 +1132,13 @@ test('home asset stat label stays above amount with muted visual weight', () => 
 
 test('account add form uses aligned add control and weak footer buttons', () => {
   const appSource = readProjectFile('src/App.tsx');
+  const accountEditorSource = readProjectFile('src/features/account/AccountEditorDialog.tsx');
   const stylesSource = readProjectFile('src/styles.css');
 
-  assert.equal(appSource.includes('className="account-type-select-row"'), true);
-  assert.equal(appSource.includes('className="account-add-form-button account-add-form-button--secondary"'), true);
-  assert.equal(appSource.includes('className="account-add-form-button account-add-form-button--primary"'), true);
+  assert.equal(appSource.includes('<AccountCreateDialog'), true);
+  assert.equal(accountEditorSource.includes('className="account-type-select-row"'), true);
+  assert.equal(accountEditorSource.includes('className="account-add-form-button account-add-form-button--secondary"'), true);
+  assert.equal(accountEditorSource.includes('className="account-add-form-button account-add-form-button--primary"'), true);
   assert.equal(stylesSource.includes('--account-input-height'), true);
   assert.equal(stylesSource.includes('--account-input-height: var(--nf-control-height);'), true);
   const accountTypeAddButtonBlock =
@@ -1009,16 +1156,48 @@ test('account add form uses aligned add control and weak footer buttons', () => 
 
 test('settings and chart copy remove duplicate labels without changing chart wiring', () => {
   const appSource = readProjectFile('src/App.tsx');
+  const allocationPanelSource = readProjectFile('src/features/charts/AssetAllocationPanel.tsx');
+  const trendPanelSource = readProjectFile('src/features/charts/AssetTrendPanel.tsx');
+  const chartSettingsPanelSource = readProjectFile('src/features/charts/ChartSettingsPanel.tsx');
   const groupStructureSource = appSource.slice(
     appSource.indexOf('function GroupDetailStructurePanel'),
     appSource.indexOf('const getGroupDetailTrendBoundaryMessage')
   );
+  const groupDetailActionsSource = appSource.slice(
+    appSource.indexOf('const renderGroupDetailActions = () =>'),
+    appSource.indexOf('const renderGlobalSettingsSegmented')
+  );
 
   assert.equal(appSource.includes(['首页显示', '资产统计数值类型'].join('')), false);
   assert.equal(appSource.includes('资产统计数值类型'), true);
-  assert.equal(appSource.includes('<h2>资产占比</h2>'), true);
+  assert.equal(appSource.includes('function AssetStructurePanel'), false);
+  assert.equal(appSource.includes('function AssetTrendPanel'), false);
+  assert.equal(appSource.includes('function ChartLegendList'), false);
+  assert.equal(appSource.includes('<AssetChartsPanel'), true);
+  assert.equal(appSource.includes('<AssetAllocationPanel'), true);
+  assert.equal(appSource.includes('<AssetTrendPanel'), true);
+  assert.equal(appSource.includes('<ChartSettingsPanel'), true);
+  assert.equal(allocationPanelSource.includes('<h2>资产占比</h2>'), true);
   assert.equal(appSource.includes(['<p className="eyebrow">', '资产结构', '</p>'].join('')), false);
-  assert.equal(appSource.includes('<h2>资产趋势</h2>'), true);
+  assert.equal(trendPanelSource.includes('<h2>资产趋势</h2>'), true);
+  assert.equal(chartSettingsPanelSource.includes('title="图表设置"'), true);
+  assert.equal(chartSettingsPanelSource.includes('返回资产总览'), true);
+  assert.equal(chartSettingsPanelSource.includes('className="right-panel-page"'), true);
+  assert.equal(chartSettingsPanelSource.includes('className="right-panel-page-action"'), true);
+  assert.equal(chartSettingsPanelSource.includes('footer={<RightPanelActionButton'), false);
+  assert.equal(
+    chartSettingsPanelSource.indexOf('</RightPanelSection>') <
+      chartSettingsPanelSource.indexOf('className="right-panel-page-action"'),
+    true
+  );
+  assert.equal(groupDetailActionsSource.includes('title="图表参数设置"'), true);
+  assert.equal(groupDetailActionsSource.includes('footer={renderRightPanelActionButton'), false);
+  assert.equal(groupDetailActionsSource.includes("className: 'right-panel-page-action'"), true);
+  assert.equal(
+    groupDetailActionsSource.indexOf('ariaDisabled={isLockedByGlobal}') <
+      groupDetailActionsSource.indexOf("className: 'right-panel-page-action'"),
+    true
+  );
   assert.equal(groupStructureSource.includes('<span>当前合计</span>'), false);
   assert.equal(groupStructureSource.includes('formatChartNumber(data.signedTotal)'), false);
   assert.equal(groupStructureSource.includes('<circle cx="60" cy="60" r="38"'), true);
@@ -1089,6 +1268,18 @@ test('global settings right navigation reuses the home right panel action rhythm
 
 test('popup and system prompt copy removes sentence periods without touching dotted technical values', () => {
   const appSource = readProjectFile('src/App.tsx');
+  const confirmDialogSource = readProjectFile('src/components/dialogs/ConfirmDialog.tsx');
+  const inputDialogSource = readProjectFile('src/components/dialogs/InputDialog.tsx');
+  const noticeDialogSource = readProjectFile('src/components/dialogs/NoticeDialog.tsx');
+  const accountEditorSource = readProjectFile('src/features/account/AccountEditorDialog.tsx');
+  const accountInfoEditorSource = readProjectFile('src/features/account/AccountInfoEditorDialog.tsx');
+  const passwordEditorSource = readProjectFile('src/features/settings/PasswordEditorDialog.tsx');
+  const snapshotPasswordEditorSource = readProjectFile(
+    'src/features/settings/SnapshotPasswordEditorDialog.tsx'
+  );
+  const snapshotEncryptionDisableSource = readProjectFile(
+    'src/features/settings/SnapshotEncryptionDisableDialog.tsx'
+  );
   const packageJson = JSON.parse(readProjectFile('package.json')) as { version?: string };
 
   const popupSources = [
@@ -1098,9 +1289,17 @@ test('popup and system prompt copy removes sentence periods without touching dot
     appSource.slice(appSource.indexOf('const confirmRollupImportWrite'), appSource.indexOf('const chooseQuickSingleEntryAccount')),
     appSource.slice(appSource.indexOf('const selectAutoBackupDirectory'), appSource.indexOf('const selectCalendarDate')),
     appSource.slice(appSource.indexOf('const renderPasswordDisableConfirm'), appSource.indexOf('const renderLockScreen')),
-    appSource.slice(appSource.indexOf('{backupReminderPrompt ? ('), appSource.indexOf('{confirmationDialog ? (')),
-    appSource.slice(appSource.indexOf('{confirmationDialog ? ('), appSource.indexOf('{editingAccount && currentAccount ? (')),
-    appSource.slice(appSource.indexOf('{accountTypeEditor && isAccountTypeEditorVisible ? ('), appSource.indexOf('{renderFirstWelcome()}'))
+    appSource.slice(appSource.indexOf('<ConfirmDialog'), appSource.indexOf('{resetConfirmation ? (')),
+    appSource.slice(appSource.indexOf('<AccountAmountEditorDialog'), appSource.indexOf('{accountTypeEditor && isAccountTypeEditorVisible ? (')),
+    appSource.slice(appSource.indexOf('{accountTypeEditor && isAccountTypeEditorVisible ? ('), appSource.indexOf('{renderFirstWelcome()}')),
+    confirmDialogSource,
+    inputDialogSource,
+    noticeDialogSource,
+    accountEditorSource,
+    accountInfoEditorSource,
+    passwordEditorSource,
+    snapshotPasswordEditorSource,
+    snapshotEncryptionDisableSource
   ].filter((source) => source.length > 0);
   const popupSource = popupSources.join('\n');
   const dialogFieldTexts = Array.from(
@@ -1134,18 +1333,15 @@ test('changelog includes the 0.9.2 local release notes', () => {
 test('flash note visual copy removes extra eyebrows and keeps mode labels explicit', () => {
   const appSource = readProjectFile('src/App.tsx');
   const stylesSource = readProjectFile('src/styles.css');
-  const flashModeSource = appSource.slice(
-    appSource.indexOf('const renderFlashModeSelectionStage'),
-    appSource.indexOf('const getFlashTypewriterWeeks')
-  );
+  const flashSelectSource = readProjectFile('src/features/flashNote/FlashSelectStep.tsx');
   const flashExitSource = appSource.slice(
     appSource.indexOf('const renderFlashExitConfirm'),
     appSource.indexOf('const renderFlashReturnDateConfirm')
   );
 
-  assert.equal(flashModeSource.includes('<p className="eyebrow">输入模式</p>'), false);
-  assert.equal(flashModeSource.includes('净值变动（change）'), true);
-  assert.equal(flashModeSource.includes('账户余额（balance）'), true);
+  assert.equal(flashSelectSource.includes('<p className="eyebrow">输入模式</p>'), false);
+  assert.equal(flashSelectSource.includes('净值变动（change）'), true);
+  assert.equal(flashSelectSource.includes('账户余额（balance）'), true);
   assert.equal(flashExitSource.includes('退出闪记'), false);
   assert.match(stylesSource, /\.flash-note-mode-select\s*\{[^}]*place-items: center;[^}]*\}/s);
 });

@@ -63,7 +63,6 @@ export function FlashCalendarGrid({
               {week.map((date) => {
                 const dateValue = toFlashDateValue(date);
                 const cell = getCell(dateValue);
-                const hasValue = parseFlashNumberInput(cell.value) !== null;
                 const isCurrentCell = dateValue === activeDate;
 
                 return (

@@ -28,7 +28,6 @@ import type {
   BackupRecord,
   HistoryRecord,
   HistoryType,
-  SearchCategoryCounts,
   SettingsSearchItem
 } from '../searchTypes';
 import { SEARCH_CATEGORY_LABELS, SEARCH_CATEGORY_TABS } from '../searchTypes';
@@ -335,8 +334,6 @@ const search = (query: string) => runGlobalSearch(index, query);
 const getResultIds = (query: string) => search(query).allResults.map((result) => result.id);
 const getHighlightedText = (value: string, ranges: Array<{ start: number; end: number }>) =>
   ranges.map((range) => value.slice(range.start, range.end)).join('');
-
-const categoryCounts = (query: string): SearchCategoryCounts => search(query).counts;
 
 test('default categories and unified all-result stream include settings', () => {
   assert.deepEqual(SEARCH_CATEGORY_TABS, ['all', 'account', 'history', 'snapshot', 'settings']);

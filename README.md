@@ -21,7 +21,7 @@ $env:Path="$PWD\.tools\node-v22.22.2-win-x64;$env:Path"
 1. 进入项目目录：
 
    ```bash
-   cd C:\Users\ire1y\Documents\Codex\2026-04-28\NetraFlow_dev
+   cd path\to\NetraFlow_dev
    ```
 
 2. 安装依赖：

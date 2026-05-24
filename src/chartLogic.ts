@@ -113,7 +113,9 @@ const OTHER_COLOR = NETRAFLOW_CHART_PALETTE[NETRAFLOW_CHART_PALETTE.length - 1];
 export const ARCHIVED_CHART_BADGE_LABEL = '已归档';
 export const PIE_SEGMENT_SEPARATOR_CONFIG = {
   stroke: 'var(--chart-separator)',
-  strokeWidth: 0.55,
+  strokeWidth: 0.38,
+  strokeOpacity: 0.68,
+  strokeLinecap: 'round',
   strokeLinejoin: 'round',
   paintOrder: 'stroke fill',
   vectorEffect: 'non-scaling-stroke'
