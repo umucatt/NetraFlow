@@ -31,6 +31,7 @@ export type HistoryRecord = {
   time: string;
   relatedTime?: string;
   note?: string;
+  source?: 'flash-note' | 'rollup';
 };
 
 export type BackupMethod = 'manual' | 'auto';

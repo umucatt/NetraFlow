@@ -47,10 +47,12 @@ test('keeps the fixed NetraFlow chart palette order', () => {
 
 test('pie segments expose a restrained separator stroke configuration', () => {
   assert.equal(PIE_SEGMENT_SEPARATOR_CONFIG.stroke, 'var(--chart-separator)');
+  assert.equal(PIE_SEGMENT_SEPARATOR_CONFIG.strokeLinecap, 'round');
   assert.equal(PIE_SEGMENT_SEPARATOR_CONFIG.strokeLinejoin, 'round');
   assert.equal(PIE_SEGMENT_SEPARATOR_CONFIG.paintOrder, 'stroke fill');
+  assert.ok(PIE_SEGMENT_SEPARATOR_CONFIG.strokeOpacity < 0.75);
   assert.ok(PIE_SEGMENT_SEPARATOR_CONFIG.strokeWidth > 0);
-  assert.ok(PIE_SEGMENT_SEPARATOR_CONFIG.strokeWidth < 1);
+  assert.ok(PIE_SEGMENT_SEPARATOR_CONFIG.strokeWidth < 0.5);
 });
 
 test('uses natural-day x-axis ranges ending at the selected date', () => {

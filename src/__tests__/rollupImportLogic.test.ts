@@ -81,7 +81,7 @@ test('merges duplicate change rows into a medium-risk review', () => {
   assert.equal(result.review.records[0].amount, -22);
 });
 
-test('marks same-day change and balance conflicts as high risk', () => {
+test('marks mixed change and balance batches as high risk without blocking', () => {
   const result = parse({
     format: 'netraflow_rollup',
     records: [
@@ -93,11 +93,11 @@ test('marks same-day change and balance conflicts as high risk', () => {
         accountKeyword: '基金'
       },
       {
-        date: '2026-05-04',
+        date: '2026-05-05',
         mode: 'balance',
         amount: 2000,
         currency: 'CNY',
-        accountKeyword: '基金'
+        accountKeyword: '银行卡'
       }
     ],
     unresolvedItems: []
@@ -106,6 +106,42 @@ test('marks same-day change and balance conflicts as high risk', () => {
   assert.equal(result.ok, true);
   assert.equal(result.review.riskLevel, 'high');
   assert.equal(result.review.hasBlockingIssues, false);
+  assert.equal(
+    result.review.issues.some((issue) =>
+      issue.message.includes('本次导入同时包含净变动和余额记录')
+    ),
+    true
+  );
+});
+
+test('reports repeated rollup content as high risk without blocking', () => {
+  const payload = {
+    format: 'netraflow_rollup',
+    records: [
+      {
+        date: '2026-05-04',
+        mode: 'change',
+        amount: 12,
+        currency: 'CNY',
+        accountKeyword: '支付宝'
+      }
+    ],
+    unresolvedItems: []
+  };
+
+  const result = parseRollupImportJson(JSON.stringify(payload), {
+    todayDateValue: '2026-05-06',
+    contentHash: 'same-content',
+    importedHashes: ['same-content']
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.review.riskLevel, 'high');
+  assert.equal(result.review.hasBlockingIssues, false);
+  assert.equal(
+    result.review.issues.some((issue) => issue.message.includes('高度疑似完全重复')),
+    true
+  );
 });
 
 test('blocks future dates and invalid amount values', () => {

@@ -1,378 +1,214 @@
 import {
-
   type ChangeEvent,
-
   type CSSProperties,
-
   type DragEvent,
-
   type FormEvent,
-
   type HTMLAttributes,
-
   type KeyboardEvent,
-
   type MouseEvent,
-
   type PointerEvent,
-
-  type WheelEvent,
-
   type ReactNode,
-
+  type WheelEvent,
   useEffect,
-
   useMemo,
-
   useReducer,
-
   useRef,
-
   useState
-
 } from 'react';
 
 import packageInfo from '../package.json';
 
-import bilibiliIcon from './assets/Bilibili_tv_a.svg';
-
 import {
-
-  CatIdleIcon,
-
-  CatPettedNyaaIcon,
-
   NfFlashnoteSourceIcon,
-
   NfRollupSourceWideIcon,
-
-  NfSelectionIntersectIcon,
-
-  NfSelectionSingleIcon,
-
-  NfSelectionSubtractIcon,
-
-  NfSelectionUnionIcon,
-
-  NfActionAddIcon,
-
-  NfGithubIcon,
-
   NfSortIcon,
-
-  NfNavBackIcon,
-
-  NfNavChevronRightIcon,
-
   NfWindowCloseIcon,
-
   NfWindowMaximizeIcon,
-
   NfWindowMinimizeIcon,
-
   NfWindowRestoreIcon
-
 } from './assets/icons';
 
+import AccountMark from './components/AccountMark';
 import NfSvgIcon from './components/NfSvgIcon';
-
+import { ConfirmDialog, InputDialog, NoticeDialog } from './components/dialogs';
+import { RightPanelActionButton, RightPanelSection } from './components/rightPanel';
 import GlobalSearchPanel from './components/search/GlobalSearchPanel';
-
 import SearchFloatingNavigator from './components/search/SearchFloatingNavigator';
+import SearchPreviewPanel from './components/search/SearchPreviewPanel';
 
 import {
-
-  getFlashSignedAmountParts,
-
-  resolveFlashRightClickSelection,
-
-  resolveFlashSelection
-
-} from './flashNoteLogic';
-
+  AccountActionsPanel,
+  AccountAmountEditorDialog,
+  AccountChartSettingsPanel,
+  AccountCreateDialog,
+  AccountDangerActionsPanel,
+  AccountDetailPanel,
+  AccountHistoryList,
+  AccountInfoEditorDialog,
+  AccountRestoreDialog
+} from './features/account';
+import {
+  AssetAllocationPanel,
+  AssetChartsPanel,
+  AssetStructureGraphic,
+  AssetTrendChart,
+  AssetTrendPanel,
+  CHART_COLORS,
+  ChartLegendList,
+  ChartSettingsPanel,
+  PieSegments,
+  getInteractiveChartClassName
+} from './features/charts';
 import { FlashNotePage } from './features/flashNote/FlashNotePage';
-
-import { useFlashKeyboardInput } from './features/flashNote/useFlashKeyboardInput';
+import {
+  BackupRecordList,
+  HistoryCalendarPanel,
+  HistoryFilterToolbar,
+  HistoryPanel,
+  HistoryRecordList
+} from './features/history';
+import { QuickEntryAccountPicker, QuickEntryPanel } from './features/quickEntry';
+import {
+  RollupImportDropzone,
+  RollupImportPage,
+  RollupReviewActionsPanel
+} from './features/rollupImport';
+import {
+  AboutNetraFlowPanel,
+  AppearanceSettingsPanel,
+  BackupSettingsPanel,
+  PasswordEditorDialog,
+  SearchSettingsPanel,
+  SnapshotEncryptionDisableDialog,
+  SnapshotPasswordEditorDialog
+} from './features/settings';
 
 import {
-
-  appendFlashInputCharacter,
-
-  backspaceFlashInputValue,
-
-  getContinuousFlashDates,
-
-  getFlashDirectionFromDates,
-
-  getFlashWeeksAround,
-
-  getFlashWeeksForDates,
-
-} from './features/flashNote/flashNoteUtils';
-
-import type {
-
-  FlashCell,
-
-  FlashDirection,
-
-  FlashDateRule,
-
-  FlashInputMode,
-
-  FlashSelectionMode,
-
-  FlashStep,
-
-  FlashWriteRow
-
-} from './features/flashNote/flashNoteTypes';
-
-import {
-
   ACCOUNT_MARK_MAX_CHARS,
-
   getAccountDisplayMark,
-
-  getAccountMarkDisplay,
-
-  limitAccountAliasInput,
-
-  type AccountMarkAccount
-
+  limitAccountAliasInput
 } from './accountMark';
-
 import {
-
   getAccountOperationCalendarMonth,
-
   getAccountOperationTodayDateValue,
-
   isFutureAccountOperationDateValue,
-
   parseAccountOperationDateInput,
-
   resolveProtectedAccountOperationDateInputState,
-
   shiftAccountOperationCalendarMonth,
-
   toAccountOperationDateValue,
-
   toAccountOperationIsoTime
-
 } from './accountOperationDate';
-
-import type {
-
-  GlobalSearchResult,
-
-  SearchLogicMode,
-
-  SearchNavigationTarget,
-
-  SettingsSearchItem
-
-} from './search/searchTypes';
-
 import {
-
-  createGlobalSearchIndex,
-
-  runGlobalSearch
-
-} from './search/searchEngine';
-
+  buildDisplayChartItems,
+  buildSteppedStackLayers,
+  cloneCategoryChartSettings,
+  createSteppedAreaPath,
+  getArchivedChartTooltipLabel,
+  getChartAxisLabelIndexes,
+  getChartRangeDateKeys,
+  getChartValueLabelIndexes,
+  getChartValueLabelLayout,
+  getEffectiveAccountChartSettings,
+  getEffectiveCategoryChartSettings,
+  getNearestChangeDatePointIndex,
+  getZeroAnchoredStackedYAxisScale,
+  isChartColorAssignmentMode,
+  isChartXAxisRange,
+  normalizeChartPointValueMode,
+  normalizeGlobalChartControlMode,
+  syncCategoryChartSettingsFromGlobal
+} from './chartLogic';
+import { EXAMPLE_TEMPLATES, createExampleData } from './exampleData';
 import {
-
-  getNextSearchNavigationTarget,
-
-  getSearchResultItemId,
-
-  getSearchResultsForCategory,
-
-  getSearchNavigationCycle,
-
-  SEARCH_SCROLL_BLOCK
-
-} from './search/searchNavigation';
-
+  appendFlashInputCharacter,
+  backspaceFlashInputValue,
+  getContinuousFlashDates,
+  getFlashDirectionFromDates,
+  getFlashWeeksAround,
+  getFlashWeeksForDates
+} from './features/flashNote/flashNoteUtils';
+import { useFlashKeyboardInput } from './features/flashNote/useFlashKeyboardInput';
 import {
-
-  createInitialSearchState,
-
-  getSearchEscapeAction,
-
-  searchStateReducer
-
-} from './search/searchState';
-
+  DEFAULT_HOME_ASSET_STAT_SETTINGS,
+  isHomeAssetStatLabelMode,
+  isHomeAssetStatMetric,
+  resolveHomeAssetStatLabel,
+  resolveHomeAssetStatValue
+} from './homeAssetStats';
 import {
-
-  createPasswordHash,
-
-  isPasswordHash,
-
-  verifyPassword,
-
-  type PasswordHash
-
-} from './security/passwordHash';
-
+  formatCurrencyMoneyValue,
+  formatHomeMoney,
+  formatMoneyInputValue,
+  formatMoneyValue,
+  isMoneyInput,
+  normalizeMoneyInput,
+  parseMoneyInput,
+  roundToMoneyPrecision
+} from './money';
+import { ROLLUP_IMPORT_EXPLANATION, ROLLUP_IMPORT_PROMPT } from './rollupImportContent';
 import {
-
-  ROLLUP_IMPORT_EXPLANATION,
-
-  ROLLUP_IMPORT_PROMPT
-
-} from './rollupImportContent';
-
-import {
-
   areAllRollupGroupsAssigned,
-
   getRollupAccountGroupKeys,
-
-  parseRollupImportJson,
-
-  type RollupAccountAssignment,
-
-  type RollupImportRecord,
-
-  type RollupImportReview,
-
-  type RollupRiskLevel
-
+  parseRollupImportJson
 } from './rollupImportLogic';
-
+import { createGlobalSearchIndex, runGlobalSearch } from './search/searchEngine';
 import {
-
+  getNextSearchNavigationTarget,
+  getSearchNavigationCycle,
+  getSearchResultItemId,
+  getSearchResultsForCategory,
+  SEARCH_SCROLL_BLOCK
+} from './search/searchNavigation';
+import {
+  createInitialSearchState,
+  getSearchEscapeAction,
+  searchStateReducer
+} from './search/searchState';
+import { createPasswordHash, isPasswordHash, verifyPassword } from './security/passwordHash';
+import {
   SNAPSHOT_DECRYPTION_ERROR_MESSAGE,
-
   decryptSnapshotPayload,
-
   encryptSnapshotPayload,
-
   isEncryptedSnapshotFile
-
 } from './security/snapshotCrypto';
 
-import {
-
-  ARCHIVED_CHART_BADGE_LABEL,
-
-  NETRAFLOW_CHART_PALETTE,
-
-  PIE_SEGMENT_SEPARATOR_CONFIG,
-
-  buildSteppedStackLayers,
-
-  buildDisplayChartItems,
-
-  cloneCategoryChartSettings,
-
-  createSteppedAreaPath,
-
-  createSteppedLinePath,
-
-  getArchivedChartTooltipLabel,
-
-  getChartAxisLabelIndexes,
-
-  getNearestChangeDatePointIndex,
-
-  getChartRangeDateKeys,
-
-  getChartValueLabelIndexes,
-
-  getChartValueLabelLayout,
-
-  getEffectiveAccountChartSettings,
-
-  getEffectiveCategoryChartSettings,
-
-  getNiceYAxisScale,
-
-  getVisibleTrendMarkerIndexes,
-
-  getZeroAnchoredStackedYAxisScale,
-
-  normalizeChartPointValueMode,
-
-  normalizeGlobalChartControlMode,
-
-  isChartColorAssignmentMode,
-
-  isChartXAxisRange,
-
-  syncCategoryChartSettingsFromGlobal,
-
-  type BasicAccountChartSettings,
-
-  type BasicCategoryChartSettings,
-
-  type ChartColorAssignmentMode as NetraflowChartColorAssignmentMode,
-
-  type ChartColorItem,
-
-  type ChartPointKind,
-
-  type GlobalChartControlMode,
-
-  type ChartPointValueMode,
-
-  type ChartXAxisRange
-
+import type { RightPanelActionButtonProps } from './components/rightPanel';
+import type { ChartLegendItemData, TotalAssetChartSettings } from './features/charts';
+import type {
+  FlashCell,
+  FlashDateRule,
+  FlashDirection,
+  FlashInputMode,
+  FlashSelectionMode,
+  FlashStep,
+  FlashWriteRow
+} from './features/flashNote/flashNoteTypes';
+import type { QuickEntryAccountGroup } from './features/quickEntry';
+import type {
+  BasicAccountChartSettings,
+  BasicCategoryChartSettings,
+  ChartColorAssignmentMode as NetraflowChartColorAssignmentMode,
+  ChartColorItem,
+  ChartPointKind,
+  ChartPointValueMode,
+  ChartXAxisRange,
+  GlobalChartControlMode
 } from './chartLogic';
-
-import {
-
-  formatCurrencyMoneyValue,
-
-  formatHomeMoney,
-
-  formatMoneyInputValue,
-
-  formatMoneyValue,
-
-  isMoneyInput,
-
-  normalizeMoneyInput,
-
-  parseMoneyInput,
-
-  roundToMoneyPrecision
-
-} from './money';
-
-import {
-
-  DEFAULT_HOME_ASSET_STAT_SETTINGS,
-
-  isHomeAssetStatLabelMode,
-
-  isHomeAssetStatMetric,
-
-  resolveHomeAssetStatLabel,
-
-  resolveHomeAssetStatValue,
-
-  type HomeAssetStatLabelMode,
-
-  type HomeAssetStatMetric
-
-} from './homeAssetStats';
-
-import {
-
-  EXAMPLE_TEMPLATES,
-
-  createExampleData,
-
-  type ExampleTemplateId
-
-} from './exampleData';
-
-
+import type { ExampleTemplateId } from './exampleData';
+import type { HomeAssetStatLabelMode, HomeAssetStatMetric } from './homeAssetStats';
+import type {
+  RollupAccountAssignment,
+  RollupImportRecord,
+  RollupImportReview,
+  RollupRiskLevel
+} from './rollupImportLogic';
+import type {
+  GlobalSearchResult,
+  SearchLogicMode,
+  SearchNavigationTarget,
+  SettingsSearchItem
+} from './search/searchTypes';
+import type { PasswordHash } from './security/passwordHash';
 
 type Account = {
 
@@ -591,28 +427,6 @@ type HistoryTone = {
 
 
 
-type HistoryCardOptions = {
-
-  nested?: boolean;
-
-  timeLabel?: string;
-
-  extraInfo?: string;
-
-  interactive?: boolean;
-
-  expanded?: boolean;
-
-  highlighted?: boolean;
-
-  onClick?: () => void;
-
-  children?: ReactNode;
-
-};
-
-
-
 type AdjustDirection = 'increase' | 'decrease';
 
 
@@ -721,15 +535,15 @@ type ArchivedAccountEntry = Account & {
 
 
 
-type BackupReminderUnit = 'day' | 'week' | 'month';
+type BackupCycleUnit = 'day' | 'week' | 'month';
 
 
 
-type BackupReminderCycle = {
+type BackupCycle = {
 
   value: number;
 
-  unit: BackupReminderUnit;
+  unit: BackupCycleUnit;
 
 };
 
@@ -759,7 +573,7 @@ type AutoBackupSettings = {
 
   enabled: boolean;
 
-  cycle: BackupReminderCycle;
+  cycle: BackupCycle;
 
   directory: string;
 
@@ -927,7 +741,7 @@ type SignedAmountCssVariables = CSSProperties & {
 
 
 
-type HistoryPanelView = 'history' | 'backup' | 'backup-settings';
+type HistoryPanelView = 'history' | 'backup';
 
 type BackupReturnTarget = 'history' | 'global-settings-backup';
 
@@ -984,14 +798,6 @@ type SearchNavigationSnapshot = {
 
 
 type PageCoverage = 'full' | 'right-panel-only' | 'none';
-
-
-
-type BackupReminderPromptState = {
-
-  intervalDays: number;
-
-} | null;
 
 
 
@@ -1084,36 +890,6 @@ type ChartSegment = {
   sourceIds?: string[];
 
   archived?: boolean;
-
-};
-
-
-
-type ChartLegendItemData = {
-
-  id: string;
-
-  label: string;
-
-  color: string;
-
-  value?: ReactNode;
-
-  detail?: ReactNode;
-
-  swatch?: 'block' | 'line';
-
-  archived?: boolean;
-
-};
-
-
-
-type AssetTrendDetailPoint = {
-
-  index: number;
-
-  seriesKey: TrendChartSeries['key'];
 
 };
 
@@ -1242,8 +1018,6 @@ const HISTORY_STORAGE_KEY = 'asset-overview-history';
 const LAST_BACKUP_STORAGE_KEY = 'lastBackupAt';
 
 const LAST_BACKUP_HISTORY_COUNT_STORAGE_KEY = 'lastBackupHistoryCount';
-
-const BACKUP_REMINDER_CYCLE_STORAGE_KEY = 'backupReminderCycle';
 
 const BACKUP_RECORDS_STORAGE_KEY = 'backupRecords';
 
@@ -2153,14 +1927,6 @@ const isGlobalSettingsSection = (value: string): value is GlobalSettingsSection 
 
   GLOBAL_SETTINGS_NAV_ITEMS.some((item) => item.id === value);
 
-const DEFAULT_BACKUP_REMINDER_CYCLE: BackupReminderCycle = {
-
-  value: 7,
-
-  unit: 'day'
-
-};
-
 const DEFAULT_AUTO_BACKUP_SETTINGS: AutoBackupSettings = {
 
   enabled: false,
@@ -2291,26 +2057,6 @@ const SIGNED_AMOUNT_BACKGROUNDS = {
 
 } as const;
 
-const CHART_COLORS = {
-
-  empty: 'var(--chart-empty)',
-
-  netLine: 'var(--chart-net-line)',
-
-  compactTrendLine: 'var(--chart-compact-trend-line)',
-
-  compactNetLine: 'var(--chart-compact-net-line)',
-
-  positiveLine: NETRAFLOW_CHART_PALETTE[0],
-
-  negativeLine: NETRAFLOW_CHART_PALETTE[2],
-
-  liabilityOverlay: NETRAFLOW_CHART_PALETTE[2]
-
-} as const;
-
-
-
 const FIRST_WELCOME_FOOTPRINT_STORAGE_KEYS = [
 
   GROUPS_STORAGE_KEY,
@@ -2320,8 +2066,6 @@ const FIRST_WELCOME_FOOTPRINT_STORAGE_KEYS = [
   LAST_BACKUP_STORAGE_KEY,
 
   LAST_BACKUP_HISTORY_COUNT_STORAGE_KEY,
-
-  BACKUP_REMINDER_CYCLE_STORAGE_KEY,
 
   BACKUP_RECORDS_STORAGE_KEY,
 
@@ -2735,17 +2479,17 @@ const readStorageJson = (key: string) => {
 
 
 
-const isBackupReminderUnit = (value: unknown): value is BackupReminderUnit =>
+const isBackupCycleUnit = (value: unknown): value is BackupCycleUnit =>
 
   value === 'day' || value === 'week' || value === 'month';
 
 
 
-const normalizeBackupReminderCycle = (value: unknown): BackupReminderCycle => {
+const normalizeBackupCycle = (value: unknown): BackupCycle => {
 
   if (!isPlainObject(value)) {
 
-    return DEFAULT_BACKUP_REMINDER_CYCLE;
+    return { ...DEFAULT_AUTO_BACKUP_SETTINGS.cycle };
 
   }
 
@@ -2761,7 +2505,7 @@ const normalizeBackupReminderCycle = (value: unknown): BackupReminderCycle => {
 
       ? Math.max(1, Math.floor(rawValue))
 
-      : DEFAULT_BACKUP_REMINDER_CYCLE.value;
+      : DEFAULT_AUTO_BACKUP_SETTINGS.cycle.value;
 
 
 
@@ -2769,33 +2513,9 @@ const normalizeBackupReminderCycle = (value: unknown): BackupReminderCycle => {
 
     value: cycleValue,
 
-    unit: isBackupReminderUnit(rawUnit) ? rawUnit : DEFAULT_BACKUP_REMINDER_CYCLE.unit
+    unit: isBackupCycleUnit(rawUnit) ? rawUnit : DEFAULT_AUTO_BACKUP_SETTINGS.cycle.unit
 
   };
-
-};
-
-
-
-const loadBackupReminderCycle = () => {
-
-  const storedCycle = readStorageJson(BACKUP_REMINDER_CYCLE_STORAGE_KEY);
-
-
-
-  return storedCycle.parsed
-
-    ? normalizeBackupReminderCycle(storedCycle.value)
-
-    : DEFAULT_BACKUP_REMINDER_CYCLE;
-
-};
-
-
-
-const saveBackupReminderCycle = (cycle: BackupReminderCycle) => {
-
-  window.localStorage.setItem(BACKUP_REMINDER_CYCLE_STORAGE_KEY, JSON.stringify(cycle));
 
 };
 
@@ -2963,7 +2683,7 @@ const saveBackupRecords = (records: BackupRecord[]) => {
 
 
 
-const getBackupReminderCycleDays = (cycle: BackupReminderCycle) => {
+const getBackupCycleDays = (cycle: BackupCycle) => {
 
   const unitMultiplier = cycle.unit === 'month' ? 30 : cycle.unit === 'week' ? 7 : 1;
 
@@ -3123,7 +2843,7 @@ const normalizeAutoBackupSettings = (value: unknown): AutoBackupSettings => {
 
         : DEFAULT_AUTO_BACKUP_SETTINGS.enabled,
 
-    cycle: normalizeBackupReminderCycle(value.cycle),
+    cycle: normalizeBackupCycle(value.cycle),
 
     directory:
 
@@ -3901,7 +3621,7 @@ const getSignedAmountTone = (
 
 
 
-const areBackupCyclesEqual = (left: BackupReminderCycle, right: BackupReminderCycle) =>
+const areBackupCyclesEqual = (left: BackupCycle, right: BackupCycle) =>
 
   left.value === right.value && left.unit === right.unit;
 
@@ -5223,52 +4943,6 @@ const getSegmentedControlStyle = (optionCount: number): CSSProperties =>
 
 
 
-function AccountMark({
-
-  account,
-
-  className,
-
-  style
-
-}: {
-
-  account: AccountMarkAccount;
-
-  className?: string;
-
-  style?: CSSProperties;
-
-}) {
-
-  const mark = getAccountMarkDisplay(account);
-
-  const classes = ['account-mark', `account-mark--${mark.layout}`, className]
-
-    .filter(Boolean)
-
-    .join(' ');
-
-
-
-  return (
-
-    <span aria-hidden="true" className={classes} style={style}>
-
-      {mark.rows.map((row, index) => (
-
-        <span key={`${index}-${row}`}>{row}</span>
-
-      ))}
-
-    </span>
-
-  );
-
-}
-
-
-
 const addDays = (date: Date, days: number) => {
 
   const nextDate = new Date(date);
@@ -5341,70 +5015,6 @@ const getSelectedDayCount = (startDate: string, endDate: string) => {
 
 
 
-const FLASH_NOTE_STAGE_LABELS: Record<FlashNoteStage, string> = {
-
-  select: '选择',
-
-  input: '输入',
-
-  'date-select': '日期选择',
-
-  'mode-select': '输入模式选择',
-
-  'sequence-input': '顺序输入',
-
-  correction: '确认',
-
-  confirm: '确认',
-
-  completed: '完成写入'
-
-};
-
-
-
-const FLASH_NOTE_STAGE_ORDER: FlashNoteStage[] = [
-
-  'select',
-
-  'input',
-
-  'confirm',
-
-  'completed'
-
-];
-
-
-
-const FLASH_NOTE_SELECTION_TOOLS: Array<{
-
-  mode: FlashNoteSelectionMode;
-
-  icon: string;
-
-  title: string;
-
-  ariaLabel: string;
-
-}> = [
-
-  { mode: 'replace', icon: NfSelectionSingleIcon, title: '单选/拖选', ariaLabel: '单选' },
-
-  { mode: 'intersect', icon: NfSelectionIntersectIcon, title: '交集', ariaLabel: '交集选区' },
-
-  { mode: 'union', icon: NfSelectionUnionIcon, title: '合集/合并', ariaLabel: '合并选区' },
-
-  { mode: 'subtract', icon: NfSelectionSubtractIcon, title: '删除/相减', ariaLabel: '相减选区' }
-
-];
-
-
-
-const FLASH_NOTE_WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'];
-
-
-
 const getDateKeyFromValue = (dateValue: string) =>
 
   new Date(`${dateValue}T00:00:00`);
@@ -5442,62 +5052,6 @@ const getMondayDate = (date: Date) => addDays(date, -((date.getDay() + 6) % 7));
 const getDateWeekKey = (dateValue: string) =>
 
   toDateInputValue(getMondayDate(getDateKeyFromValue(dateValue)));
-
-
-
-const formatFlashShortDate = (dateValue: string) => {
-
-  if (!dateValue) {
-
-    return '--';
-
-  }
-
-
-
-  const date = getDateKeyFromValue(dateValue);
-
-  return `${date.getMonth() + 1}.${date.getDate()}`;
-
-};
-
-
-
-const formatFlashDateRange = (dates: string[]) => {
-
-  if (dates.length === 0) {
-
-    return '--';
-
-  }
-
-
-
-  const sortedDates = [...dates].sort();
-
-  const firstDate = sortedDates[0] ?? '';
-
-  const lastDate = sortedDates[sortedDates.length - 1] ?? firstDate;
-
-
-
-  return firstDate === lastDate
-
-    ? formatFlashShortDate(firstDate)
-
-    : `${formatFlashShortDate(firstDate)}-${formatFlashShortDate(lastDate)}`;
-
-};
-
-
-
-const getFlashCoverageWeekCount = (dates: string[]) =>
-
-  dates.length === 0
-
-    ? 0
-
-    : new Set(dates.map((dateValue) => getDateWeekKey(dateValue))).size;
 
 
 
@@ -5581,44 +5135,6 @@ const parseFlashNumberInput = (value: string) => {
 
 
 
-const cloneFlashCells = (cells: Record<string, FlashNoteCell>) =>
-
-  Object.fromEntries(
-
-    Object.entries(cells).map(([dateValue, cell]) => [dateValue, { ...cell }])
-
-  ) as Record<string, FlashNoteCell>;
-
-
-
-const serializeFlashCells = (cells: Record<string, FlashNoteCell>) =>
-
-  JSON.stringify(
-
-    Object.values(cells)
-
-      .map((cell) => ({
-
-        date: cell.date,
-
-        enabled: cell.enabled,
-
-        missing: cell.missing,
-
-        original: cell.original,
-
-        pendingDelete: cell.pendingDelete,
-
-        value: cell.value
-
-      }))
-
-      .sort((left, right) => left.date.localeCompare(right.date))
-
-  );
-
-
-
 const getFlashMonthStart = (date = new Date()) =>
 
   new Date(date.getFullYear(), date.getMonth(), 1);
@@ -5628,22 +5144,6 @@ const getFlashMonthStart = (date = new Date()) =>
 const getFlashDefaultVisibleMonth = (date = new Date()) =>
 
   getFlashMonthStart(new Date(date.getFullYear(), date.getMonth() - 1, 1));
-
-
-
-const getFlashMonthLabel = (monthDate: Date) =>
-
-  `${monthDate.getFullYear()}年${monthDate.getMonth() + 1}月`;
-
-
-
-const getFlashWeekdayLabel = (dateValue: string) => {
-
-  const date = getDateKeyFromValue(dateValue);
-
-  return FLASH_NOTE_WEEKDAYS[(date.getDay() + 6) % 7] ?? '';
-
-};
 
 
 
@@ -5882,68 +5382,6 @@ const getHistoryTimestamp = (record: HistoryRecord) => {
 const compareHistoryByTimeDesc = (left: HistoryRecord, right: HistoryRecord) =>
 
   getHistoryTimestamp(right) - getHistoryTimestamp(left);
-
-
-
-const getEarliestHistoryTimestamp = (history: HistoryRecord[]) => {
-
-  const timestamps = history
-
-    .map((record) => getHistoryTimestamp(record))
-
-    .filter((timestamp) => timestamp > 0);
-
-
-
-  return timestamps.length > 0 ? Math.min(...timestamps) : null;
-
-};
-
-
-
-const getBackupReminderStatus = (
-
-  lastBackupAt: string,
-
-  history: HistoryRecord[],
-
-  reminderCycle: BackupReminderCycle,
-
-  hasStoredReminderCycle = false
-
-) => {
-
-  const lastBackupTimestamp = getValidTimestamp(lastBackupAt);
-
-  const firstHistoryTimestamp = getEarliestHistoryTimestamp(history);
-
-  const sourceTimestamp = lastBackupTimestamp ?? firstHistoryTimestamp;
-
-  const intervalDays =
-
-    sourceTimestamp === null
-
-      ? 0
-
-      : Math.max(0, Math.floor((Date.now() - sourceTimestamp) / DAY_MS));
-
-  const reminderCycleDays = getBackupReminderCycleDays(reminderCycle);
-
-
-
-  return {
-
-    intervalDays,
-
-    reminderCycleDays,
-
-    shouldRemind:
-
-      sourceTimestamp === null ? !hasStoredReminderCycle : intervalDays >= reminderCycleDays
-
-  };
-
-};
 
 
 
@@ -7433,156 +6871,6 @@ const deriveAccountTrendPoints = (
 
 
 
-const getTrendSeries = (
-
-  points: TrendChartPoint[],
-
-  display: TrendAssetDisplay
-
-): TrendChartSeries[] => {
-
-  if (display === 'net') {
-
-    return [
-
-      {
-
-        key: 'net',
-
-        label: '净资产',
-
-        color: CHART_COLORS.netLine,
-
-        values: points.map((point) => point.net)
-
-      }
-
-    ];
-
-  }
-
-
-
-  if (display === 'positive') {
-
-    return [
-
-      {
-
-        key: 'positive',
-
-        label: '正资产',
-
-        color: CHART_COLORS.positiveLine,
-
-        values: points.map((point) => point.positive)
-
-      }
-
-    ];
-
-  }
-
-
-
-  const positiveNegativeSeries: TrendChartSeries[] = [
-
-    {
-
-      key: 'positive',
-
-      label: '正资产',
-
-      color: CHART_COLORS.positiveLine,
-
-      values: points.map((point) => point.positive)
-
-    },
-
-    {
-
-      key: 'negative',
-
-      label: '负资产',
-
-      color: CHART_COLORS.negativeLine,
-
-      values: points.map((point) => point.negative)
-
-    }
-
-  ];
-
-
-
-  return positiveNegativeSeries.filter((series) =>
-
-    series.values.some((value) => value !== 0)
-
-  );
-
-};
-
-
-
-const getTrendBoundaryMessage = (
-
-  points: TrendChartPoint[],
-
-  display: TrendAssetDisplay
-
-) => {
-
-  if (points.length < 2) {
-
-    return '暂无足够数据';
-
-  }
-
-
-
-  if (display === 'net' && points.every((point) => point.net === 0)) {
-
-    return '净资产为 0';
-
-  }
-
-
-
-  if (display === 'positive' && points.every((point) => point.positive === 0)) {
-
-    return '正资产为 0';
-
-  }
-
-
-
-  if (
-
-    display === 'positive-negative' &&
-
-    points.every((point) => point.positive === 0 && point.negative === 0)
-
-  ) {
-
-    return '正负资产均为 0';
-
-  }
-
-
-
-  return null;
-
-};
-
-
-
-const getDebtMultipleLabel = (debtRatio: number) =>
-
-  Number.isFinite(debtRatio) && debtRatio >= 2 ? `≥${Math.floor(debtRatio)}×` : '';
-
-
-
 const getCalendarDays = (monthDate: Date) => {
 
   const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
@@ -7638,956 +6926,6 @@ const renderWindowControlIcon = (
   );
 
 };
-
-
-
-const polarToCartesian = (cx: number, cy: number, radius: number, angleInDegrees: number) => {
-
-  const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180;
-
-
-
-  return {
-
-    x: cx + radius * Math.cos(angleInRadians),
-
-    y: cy + radius * Math.sin(angleInRadians)
-
-  };
-
-};
-
-
-
-const describePieSlice = (
-
-  cx: number,
-
-  cy: number,
-
-  radius: number,
-
-  startAngle: number,
-
-  endAngle: number
-
-) => {
-
-  const start = polarToCartesian(cx, cy, radius, endAngle);
-
-  const end = polarToCartesian(cx, cy, radius, startAngle);
-
-  const largeArcFlag = endAngle - startAngle <= 180 ? 0 : 1;
-
-
-
-  return [
-
-    `M ${cx} ${cy}`,
-
-    `L ${start.x} ${start.y}`,
-
-    `A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`,
-
-    'Z'
-
-  ].join(' ');
-
-};
-
-
-
-const describeDonutSegment = (
-
-  cx: number,
-
-  cy: number,
-
-  innerRadius: number,
-
-  outerRadius: number,
-
-  startAngle: number,
-
-  endAngle: number
-
-) => {
-
-  const outerStart = polarToCartesian(cx, cy, outerRadius, endAngle);
-
-  const outerEnd = polarToCartesian(cx, cy, outerRadius, startAngle);
-
-  const innerStart = polarToCartesian(cx, cy, innerRadius, endAngle);
-
-  const innerEnd = polarToCartesian(cx, cy, innerRadius, startAngle);
-
-  const largeArcFlag = endAngle - startAngle <= 180 ? 0 : 1;
-
-
-
-  return [
-
-    `M ${outerStart.x} ${outerStart.y}`,
-
-    `A ${outerRadius} ${outerRadius} 0 ${largeArcFlag} 0 ${outerEnd.x} ${outerEnd.y}`,
-
-    `L ${innerEnd.x} ${innerEnd.y}`,
-
-    `A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 1 ${innerStart.x} ${innerStart.y}`,
-
-    'Z'
-
-  ].join(' ');
-
-};
-
-
-
-function PieSegments({
-
-  segments,
-
-  total,
-
-  cx,
-
-  cy,
-
-  radius,
-
-  activeSegmentId,
-
-  onSegmentHover
-
-}: {
-
-  segments: ChartSegment[];
-
-  total: number;
-
-  cx: number;
-
-  cy: number;
-
-  radius: number;
-
-  activeSegmentId?: string | null;
-
-  onSegmentHover?: (id: string | null) => void;
-
-}) {
-
-  if (total <= 0 || segments.length === 0) {
-
-    return <circle cx={cx} cy={cy} r={radius} fill={CHART_COLORS.empty} opacity="0.55" />;
-
-  }
-
-
-
-  if (segments.length === 1) {
-
-    const segment = segments[0];
-
-
-
-    return (
-
-      <circle
-
-        cx={cx}
-
-        cy={cy}
-
-        r={radius}
-
-        fill={segment.color}
-
-        className={getInteractiveChartClassName('chart-shape', segment.id, activeSegmentId)}
-
-        onMouseEnter={() => onSegmentHover?.(segment.id)}
-
-        onMouseLeave={() => onSegmentHover?.(null)}
-
-      >
-
-        <title>
-
-          {getArchivedChartTooltipLabel(segment.label, segment.archived)} · {formatChartNumber(segment.amount)}
-
-        </title>
-
-      </circle>
-
-    );
-
-  }
-
-
-
-  let currentAngle = 0;
-
-
-
-  return (
-
-    <>
-
-      {segments.map((segment) => {
-
-        const startAngle = currentAngle;
-
-        const endAngle = currentAngle + (segment.amount / total) * 360;
-
-        currentAngle = endAngle;
-
-
-
-        return (
-
-          <path
-
-            key={segment.id}
-
-            d={describePieSlice(cx, cy, radius, startAngle, endAngle)}
-
-            fill={segment.color}
-
-            {...PIE_SEGMENT_SEPARATOR_CONFIG}
-
-            className={getInteractiveChartClassName('chart-shape', segment.id, activeSegmentId)}
-
-            onMouseEnter={() => onSegmentHover?.(segment.id)}
-
-            onMouseLeave={() => onSegmentHover?.(null)}
-
-          >
-
-            <title>
-
-              {getArchivedChartTooltipLabel(segment.label, segment.archived)} · {formatChartNumber(segment.amount)}
-
-            </title>
-
-          </path>
-
-        );
-
-      })}
-
-    </>
-
-  );
-
-}
-
-
-
-function DonutSegments({
-
-  segments,
-
-  total,
-
-  cx,
-
-  cy,
-
-  innerRadius,
-
-  outerRadius,
-
-  activeSegmentId,
-
-  onSegmentHover
-
-}: {
-
-  segments: ChartSegment[];
-
-  total: number;
-
-  cx: number;
-
-  cy: number;
-
-  innerRadius: number;
-
-  outerRadius: number;
-
-  activeSegmentId?: string | null;
-
-  onSegmentHover?: (id: string | null) => void;
-
-}) {
-
-  if (total <= 0 || segments.length === 0) {
-
-    return null;
-
-  }
-
-
-
-  if (segments.length === 1) {
-
-    return (
-
-      <circle
-
-        cx={cx}
-
-        cy={cy}
-
-        r={(innerRadius + outerRadius) / 2}
-
-        fill="none"
-
-        stroke={segments[0].color}
-
-        strokeWidth={outerRadius - innerRadius}
-
-        className={getInteractiveChartClassName('chart-shape', segments[0].id, activeSegmentId)}
-
-        onMouseEnter={() => onSegmentHover?.(segments[0].id)}
-
-        onMouseLeave={() => onSegmentHover?.(null)}
-
-      >
-
-        <title>
-
-          {getArchivedChartTooltipLabel(segments[0].label, segments[0].archived)} · {formatChartNumber(segments[0].amount)}
-
-        </title>
-
-      </circle>
-
-    );
-
-  }
-
-
-
-  let currentAngle = 0;
-
-
-
-  return (
-
-    <>
-
-      {segments.map((segment) => {
-
-        const startAngle = currentAngle;
-
-        const endAngle = currentAngle + (segment.amount / total) * 360;
-
-        currentAngle = endAngle;
-
-
-
-        return (
-
-          <path
-
-            key={segment.id}
-
-            d={describeDonutSegment(cx, cy, innerRadius, outerRadius, startAngle, endAngle)}
-
-            fill={segment.color}
-
-            {...PIE_SEGMENT_SEPARATOR_CONFIG}
-
-            className={getInteractiveChartClassName('chart-shape', segment.id, activeSegmentId)}
-
-            onMouseEnter={() => onSegmentHover?.(segment.id)}
-
-            onMouseLeave={() => onSegmentHover?.(null)}
-
-          >
-
-            <title>
-
-              {getArchivedChartTooltipLabel(segment.label, segment.archived)} · {formatChartNumber(segment.amount)}
-
-            </title>
-
-          </path>
-
-        );
-
-      })}
-
-    </>
-
-  );
-
-}
-
-
-
-function DebtRatioRing({
-
-  ratio,
-
-  cx,
-
-  cy,
-
-  radius,
-
-  strokeWidth
-
-}: {
-
-  ratio: number;
-
-  cx: number;
-
-  cy: number;
-
-  radius: number;
-
-  strokeWidth: number;
-
-}) {
-
-  const circumference = 2 * Math.PI * radius;
-
-  const safeRatio = Number.isFinite(ratio) ? Math.max(0, ratio) : 0;
-
-  const baseRatio = Math.min(safeRatio, 1);
-
-  const overlayRatio = safeRatio > 1 ? Math.min(safeRatio - 1, 1) : 0;
-
-
-
-  return (
-
-    <>
-
-      <circle
-
-        cx={cx}
-
-        cy={cy}
-
-        r={radius}
-
-        fill="none"
-
-        stroke={CHART_COLORS.empty}
-
-        strokeWidth={strokeWidth}
-
-        opacity="0.42"
-
-      />
-
-      {baseRatio > 0 ? (
-
-        <circle
-
-          cx={cx}
-
-          cy={cy}
-
-          r={radius}
-
-          fill="none"
-
-          stroke={NETRAFLOW_CHART_PALETTE[2]}
-
-          strokeWidth={strokeWidth}
-
-          strokeDasharray={`${circumference * baseRatio} ${circumference}`}
-
-          strokeLinecap={baseRatio >= 1 ? 'butt' : 'round'}
-
-          transform={`rotate(-90 ${cx} ${cy})`}
-
-        />
-
-      ) : null}
-
-      {overlayRatio > 0 ? (
-
-        <circle
-
-          cx={cx}
-
-          cy={cy}
-
-          r={radius}
-
-          fill="none"
-
-          stroke={CHART_COLORS.liabilityOverlay}
-
-          strokeWidth={strokeWidth}
-
-          strokeDasharray={`${circumference * overlayRatio} ${circumference}`}
-
-          strokeLinecap={overlayRatio >= 1 ? 'butt' : 'round'}
-
-          transform={`rotate(-90 ${cx} ${cy})`}
-
-        />
-
-      ) : null}
-
-    </>
-
-  );
-
-}
-
-
-
-const getStructureCenterMessage = (
-
-  data: AssetStructureChartData,
-
-  display: StructureAssetDisplay
-
-) => {
-
-  if (display === 'positive' && data.positiveTotal === 0) {
-
-    return '正资产为 0';
-
-  }
-
-
-
-  if (display === 'negative' && data.negativeTotal === 0) {
-
-    return '负资产为 0';
-
-  }
-
-
-
-  if (display === 'both') {
-
-    if (data.positiveTotal === 0 && data.negativeTotal === 0) {
-
-      return '暂无资产结构';
-
-    }
-
-
-
-    if (data.positiveTotal === 0 && data.negativeTotal > 0) {
-
-      return '正资产为 0';
-
-    }
-
-  }
-
-
-
-  return '';
-
-};
-
-
-
-function AssetStructureGraphic({
-
-  data,
-
-  display,
-
-  compact = false,
-
-  showDebtMultiple = true,
-
-  activeSegmentId,
-
-  onSegmentHover
-
-}: {
-
-  data: AssetStructureChartData;
-
-  display: StructureAssetDisplay;
-
-  compact?: boolean;
-
-  showDebtMultiple?: boolean;
-
-  activeSegmentId?: string | null;
-
-  onSegmentHover?: (id: string | null) => void;
-
-}) {
-
-  const centerMessage = compact ? '' : getStructureCenterMessage(data, display);
-
-  const debtMultipleLabel =
-
-    display === 'both' && data.positiveTotal > 0 && showDebtMultiple
-
-      ? getDebtMultipleLabel(data.debtRatio)
-
-      : '';
-
-  const shouldRenderDebtRing =
-
-    display === 'both' && data.positiveTotal > 0 && data.negativeTotal > 0;
-
-  const shouldRenderNegativeOnlyRing =
-
-    display === 'both' && data.positiveTotal === 0 && data.negativeTotal > 0;
-
-  const effectiveDisplay =
-
-    display === 'both' && data.negativeTotal === 0 && data.positiveTotal > 0
-
-      ? 'positive'
-
-      : display;
-
-
-
-  return (
-
-    <div className={`asset-structure-graphic${compact ? ' is-compact' : ''}`}>
-
-      <svg viewBox="0 0 120 120" role="img" aria-hidden={compact ? true : undefined}>
-
-        <circle cx="60" cy="60" r="36" fill="var(--chart-center-bg)" />
-
-        {effectiveDisplay === 'positive' ? (
-
-          <PieSegments
-
-            segments={data.positiveSegments}
-
-            total={data.positiveTotal}
-
-            cx={60}
-
-            cy={60}
-
-            radius={compact ? 31 : 34}
-
-            activeSegmentId={activeSegmentId}
-
-            onSegmentHover={onSegmentHover}
-
-          />
-
-        ) : null}
-
-        {effectiveDisplay === 'negative' ? (
-
-          <PieSegments
-
-            segments={data.negativeSegments}
-
-            total={data.negativeTotal}
-
-            cx={60}
-
-            cy={60}
-
-            radius={compact ? 31 : 34}
-
-            activeSegmentId={activeSegmentId}
-
-            onSegmentHover={onSegmentHover}
-
-          />
-
-        ) : null}
-
-        {effectiveDisplay === 'both' ? (
-
-          <>
-
-            <PieSegments
-
-              segments={data.positiveSegments}
-
-              total={data.positiveTotal}
-
-              cx={60}
-
-              cy={60}
-
-              radius={compact ? 29 : 32}
-
-              activeSegmentId={activeSegmentId}
-
-              onSegmentHover={onSegmentHover}
-
-            />
-
-            {shouldRenderDebtRing ? (
-
-              <DebtRatioRing
-
-                ratio={data.debtRatio}
-
-                cx={60}
-
-                cy={60}
-
-                radius={compact ? 45 : 47}
-
-                strokeWidth={compact ? 7 : 9}
-
-              />
-
-            ) : null}
-
-            {shouldRenderNegativeOnlyRing ? (
-
-              <DonutSegments
-
-                segments={data.negativeSegments}
-
-                total={data.negativeTotal}
-
-                cx={60}
-
-                cy={60}
-
-                innerRadius={42}
-
-                outerRadius={52}
-
-                activeSegmentId={activeSegmentId}
-
-                onSegmentHover={onSegmentHover}
-
-              />
-
-            ) : null}
-
-          </>
-
-        ) : null}
-
-        {centerMessage ? (
-
-          <text
-
-            x="60"
-
-            y="62"
-
-            textAnchor="middle"
-
-            dominantBaseline="middle"
-
-            fill="var(--chart-axis-text)"
-
-            fontSize="8.5"
-
-            fontWeight="700"
-
-            className="chart-svg-text"
-
-          >
-
-            {centerMessage}
-
-          </text>
-
-        ) : null}
-
-      </svg>
-
-      {debtMultipleLabel ? (
-
-        <span className="asset-structure-graphic__multiple chart-visual-text">
-
-          {debtMultipleLabel}
-
-        </span>
-
-      ) : null}
-
-    </div>
-
-  );
-
-}
-
-
-
-const getStructureLegendRows = (
-
-  data: AssetStructureChartData,
-
-  display: StructureAssetDisplay
-
-) => {
-
-  if (display === 'positive') {
-
-    return data.positiveSegments.map((segment) => ({
-
-      ...segment,
-
-      percent: formatChartPercent(segment.amount, data.positiveTotal)
-
-    }));
-
-  }
-
-
-
-  if (display === 'negative') {
-
-    return data.negativeSegments.map((segment) => ({
-
-      ...segment,
-
-      percent: formatChartPercent(segment.amount, data.negativeTotal)
-
-    }));
-
-  }
-
-
-
-  return [
-
-    ...data.positiveSegments.map((segment) => ({
-
-      ...segment,
-
-      percent: formatChartPercent(segment.amount, data.positiveTotal)
-
-    })),
-
-    ...data.negativeSegments.map((segment) => ({
-
-      ...segment,
-
-      percent: formatChartPercent(segment.amount, data.negativeTotal)
-
-    }))
-
-  ];
-
-};
-
-
-
-function AssetStructurePanel({
-
-  data,
-
-  settings
-
-}: {
-
-  data: AssetStructureChartData;
-
-  settings: AssetChartSettings['structure'];
-
-}) {
-
-  const [hoveredSeriesId, setHoveredSeriesId] = useState<string | null>(null);
-
-  const legendRows = getStructureLegendRows(data, settings.assetDisplay);
-
-  const legendItems: ChartLegendItemData[] = legendRows.map((segment) => ({
-
-    id: segment.id,
-
-    label: segment.label,
-
-    color: segment.color,
-
-    value: formatChartNumber(segment.amount),
-
-    detail: segment.percent,
-
-    archived: segment.archived
-
-  }));
-
-  const debtRate =
-
-    data.positiveTotal > 0
-
-      ? `${(data.debtRatio * 100).toFixed(1)}%`
-
-      : data.negativeTotal > 0
-
-        ? '--'
-
-        : '0%';
-
-
-
-  return (
-
-    <section className="asset-chart-panel">
-
-      <header className="asset-chart-panel__header chart-visual-text">
-
-        <div>
-
-          <h2>资产占比</h2>
-
-        </div>
-
-        <div className="asset-chart-panel__stat">
-
-          <span>负债率</span>
-
-          <strong>{debtRate}</strong>
-
-        </div>
-
-      </header>
-
-
-
-      <div className="asset-structure-detail">
-
-        <AssetStructureGraphic
-
-          data={data}
-
-          display={settings.assetDisplay}
-
-          showDebtMultiple={settings.showDebtMultiple}
-
-          activeSegmentId={hoveredSeriesId}
-
-          onSegmentHover={setHoveredSeriesId}
-
-        />
-
-        <ChartLegendList
-
-          items={legendItems}
-
-          emptyMessage="暂无资产结构"
-
-          activeId={hoveredSeriesId}
-
-          onActiveIdChange={setHoveredSeriesId}
-
-        />
-
-      </div>
-
-    </section>
-
-  );
-
-}
 
 
 
@@ -8683,150 +7021,6 @@ const createSteppedVerticalLinePath = (
 
 
 
-const getInteractiveChartClassName = (
-
-  baseClassName: string,
-
-  id: string,
-
-  activeId: string | null | undefined
-
-) =>
-
-  [
-
-    baseClassName,
-
-    activeId === id ? 'is-active' : '',
-
-    activeId && activeId !== id ? 'is-dimmed' : ''
-
-  ]
-
-    .filter(Boolean)
-
-    .join(' ');
-
-
-
-function ChartLegendList({
-
-  items,
-
-  emptyMessage,
-
-  activeId,
-
-  onActiveIdChange,
-
-  className = ''
-
-}: {
-
-  items: ChartLegendItemData[];
-
-  emptyMessage: string;
-
-  activeId?: string | null;
-
-  onActiveIdChange?: (id: string | null) => void;
-
-  className?: string;
-
-}) {
-
-  return (
-
-    <div className={`chart-legend-list${className ? ` ${className}` : ''}`} role="list">
-
-      {items.length === 0 ? (
-
-        <p className="asset-chart-empty">{emptyMessage}</p>
-
-      ) : (
-
-        items.map((item) => (
-
-          <div
-
-            key={`${item.id}-${item.color}`}
-
-            role="listitem"
-
-            tabIndex={onActiveIdChange ? 0 : undefined}
-
-            className={getInteractiveChartClassName('chart-legend-item', item.id, activeId)}
-
-            onMouseEnter={() => onActiveIdChange?.(item.id)}
-
-            onMouseLeave={() => onActiveIdChange?.(null)}
-
-            onFocus={() => onActiveIdChange?.(item.id)}
-
-            onBlur={() => onActiveIdChange?.(null)}
-
-          >
-
-            <span className="chart-legend-item__identity">
-
-              <span
-
-                aria-hidden="true"
-
-                className={`chart-legend-item__swatch chart-legend-item__swatch--${item.swatch ?? 'block'}`}
-
-                style={{ background: item.color }}
-
-              />
-
-              <strong>{item.label}</strong>
-
-              {item.archived ? (
-
-                <span className="chart-legend-item__archived">
-
-                  {ARCHIVED_CHART_BADGE_LABEL}
-
-                </span>
-
-              ) : null}
-
-            </span>
-
-            {item.value !== undefined ? (
-
-              <span className="chart-legend-item__metric chart-legend-item__metric--value">
-
-                {item.value}
-
-              </span>
-
-            ) : null}
-
-            {item.detail !== undefined ? (
-
-              <span className="chart-legend-item__metric chart-legend-item__metric--detail">
-
-                {item.detail}
-
-              </span>
-
-            ) : null}
-
-          </div>
-
-        ))
-
-      )}
-
-    </div>
-
-  );
-
-}
-
-
-
 const useMeasuredWidth = <T extends HTMLElement>() => {
 
   const ref = useRef<T | null>(null);
@@ -8883,930 +7077,6 @@ const useMeasuredWidth = <T extends HTMLElement>() => {
 
 
 
-function AssetTrendChart({
-
-  points,
-
-  settings,
-
-  compact = false,
-
-  activeSeriesId,
-
-  onSeriesHover,
-
-  detailMode = false,
-
-  onDetailModeChange
-
-}: {
-
-  points: TrendChartPoint[];
-
-  settings: AssetChartSettings['trend'];
-
-  compact?: boolean;
-
-  activeSeriesId?: string | null;
-
-  onSeriesHover?: (id: string | null) => void;
-
-  detailMode?: boolean;
-
-  onDetailModeChange?: (enabled: boolean) => void;
-
-}) {
-
-  const [containerRef, measuredWidth] = useMeasuredWidth<HTMLDivElement>();
-
-  const [detailPoint, setDetailPoint] = useState<AssetTrendDetailPoint | null>(null);
-
-  const message = getTrendBoundaryMessage(points, settings.assetDisplay);
-
-  const visibleSeries = getTrendSeries(points, settings.assetDisplay);
-
-  const densityWidth = measuredWidth || (compact ? 220 : 620);
-
-  const isDetailMode = !compact && detailMode;
-
-  const chartActiveSeriesId = isDetailMode ? null : activeSeriesId;
-
-
-
-  useEffect(() => {
-
-    setDetailPoint(null);
-
-  }, [isDetailMode, points, settings.assetDisplay]);
-
-
-
-  if (message || visibleSeries.length === 0) {
-
-    return (
-
-      <div
-
-        ref={containerRef}
-
-        className={`asset-trend-chart${compact ? ' is-compact' : ''} is-empty`}
-
-      >
-
-        <span className="chart-visual-text">{message ?? '暂无足够数据'}</span>
-
-      </div>
-
-    );
-
-  }
-
-
-
-  const viewWidth = compact ? 240 : 640;
-
-  const compactTargetHeight = 96;
-
-  const viewHeight = compact
-
-    ? (viewWidth * compactTargetHeight) / Math.max(densityWidth, 1)
-
-    : 280;
-
-  const padding = compact
-
-    ? {
-
-        top: viewHeight * 0.25,
-
-        right: 18,
-
-        bottom: viewHeight * 0.25,
-
-        left: 18
-
-      }
-
-    : { top: 28, right: 32, bottom: 46, left: 56 };
-
-  const plotWidth = viewWidth - padding.left - padding.right;
-
-  const plotHeight = viewHeight - padding.top - padding.bottom;
-
-  const values = visibleSeries.flatMap((series) => series.values);
-
-  const yScale = compact
-
-    ? getNiceYAxisScale(values, {
-
-        includeZero: false,
-
-        mode: 'mixed',
-
-        targetTickCount: 4
-
-      })
-
-    : settings.assetDisplay === 'net'
-
-      ? getNiceYAxisScale(values, {
-
-          includeZero: !settings.adaptiveYAxis,
-
-          mode: 'mixed',
-
-          targetTickCount: 5
-
-        })
-
-      : getNiceYAxisScale(values, {
-
-          mode: 'positive',
-
-          targetTickCount: 5
-
-        });
-
-  const [yMin, yMax] = yScale.domain;
-
-
-
-  const getX = (index: number) =>
-
-    padding.left + (points.length === 1 ? 0 : (index / (points.length - 1)) * plotWidth);
-
-  const getY = (value: number) =>
-
-    padding.top + (1 - (value - yMin) / (yMax - yMin)) * plotHeight;
-
-  const getValueLabelLayout = (index: number, value: number, preferBelow = false) =>
-
-    getChartValueLabelLayout({
-
-      pointX: getX(index),
-
-      pointY: getY(value),
-
-      plotLeft: padding.left,
-
-      plotTop: padding.top,
-
-      plotWidth,
-
-      plotHeight,
-
-      preferBelow: preferBelow || value < 0
-
-    });
-
-  const axisLabelIndexes = compact
-
-    ? []
-
-    : getAxisLabelIndexes(points.length, settings.xAxisRange, densityWidth);
-
-  const yAxisLabels = compact ? [] : yScale.ticks;
-
-  const trendStrokeWidth = compact
-
-    ? densityWidth < 180
-
-      ? 2.8
-
-      : 3.15
-
-    : visibleSeries.length > 1
-
-      ? 2.25
-
-      : 2.5;
-
-  const trendPointRadius = 3.25;
-
-  const updateDetailPointFromMouse = (event: MouseEvent<SVGSVGElement>) => {
-
-    if (!isDetailMode) {
-
-      return;
-
-    }
-
-
-
-    const bounds = event.currentTarget.getBoundingClientRect();
-
-    const cursorX = ((event.clientX - bounds.left) / Math.max(bounds.width, 1)) * viewWidth;
-
-    const cursorY = ((event.clientY - bounds.top) / Math.max(bounds.height, 1)) * viewHeight;
-
-
-
-    if (
-
-      cursorX < padding.left ||
-
-      cursorX > padding.left + plotWidth ||
-
-      cursorY < padding.top ||
-
-      cursorY > padding.top + plotHeight
-
-    ) {
-
-      setDetailPoint(null);
-
-      return;
-
-    }
-
-
-
-    const nearestIndex = getNearestChangeDatePointIndex(points, cursorX, getX);
-
-
-
-    if (nearestIndex < 0) {
-
-      setDetailPoint(null);
-
-      return;
-
-    }
-
-
-
-    const nearestSeries = visibleSeries.reduce((bestSeries, series) => {
-
-      const currentDistance = Math.abs(getY(series.values[nearestIndex] ?? 0) - cursorY);
-
-      const bestDistance = Math.abs(getY(bestSeries.values[nearestIndex] ?? 0) - cursorY);
-
-
-
-      return currentDistance < bestDistance ? series : bestSeries;
-
-    }, visibleSeries[0] as TrendChartSeries);
-
-
-
-    setDetailPoint({
-
-      index: nearestIndex,
-
-      seriesKey: nearestSeries.key
-
-    });
-
-  };
-
-  const toggleDetailMode = () => {
-
-    if (compact) {
-
-      return;
-
-    }
-
-
-
-    onSeriesHover?.(null);
-
-    setDetailPoint(null);
-
-    onDetailModeChange?.(!isDetailMode);
-
-  };
-
-  const detailSeries = detailPoint
-
-    ? visibleSeries.find((series) => series.key === detailPoint.seriesKey)
-
-    : null;
-
-  const detailValue =
-
-    detailPoint && detailSeries ? detailSeries.values[detailPoint.index] ?? 0 : 0;
-
-  const detailX = detailPoint ? getX(detailPoint.index) : 0;
-
-  const detailY = detailPoint ? getY(detailValue) : 0;
-
-  const detailBubbleWidth = 116;
-
-  const detailBubbleX = detailPoint
-
-    ? clampNumber(
-
-        detailX + (detailX > viewWidth - detailBubbleWidth - 14 ? -detailBubbleWidth - 10 : 10),
-
-        padding.left,
-
-        viewWidth - detailBubbleWidth - 4
-
-      )
-
-    : 0;
-
-  const detailBubbleY = detailPoint
-
-    ? clampNumber(detailY - 30, padding.top + 4, padding.top + plotHeight - 28)
-
-    : 0;
-
-
-
-  return (
-
-    <div ref={containerRef} className={`asset-trend-chart${compact ? ' is-compact' : ''}`}>
-
-      {!compact && settings.adaptiveYAxis ? (
-
-        <span className="asset-trend-chart__scale-note chart-visual-text">趋势已放大</span>
-
-      ) : null}
-
-      <svg
-
-        viewBox={`0 0 ${viewWidth} ${viewHeight}`}
-
-        role="img"
-
-        aria-hidden={compact ? true : undefined}
-
-        onDoubleClick={toggleDetailMode}
-
-        onMouseMove={isDetailMode ? updateDetailPointFromMouse : undefined}
-
-        onMouseLeave={() => {
-
-          setDetailPoint(null);
-
-          if (!isDetailMode) {
-
-            onSeriesHover?.(null);
-
-          }
-
-        }}
-
-      >
-
-        {!compact ? (
-
-          <>
-
-            <line
-
-              x1={padding.left}
-
-              y1={padding.top}
-
-              x2={padding.left}
-
-              y2={padding.top + plotHeight}
-
-              stroke="var(--chart-axis-line)"
-
-            />
-
-            <line
-
-              x1={padding.left}
-
-              y1={padding.top + plotHeight}
-
-              x2={padding.left + plotWidth}
-
-              y2={padding.top + plotHeight}
-
-              stroke="var(--chart-axis-line)"
-
-            />
-
-            {yAxisLabels.map((value) => {
-
-              const y = getY(value);
-
-
-
-              return (
-
-                <g key={value}>
-
-                  <line
-
-                    x1={padding.left}
-
-                    y1={y}
-
-                    x2={padding.left + plotWidth}
-
-                    y2={y}
-
-                    stroke="var(--chart-grid-line)"
-
-                  />
-
-                  <text
-
-                    x={padding.left - 8}
-
-                    y={y + 3}
-
-                    textAnchor="end"
-
-                    fill="var(--chart-axis-text)"
-
-                    fontSize="10"
-
-                    className="chart-svg-text"
-
-                  >
-
-                    {formatChartNumber(value)}
-
-                  </text>
-
-                </g>
-
-              );
-
-            })}
-
-            {axisLabelIndexes.map((index) => (
-
-              <text
-
-                key={points[index].date}
-
-                x={getX(index)}
-
-                y={viewHeight - 14}
-
-                textAnchor="middle"
-
-                fill="var(--chart-axis-text)"
-
-                fontSize="10"
-
-                className="chart-svg-text"
-
-              >
-
-                {points[index].date.slice(5)}
-
-              </text>
-
-            ))}
-
-          </>
-
-        ) : null}
-
-
-
-        {visibleSeries.map((series) => {
-
-          const path = createSteppedLinePath(series.values, getX, getY);
-
-          const valueLabelIndexes = compact
-
-            ? []
-
-            : getValueLabelIndexes(series, settings.pointValueMode, densityWidth);
-
-          const markerIndexes = compact
-
-            ? []
-
-            : getVisibleTrendMarkerIndexes(valueLabelIndexes, series.values.length);
-
-          const strokeColor = compact
-
-            ? series.key === 'net'
-
-              ? CHART_COLORS.compactNetLine
-
-              : CHART_COLORS.compactTrendLine
-
-            : series.color;
-
-          const isActive = chartActiveSeriesId === series.key;
-
-          const isDimmed = Boolean(chartActiveSeriesId && chartActiveSeriesId !== series.key);
-
-
-
-          return (
-
-            <g key={series.key}>
-
-              <path
-
-                d={path}
-
-                fill="none"
-
-                stroke={strokeColor}
-
-                strokeWidth={isActive ? trendStrokeWidth + 0.7 : trendStrokeWidth}
-
-                strokeLinecap="round"
-
-                strokeLinejoin="round"
-
-                strokeOpacity={isDimmed ? 0.24 : 1}
-
-                className={getInteractiveChartClassName('chart-series-line', series.key, chartActiveSeriesId)}
-
-                onMouseEnter={() => {
-
-                  if (!isDetailMode) {
-
-                    onSeriesHover?.(series.key);
-
-                  }
-
-                }}
-
-                onMouseLeave={() => {
-
-                  if (!isDetailMode) {
-
-                    onSeriesHover?.(null);
-
-                  }
-
-                }}
-
-              />
-
-              {!compact ? (
-
-                <path
-
-                  d={path}
-
-                  fill="none"
-
-                  stroke="transparent"
-
-                  strokeWidth="14"
-
-                  strokeLinecap="round"
-
-                  strokeLinejoin="round"
-
-                  pointerEvents="stroke"
-
-                  onMouseEnter={() => {
-
-                    if (!isDetailMode) {
-
-                      onSeriesHover?.(series.key);
-
-                    }
-
-                  }}
-
-                  onMouseLeave={() => {
-
-                    if (!isDetailMode) {
-
-                      onSeriesHover?.(null);
-
-                    }
-
-                  }}
-
-                />
-
-              ) : null}
-
-              {markerIndexes.map((index) => {
-
-                const value = series.values[index];
-
-
-
-                return (
-
-                  <circle
-
-                    key={`${series.key}-${points[index].date}`}
-
-                    cx={getX(index)}
-
-                    cy={getY(value)}
-
-                    r={isActive ? trendPointRadius + 0.7 : trendPointRadius}
-
-                    fill="var(--chart-point-fill)"
-
-                    stroke={series.color}
-
-                    strokeWidth="1.5"
-
-                    opacity={isDimmed ? 0.35 : 1}
-
-                    className={getInteractiveChartClassName('chart-shape', series.key, chartActiveSeriesId)}
-
-                    onMouseEnter={() => {
-
-                      if (!isDetailMode) {
-
-                        onSeriesHover?.(series.key);
-
-                      }
-
-                    }}
-
-                    onMouseLeave={() => {
-
-                      if (!isDetailMode) {
-
-                        onSeriesHover?.(null);
-
-                      }
-
-                    }}
-
-                  >
-
-                    <title>
-
-                      {points[index].date} · {series.label} {formatChartNumber(value)}
-
-                    </title>
-
-                  </circle>
-
-                );
-
-              })}
-
-              {valueLabelIndexes.map((index) => {
-
-                const value = series.values[index];
-
-                const labelLayout = getValueLabelLayout(index, value, series.key === 'negative');
-
-
-
-                return (
-
-                  <text
-
-                    key={`${series.key}-value-${points[index].date}`}
-
-                    x={labelLayout.x}
-
-                    y={labelLayout.y}
-
-                    textAnchor={labelLayout.textAnchor}
-
-                    fill={series.color}
-
-                    fontSize="10"
-
-                    fontWeight="700"
-
-                    className="chart-svg-text chart-value-label"
-
-                  >
-
-                    {formatChartNumber(value)}
-
-                  </text>
-
-                );
-
-              })}
-
-            </g>
-
-          );
-
-        })}
-
-        {isDetailMode && detailPoint && detailSeries ? (
-
-          <g className="chart-detail-readout" pointerEvents="none">
-
-            <line
-
-              x1={padding.left}
-
-              y1={detailY}
-
-              x2={detailX}
-
-              y2={detailY}
-
-              className="chart-detail-readout__guide"
-
-            />
-
-            <line
-
-              x1={detailX}
-
-              y1={detailY}
-
-              x2={detailX}
-
-              y2={padding.top + plotHeight}
-
-              className="chart-detail-readout__guide"
-
-            />
-
-            <circle
-
-              cx={detailX}
-
-              cy={detailY}
-
-              r="4.1"
-
-              fill="var(--chart-point-fill)"
-
-              stroke={detailSeries.color}
-
-              strokeWidth="1.7"
-
-            />
-
-            <text
-
-              x={padding.left - 8}
-
-              y={clampNumber(detailY - 6, padding.top + 10, padding.top + plotHeight - 6)}
-
-              textAnchor="end"
-
-              className="chart-detail-readout__axis-label chart-svg-text"
-
-            >
-
-              {formatChartNumber(detailValue)}
-
-            </text>
-
-            <text
-
-              x={detailX}
-
-              y={padding.top + plotHeight + 28}
-
-              textAnchor="middle"
-
-              className="chart-detail-readout__axis-label chart-svg-text"
-
-            >
-
-              {points[detailPoint.index].date}
-
-            </text>
-
-            <rect
-
-              x={detailBubbleX}
-
-              y={detailBubbleY}
-
-              width={detailBubbleWidth}
-
-              height="24"
-
-              rx="6"
-
-              className="chart-detail-readout__bubble"
-
-            />
-
-            <text
-
-              x={detailBubbleX + 8}
-
-              y={detailBubbleY + 15.5}
-
-              className="chart-detail-readout__bubble-text chart-svg-text"
-
-            >
-
-              {detailSeries.label} {formatChartNumber(detailValue)}
-
-            </text>
-
-          </g>
-
-        ) : null}
-
-      </svg>
-
-    </div>
-
-  );
-
-}
-
-
-
-function AssetTrendPanel({
-
-  points,
-
-  settings
-
-}: {
-
-  points: TrendChartPoint[];
-
-  settings: AssetChartSettings['trend'];
-
-}) {
-
-  const [hoveredSeriesId, setHoveredSeriesId] = useState<string | null>(null);
-
-  const [isDetailMode, setIsDetailMode] = useState(false);
-
-  const series = getTrendSeries(points, settings.assetDisplay);
-
-  const lastIndex = Math.max(0, points.length - 1);
-
-  const legendItems: ChartLegendItemData[] = series.map((item) => ({
-
-    id: item.key,
-
-    label: item.label,
-
-    color: item.color,
-
-    value: formatChartNumber(item.values[lastIndex] ?? 0),
-
-    swatch: 'line'
-
-  }));
-
-
-
-  return (
-
-    <section className="asset-chart-panel">
-
-      <header className="asset-chart-panel__header chart-visual-text">
-
-        <div>
-
-          <h2>资产趋势</h2>
-
-        </div>
-
-      </header>
-
-      <AssetTrendChart
-
-        points={points}
-
-        settings={settings}
-
-        activeSeriesId={isDetailMode ? null : hoveredSeriesId}
-
-        onSeriesHover={setHoveredSeriesId}
-
-        detailMode={isDetailMode}
-
-        onDetailModeChange={(enabled) => {
-
-          setIsDetailMode(enabled);
-
-          setHoveredSeriesId(null);
-
-        }}
-
-      />
-
-      <ChartLegendList
-
-        items={legendItems}
-
-        emptyMessage="暂无资产趋势"
-
-        activeId={isDetailMode ? null : hoveredSeriesId}
-
-        onActiveIdChange={isDetailMode ? undefined : setHoveredSeriesId}
-
-      />
-
-    </section>
-
-  );
-
-}
-
-
-
 function AccountTrendPanel({
 
   points,
@@ -9858,6 +7128,8 @@ function AccountTrendPanel({
         points={points}
 
         settings={chartSettings}
+
+        formatMoney={formatChartNumber}
 
         activeSeriesId={isDetailMode ? null : hoveredSeriesId}
 
@@ -9960,6 +7232,8 @@ function GroupDetailStructurePanel({
               activeSegmentId={hoveredSeriesId}
 
               onSegmentHover={setHoveredSeriesId}
+
+              formatMoney={formatChartNumber}
 
             />
 
@@ -11063,9 +8337,7 @@ function App() {
 
   const [appData, setAppData] = useState<AppData>(loadAppData);
 
-  const [firstWelcomeState, setFirstWelcomeState] =
-
-    useState<FirstWelcomeState>(loadFirstWelcomeState);
+  const [, setFirstWelcomeState] = useState<FirstWelcomeState>(loadFirstWelcomeState);
 
   const [firstWelcomeStage, setFirstWelcomeStage] = useState<FirstWelcomeStage>(() =>
 
@@ -11155,7 +8427,7 @@ function App() {
 
   const [flashEditingDate, setFlashEditingDate] = useState('');
 
-  const [flashEditingValue, setFlashEditingValue] = useState('');
+  const [, setFlashEditingValue] = useState('');
 
   const [flashShortcutHintHidden, setFlashShortcutHintHidden] = useState(false);
 
@@ -11185,10 +8457,6 @@ function App() {
 
     useState<BackupReturnTarget>('history');
 
-  const [backupReminderPrompt, setBackupReminderPrompt] =
-
-    useState<BackupReminderPromptState>(null);
-
   const [lastBackupAt, setLastBackupAt] = useState(loadLastBackupAt);
 
   const [lastBackupHistoryCount, setLastBackupHistoryCount] = useState(() =>
@@ -11198,20 +8466,6 @@ function App() {
   );
 
   const [backupRecords, setBackupRecords] = useState(loadBackupRecords);
-
-  const [backupReminderCycle, setBackupReminderCycle] = useState(loadBackupReminderCycle);
-
-  const [hasStoredBackupReminderCycle, setHasStoredBackupReminderCycle] = useState(
-
-    () => window.localStorage.getItem(BACKUP_REMINDER_CYCLE_STORAGE_KEY) !== null
-
-  );
-
-  const [backupReminderValueInput, setBackupReminderValueInput] = useState(() =>
-
-    String(loadBackupReminderCycle().value)
-
-  );
 
   const [autoBackupSettings, setAutoBackupSettings] = useState(loadAutoBackupSettings);
 
@@ -11730,14 +8984,6 @@ function App() {
     return () => mediaQuery.removeListener(updateSystemTheme);
 
   }, [globalSettings.themeMode]);
-
-
-
-  useEffect(() => {
-
-    setBackupReminderValueInput(String(backupReminderCycle.value));
-
-  }, [backupReminderCycle.value]);
 
 
 
@@ -12448,24 +9694,6 @@ function App() {
   const incrementalRecordValue =
 
     backupHistoryDelta < 0 ? '有记录删除' : `${backupHistoryDelta}`;
-
-  const hasIncrementalRecordsForReminder = backupHistoryDelta > 0;
-
-  const backupReminderStatus = getBackupReminderStatus(
-
-    lastBackupAt,
-
-    history,
-
-    backupReminderCycle,
-
-    hasStoredBackupReminderCycle
-
-  );
-
-  const shouldShowBackupReminderDot =
-
-    backupReminderStatus.shouldRemind && hasIncrementalRecordsForReminder;
 
   const hasAutoBackupDraftChanges = !areAutoBackupSettingsEqual(
 
@@ -13192,28 +10420,6 @@ function App() {
       ...currentSettings,
 
       l0: createNextSettings(currentSettings.l0)
-
-    }));
-
-  };
-
-
-
-  const updateCategoryChartVisibility = (
-
-    createNextVisibility: (
-
-      currentVisibility: CategoryChartVisibility
-
-    ) => CategoryChartVisibility
-
-  ) => {
-
-    updateAssetChartSettings((currentSettings) => ({
-
-      ...currentSettings,
-
-      categoryVisibility: createNextVisibility(currentSettings.categoryVisibility)
 
     }));
 
@@ -14001,9 +11207,7 @@ function App() {
 
       themeStyle: effectiveThemeStyle,
 
-      assetChartSettings: normalizeAssetChartSettings(assetChartSettings),
-
-      backupReminderCycle: normalizeBackupReminderCycle(backupReminderCycle)
+      assetChartSettings: normalizeAssetChartSettings(assetChartSettings)
 
     }
 
@@ -14195,12 +11399,6 @@ function App() {
 
 
 
-    if (importedSettings.backupReminderCycle !== undefined) {
-
-      updateBackupReminderCycle(normalizeBackupReminderCycle(importedSettings.backupReminderCycle));
-
-    }
-
   };
 
 
@@ -14286,14 +11484,6 @@ function App() {
     setAssetChartSettings(DEFAULT_ASSET_CHART_SETTINGS);
 
     saveAssetChartSettings(DEFAULT_ASSET_CHART_SETTINGS);
-
-    setBackupReminderCycle(DEFAULT_BACKUP_REMINDER_CYCLE);
-
-    setHasStoredBackupReminderCycle(false);
-
-    setBackupReminderValueInput(String(DEFAULT_BACKUP_REMINDER_CYCLE.value));
-
-    window.localStorage.removeItem(BACKUP_REMINDER_CYCLE_STORAGE_KEY);
 
     setAutoBackupSettings(DEFAULT_AUTO_BACKUP_SETTINGS);
 
@@ -15683,30 +12873,6 @@ function App() {
 
 
 
-  const requestInputDialog = (
-
-    options: Omit<NonNullable<InputDialogState>, 'onConfirm' | 'onCancel'>
-
-  ) =>
-
-    new Promise<string | null>((resolve) => {
-
-      setInputDialogValue('');
-
-      setInputDialog({
-
-        ...options,
-
-        onConfirm: (value) => resolve(value),
-
-        onCancel: () => resolve(null)
-
-      });
-
-    });
-
-
-
   const formatMoney = (amount: number | null, options: { compact?: boolean } = {}) =>
 
     formatCurrencyMoneyValue(amount, options);
@@ -15799,7 +12965,7 @@ function App() {
 
 
 
-  const formatBackupTime = (time: string) => {
+  const formatRelativeBackupTime = (time: string) => {
 
     const timestamp = getValidTimestamp(time);
 
@@ -15807,27 +12973,41 @@ function App() {
 
     if (timestamp === null) {
 
-      return '从未快照';
+      return '从未备份';
 
     }
 
 
 
-    const date = new Date(timestamp);
+    const today = new Date();
 
-    const year = date.getFullYear();
+    today.setHours(0, 0, 0, 0);
 
-    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const backupDate = new Date(timestamp);
 
-    const day = String(date.getDate()).padStart(2, '0');
+    backupDate.setHours(0, 0, 0, 0);
 
-    const hour = String(date.getHours()).padStart(2, '0');
-
-    const minute = String(date.getMinutes()).padStart(2, '0');
+    const diffDays = Math.max(0, Math.floor((today.getTime() - backupDate.getTime()) / DAY_MS));
 
 
 
-    return `${year}-${month}-${day} ${hour}:${minute}`;
+    if (diffDays === 0) {
+
+      return '今天';
+
+    }
+
+
+
+    if (diffDays === 1) {
+
+      return '昨天';
+
+    }
+
+
+
+    return `${diffDays}天前`;
 
   };
 
@@ -15890,30 +13070,6 @@ function App() {
 
 
     return `${year}${month}${day}-${hour}${minute}`;
-
-  };
-
-
-
-  const getBackupReminderUnitLabel = (unit: BackupReminderUnit) => {
-
-    if (unit === 'week') {
-
-      return '周';
-
-    }
-
-
-
-    if (unit === 'month') {
-
-      return '月';
-
-    }
-
-
-
-    return '日';
 
   };
 
@@ -16111,14 +13267,6 @@ function App() {
 
   );
 
-  const flashCorrectionSelectionSet = useMemo(
-
-    () => new Set(flashCorrectionSelection),
-
-    [flashCorrectionSelection]
-
-  );
-
   const flashCurrentDate = flashTrackDates[flashInputCursor] ?? '';
 
   const flashHasTemporaryContent =
@@ -16132,20 +13280,6 @@ function App() {
     Object.values(flashCells).some((cell) => cell.value.trim() || cell.enabled || cell.missing) ||
 
     flashStashSegments.length > 0;
-
-  const compareFlashCorrectionDates = (left: string, right: string) =>
-
-    flashCorrectionTrackDates.indexOf(left) - flashCorrectionTrackDates.indexOf(right);
-
-  const getFlashDataBlockDates = (selectionDates: string[]) =>
-
-    selectionDates
-
-      .filter((dateValue) => parseFlashNumberInput(flashCells[dateValue]?.value ?? '') !== null)
-
-      .sort(compareFlashCorrectionDates);
-
-  const flashDataBlockDates = getFlashDataBlockDates(flashCorrectionSelection);
 
 
 
@@ -16995,76 +14129,6 @@ function App() {
 
 
 
-  const handleFlashSequenceInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-
-    if (event.key === 'Enter') {
-
-      event.preventDefault();
-
-      commitFlashSequenceInput();
-
-      return;
-
-    }
-
-
-
-    if (event.key === 'Tab') {
-
-      event.preventDefault();
-
-      commitFlashSequenceInput();
-
-      return;
-
-    }
-
-
-
-    if (event.key === 'Backspace' && flashCurrentInput === '') {
-
-      event.preventDefault();
-
-      undoFlashSequenceInput();
-
-      return;
-
-    }
-
-
-
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
-
-      event.preventDefault();
-
-      undoFlashSequenceInput();
-
-    }
-
-  };
-
-
-
-  const updateFlashSequenceInputValue = (nextValue: string) => {
-
-    if (isFlashInputTailLocked) {
-
-      return;
-
-    }
-
-    const normalizedValue = normalizeMoneyInput(nextValue, { allowNegative: true });
-
-    if (isValidFlashNumberInput(normalizedValue)) {
-
-      setFlashCurrentInput(normalizedValue);
-
-    }
-
-  };
-
-
-
   const appendFlashSequenceInputCharacter = (key: string) => {
 
     if (isFlashInputTailLocked) {
@@ -17125,723 +14189,11 @@ function App() {
 
 
 
-  const enterFlashCorrectionStage = () => {
-
-    if (flashTrackDates.length === 0) {
-
-      return;
-
-    }
-
-
-
-    const naturalDates = [...flashTrackDates].sort();
-
-    const firstDate = naturalDates[0] ?? flashTrackDates[0];
-
-    const lastDate = naturalDates[naturalDates.length - 1] ?? firstDate;
-
-    const rangeStart = flashEndDate
-
-      ? firstDate
-
-      : flashDirection === 'backward'
-
-        ? toDateInputValue(addDays(getDateKeyFromValue(firstDate), -28))
-
-        : firstDate;
-
-    const rangeEnd = flashEndDate
-
-      ? lastDate
-
-      : flashDirection === 'backward'
-
-        ? lastDate
-
-        : toDateInputValue(addDays(getDateKeyFromValue(lastDate), 28));
-
-
-
-    flashCorrectionEntrySnapshotRef.current = {
-
-      cells: cloneFlashCells(flashCells),
-
-      inputCursor: flashInputCursor,
-
-      currentInput: flashCurrentInput,
-
-      rangeStart,
-
-      rangeEnd
-
-    };
-
-    flashCorrectionTouchedRef.current = false;
-
-    setFlashCorrectionRangeStart(rangeStart);
-
-    setFlashCorrectionRangeEnd(rangeEnd);
-
-    setFlashCorrectionSelection([]);
-
-    setFlashContextMenu(null);
-
-    setFlashNoteStage('confirm');
-
-  };
-
-
-
-  const hasFlashCorrectionDraftChanges = () => {
-
-    const snapshot = flashCorrectionEntrySnapshotRef.current;
-
-
-
-    if (!snapshot) {
-
-      return false;
-
-    }
-
-
-
-    if (flashCorrectionTouchedRef.current) {
-
-      return true;
-
-    }
-
-
-
-    if (
-
-      serializeFlashCells(flashCells) !== serializeFlashCells(snapshot.cells) ||
-
-      flashCorrectionRangeStart !== snapshot.rangeStart ||
-
-      flashCorrectionRangeEnd !== snapshot.rangeEnd ||
-
-      flashStashSegments.length > 0
-
-    ) {
-
-      return true;
-
-    }
-
-
-
-    if (!flashEditingDate) {
-
-      return false;
-
-    }
-
-
-
-    return flashEditingValue.trim() !== getFlashCell(flashEditingDate).value.trim();
-
-  };
-
-
-
-  const clearFlashCorrectionUiState = () => {
-
-    setFlashCorrectionSelection([]);
-
-    setFlashCorrectionRangeStart('');
-
-    setFlashCorrectionRangeEnd('');
-
-    setFlashStashSegments([]);
-
-    setFlashContextMenu(null);
-
-    setFlashEditingDate('');
-
-    setFlashEditingValue('');
-
-    setFlashDragStartDate('');
-
-    setFlashDragPreviewDates([]);
-
-  };
-
-
-
-  const returnFlashSequenceInput = (restoreEntrySnapshot: boolean) => {
-
-    const snapshot = flashCorrectionEntrySnapshotRef.current;
-
-
-
-    if (restoreEntrySnapshot && snapshot) {
-
-      setFlashCells(cloneFlashCells(snapshot.cells));
-
-      setFlashInputCursor(snapshot.inputCursor);
-
-      setFlashCurrentInput(snapshot.currentInput);
-
-    }
-
-
-
-    clearFlashCorrectionUiState();
-
-    setIsFlashReturnSequenceConfirmOpen(false);
-
-    flashCorrectionEntrySnapshotRef.current = null;
-
-    flashCorrectionTouchedRef.current = false;
-
-    setFlashNoteStage('input');
-
-  };
-
-
-
-  const requestReturnFlashSequenceInput = () => {
-
-    if (flashNoteStage !== 'correction') {
-
-      return;
-
-    }
-
-
-
-    if (!hasFlashCorrectionDraftChanges()) {
-
-      returnFlashSequenceInput(false);
-
-      return;
-
-    }
-
-
-
-    setIsFlashReturnSequenceConfirmOpen(true);
-
-  };
-
-
-
-  const canMoveFlashDataBlock = (offset: -1 | 1) => {
-
-    if (flashDataBlockDates.length === 0) {
-
-      return false;
-
-    }
-
-
-
-    const movingSet = new Set(flashDataBlockDates);
-
-
-
-    return flashDataBlockDates.every((dateValue) => {
-
-      const currentIndex = flashCorrectionTrackDates.indexOf(dateValue);
-
-      const targetDate = flashCorrectionTrackDates[currentIndex + offset];
-
-
-
-      if (!targetDate) {
-
-        return false;
-
-      }
-
-
-
-      const targetCell = getFlashCell(targetDate);
-
-      const targetHasValue = parseFlashNumberInput(targetCell.value) !== null;
-
-
-
-      return !targetHasValue || movingSet.has(targetDate);
-
-    });
-
-  };
-
-
-
-  const moveFlashDataBlock = (offset: -1 | 1) => {
-
-    if (!canMoveFlashDataBlock(offset)) {
-
-      return;
-
-    }
-
-
-
-    const movingValues = flashDataBlockDates.map((dateValue) => ({
-
-      from: dateValue,
-
-      to:
-
-        flashCorrectionTrackDates[
-
-          flashCorrectionTrackDates.indexOf(dateValue) + offset
-
-        ] ?? '',
-
-      value: getFlashCell(dateValue).value
-
-    }));
-
-    const nextCells = { ...flashCells };
-
-
-
-    movingValues.forEach(({ from }) => {
-
-      nextCells[from] = createFlashCell(from, {
-
-        value: '',
-
-        enabled: true,
-
-        missing: false,
-
-        pendingDelete: false
-
-      });
-
-    });
-
-    movingValues.forEach(({ to, value }) => {
-
-      if (!to) {
-
-        return;
-
-      }
-
-
-
-      nextCells[to] = createFlashCell(to, {
-
-        value,
-
-        enabled: true,
-
-        missing: false,
-
-        pendingDelete: false
-
-      });
-
-    });
-
-
-
-    flashCorrectionTouchedRef.current = true;
-
-    setFlashCells(nextCells);
-
-    setFlashCorrectionSelection(movingValues.map((item) => item.to).filter(Boolean));
-
-    setFlashContextMenu(null);
-
-  };
-
-
-
-  const stashFlashDataBlock = () => {
-
-    if (flashDataBlockDates.length === 0 || flashStashSegments.length >= 2) {
-
-      return;
-
-    }
-
-
-
-    const segment: FlashNoteStashSegment = {
-
-      id: createId('flash-stash'),
-
-      items: flashDataBlockDates.map((dateValue) => ({
-
-        date: dateValue,
-
-        value: getFlashCell(dateValue).value
-
-      }))
-
-    };
-
-    const nextCells = { ...flashCells };
-
-
-
-    flashDataBlockDates.forEach((dateValue) => {
-
-      nextCells[dateValue] = createFlashCell(dateValue, {
-
-        value: '',
-
-        enabled: true,
-
-        missing: false,
-
-        pendingDelete: false
-
-      });
-
-    });
-
-
-
-    flashCorrectionTouchedRef.current = true;
-
-    setFlashCells(nextCells);
-
-    setFlashStashSegments((currentSegments) => [...currentSegments, segment]);
-
-    setFlashCorrectionSelection([]);
-
-    setFlashContextMenu(null);
-
-  };
-
-
-
-  const getFlashPlacementDates = (targetDate: string, segmentLength: number) =>
-
-    Array.from({ length: segmentLength }, (_, index) =>
-
-      toDateInputValue(
-
-        addDays(getDateKeyFromValue(targetDate), flashDirection === 'forward' ? index : -index)
-
-      )
-
-    );
-
-
-
-  const isFlashBlankPlacementCell = (dateValue: string) => {
-
-    const cell = getFlashCell(dateValue);
-
-    return (
-
-      parseFlashNumberInput(cell.value) === null &&
-
-      (cell.enabled || cell.original) &&
-
-      !cell.pendingDelete
-
-    );
-
-  };
-
-
-
-  const canPlaceFlashStashSegment = (
-
-    segment: FlashNoteStashSegment,
-
-    targetDate: string
-
-  ) => {
-
-    if (!isFlashBlankPlacementCell(targetDate)) {
-
-      return false;
-
-    }
-
-
-
-    const placementDates = getFlashPlacementDates(targetDate, segment.items.length);
-
-    const trackSet = new Set(flashCorrectionTrackDates);
-
-
-
-    return placementDates.every((dateValue) => {
-
-      if (isFutureDateKey(dateValue)) {
-
-        return false;
-
-      }
-
-
-
-      if (flashEndDate && !trackSet.has(dateValue)) {
-
-        return false;
-
-      }
-
-
-
-      const cell = getFlashCell(dateValue);
-
-      const hasValue = parseFlashNumberInput(cell.value) !== null;
-
-
-
-      if (hasValue) {
-
-        return false;
-
-      }
-
-
-
-      return cell.enabled || cell.original || !flashEndDate;
-
-    });
-
-  };
-
-
-
-  const placeFlashStashSegment = (segmentId: string, targetDate: string) => {
-
-    const segment = flashStashSegments.find((currentSegment) => currentSegment.id === segmentId);
-
-
-
-    if (!segment || !canPlaceFlashStashSegment(segment, targetDate)) {
-
-      return;
-
-    }
-
-
-
-    const placementDates = getFlashPlacementDates(targetDate, segment.items.length);
-
-    const sortedPlacementDates = [...placementDates].sort();
-
-    const nextRangeStart =
-
-      flashCorrectionRangeStart && flashCorrectionRangeStart < sortedPlacementDates[0]!
-
-        ? flashCorrectionRangeStart
-
-        : sortedPlacementDates[0] ?? flashCorrectionRangeStart;
-
-    const nextRangeEnd =
-
-      flashCorrectionRangeEnd &&
-
-      flashCorrectionRangeEnd > sortedPlacementDates[sortedPlacementDates.length - 1]!
-
-        ? flashCorrectionRangeEnd
-
-        : sortedPlacementDates[sortedPlacementDates.length - 1] ?? flashCorrectionRangeEnd;
-
-    const nextCells = { ...flashCells };
-
-
-
-    placementDates.forEach((dateValue, index) => {
-
-      const item = segment.items[index];
-
-
-
-      if (!item) {
-
-        return;
-
-      }
-
-
-
-      nextCells[dateValue] = createFlashCell(dateValue, {
-
-        value: item.value,
-
-        enabled: true,
-
-        missing: false,
-
-        pendingDelete: false
-
-      });
-
-    });
-
-
-
-    flashCorrectionTouchedRef.current = true;
-
-    setFlashCorrectionRangeStart(nextRangeStart);
-
-    setFlashCorrectionRangeEnd(nextRangeEnd);
-
-    setFlashCells(nextCells);
-
-    setFlashStashSegments((currentSegments) =>
-
-      currentSegments.filter((currentSegment) => currentSegment.id !== segmentId)
-
-    );
-
-    setFlashCorrectionSelection(placementDates);
-
-    setFlashContextMenu(null);
-
-  };
-
-
-
-  const startFlashCellEdit = (dateValue: string) => {
-
-    const cell = getFlashCell(dateValue);
-
-    const hasValue = parseFlashNumberInput(cell.value) !== null;
-
-
-
-    setFlashContextMenu(null);
-
-    if (!hasValue) {
-
-      flashCorrectionTouchedRef.current = true;
-
-    }
-
-    setFlashCells((currentCells) => ({
-
-      ...currentCells,
-
-      [dateValue]: {
-
-        ...(currentCells[dateValue] ?? cell),
-
-        date: dateValue,
-
-        enabled: true,
-
-        pendingDelete: false
-
-      }
-
-    }));
-
-    setFlashEditingDate(dateValue);
-
-    setFlashEditingValue(cell.value);
-
-  };
-
-
-
-  const commitFlashCellEdit = () => {
-
-    if (!flashEditingDate) {
-
-      return;
-
-    }
-
-
-
-    const trimmedValue = flashEditingValue.trim();
-
-    const parsedValue = parseFlashNumberInput(trimmedValue);
-
-    const currentCell = getFlashCell(flashEditingDate);
-
-
-
-    if (trimmedValue && parsedValue === null) {
-
-      return;
-
-    }
-
-
-
-    const normalizedValue = parsedValue === null ? '' : formatMoneyInputValue(parsedValue);
-
-
-
-    if (normalizedValue !== currentCell.value) {
-
-      flashCorrectionTouchedRef.current = true;
-
-    }
-
-    setFlashCells((currentCells) => ({
-
-      ...currentCells,
-
-      [flashEditingDate]: {
-
-        ...(currentCells[flashEditingDate] ?? currentCell),
-
-        date: flashEditingDate,
-
-        value: normalizedValue,
-
-        enabled: true,
-
-        missing: parsedValue === null && currentCell.original,
-
-        pendingDelete: false
-
-      }
-
-    }));
-
-    setFlashEditingDate('');
-
-    setFlashEditingValue('');
-
-  };
-
-
-
   const cancelFlashCellEdit = () => {
 
     setFlashEditingDate('');
 
     setFlashEditingValue('');
-
-  };
-
-
-
-  const handleFlashCellEditKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-
-    if (event.key === 'Enter' || event.key === 'Tab') {
-
-      event.preventDefault();
-
-      commitFlashCellEdit();
-
-      return;
-
-    }
-
-
-
-    if (event.key === 'Escape') {
-
-      event.preventDefault();
-
-      cancelFlashCellEdit();
-
-    }
 
   };
 
@@ -17896,266 +14248,6 @@ function App() {
     flashCorrectionTouchedRef.current = true;
 
     setFlashCells(nextCells);
-
-  };
-
-
-
-  const isFlashCorrectionSelectableDate = (dateValue: string) => {
-
-    if (isFutureDateKey(dateValue) || !flashCorrectionTrackDates.includes(dateValue)) {
-
-      return false;
-
-    }
-
-
-
-    return parseFlashNumberInput(getFlashCell(dateValue).value) !== null;
-
-  };
-
-
-
-  const getFlashCorrectionSelectableDates = (candidateDates: string[]) =>
-
-    resolveFlashSelection([], candidateDates, 'replace', {
-
-      compareDates: compareFlashCorrectionDates,
-
-      isCandidateSelectable: isFlashCorrectionSelectableDate
-
-    });
-
-
-
-  const getFlashCorrectionSelectionResult = (
-
-    candidateDates: string[],
-
-    mode = flashSelectionMode
-
-  ) =>
-
-    resolveFlashSelection(flashCorrectionSelection, candidateDates, mode, {
-
-      compareDates: compareFlashCorrectionDates,
-
-      isCandidateSelectable: isFlashCorrectionSelectableDate
-
-    });
-
-
-
-  const applyFlashCorrectionSelection = (
-
-    candidateDates: string[],
-
-    mode = flashSelectionMode
-
-  ) => {
-
-    const nextSelection = getFlashCorrectionSelectionResult(candidateDates, mode);
-
-
-
-    setFlashCorrectionSelection(nextSelection);
-
-    setFlashDragPreviewDates([]);
-
-    setFlashContextMenu(null);
-
-  };
-
-
-
-  const handleFlashCorrectionPointerDown = (dateValue: string) => {
-
-    if (isFutureDateKey(dateValue) || !flashCorrectionTrackDates.includes(dateValue)) {
-
-      return;
-
-    }
-
-
-
-    setFlashDragStartDate(dateValue);
-
-    setFlashDragPreviewDates(getFlashCorrectionSelectableDates([dateValue]));
-
-    setFlashKeyboardDate(dateValue);
-
-  };
-
-
-
-  const handleFlashCorrectionPointerEnter = (dateValue: string) => {
-
-    if (
-
-      !flashDragStartDate ||
-
-      isFutureDateKey(dateValue) ||
-
-      !flashCorrectionTrackDates.includes(dateValue)
-
-    ) {
-
-      return;
-
-    }
-
-
-
-    setFlashDragPreviewDates(
-
-      getFlashCorrectionSelectableDates(getDateRangeKeys(flashDragStartDate, dateValue))
-
-    );
-
-  };
-
-
-
-  const handleFlashCorrectionPointerUp = (dateValue: string) => {
-
-    if (
-
-      !flashDragStartDate ||
-
-      isFutureDateKey(dateValue) ||
-
-      !flashCorrectionTrackDates.includes(dateValue)
-
-    ) {
-
-      setFlashDragStartDate('');
-
-      setFlashDragPreviewDates([]);
-
-      return;
-
-    }
-
-
-
-    applyFlashCorrectionSelection(
-
-      getDateRangeKeys(flashDragStartDate, dateValue),
-
-      flashSelectionMode
-
-    );
-
-    setFlashDragStartDate('');
-
-  };
-
-
-
-  const handleFlashCorrectionContextMenu = (
-
-    dateValue: string,
-
-    event: MouseEvent<HTMLButtonElement>
-
-  ) => {
-
-    if (isFutureDateKey(dateValue)) {
-
-      return;
-
-    }
-
-
-
-    event.preventDefault();
-
-    setFlashDragStartDate('');
-
-    setFlashDragPreviewDates([]);
-
-    setFlashKeyboardDate(dateValue);
-
-
-
-    const isTargetSelected = flashCorrectionSelectionSet.has(dateValue);
-
-    const nextSelection = resolveFlashRightClickSelection({
-
-      currentSelection: flashCorrectionSelection,
-
-      targetDate: dateValue,
-
-      mode: flashSelectionMode,
-
-      isTargetSelected,
-
-      compareDates: compareFlashCorrectionDates,
-
-      isCandidateSelectable: isFlashCorrectionSelectableDate
-
-    });
-
-
-
-    if (!isTargetSelected) {
-
-      setFlashCorrectionSelection(nextSelection);
-
-    }
-
-
-
-    if (getFlashDataBlockDates(nextSelection).length > 0) {
-
-      setFlashContextMenu({
-
-        kind: 'block',
-
-        x: event.clientX,
-
-        y: event.clientY,
-
-        date: dateValue
-
-      });
-
-      return;
-
-    }
-
-
-
-    if (
-
-      !isTargetSelected &&
-
-      flashStashSegments.length > 0 &&
-
-      isFlashBlankPlacementCell(dateValue)
-
-    ) {
-
-      setFlashContextMenu({
-
-        kind: 'place',
-
-        x: event.clientX,
-
-        y: event.clientY,
-
-        date: dateValue
-
-      });
-
-      return;
-
-    }
-
-
-
-    setFlashContextMenu(null);
 
   };
 
@@ -18681,1665 +14773,33 @@ function App() {
 
 
 
-  const renderFlashStageRail = () => (
-
-    <ol className="flash-note-stage-rail" aria-label="闪记阶段">
-
-      {FLASH_NOTE_STAGE_ORDER.map((stage) => {
-
-        const stageIndex = FLASH_NOTE_STAGE_ORDER.indexOf(stage);
-
-        const currentIndex =
-
-          flashNoteStage === 'mode-select'
-
-            ? 1
-
-            : FLASH_NOTE_STAGE_ORDER.indexOf(flashNoteStage);
-
-        const canReturnToDateSelection = flashNoteStage === 'sequence-input' && stage === 'date-select';
-
-        const canReturnToSequenceInput =
-
-          flashNoteStage === 'correction' && stage === 'sequence-input';
-
-        const canReturnToCorrection = flashNoteStage === 'confirm' && stage === 'correction';
-
-        const stageReturnAction = canReturnToDateSelection
-
-          ? {
-
-              label: '返回日期选择',
-
-              onClick: requestReturnFlashDateSelection
-
-            }
-
-          : canReturnToSequenceInput
-
-            ? {
-
-                label: '返回顺序输入',
-
-                onClick: requestReturnFlashSequenceInput
-
-              }
-
-            : canReturnToCorrection
-
-              ? {
-
-                  label: '返回确认',
-
-                  onClick: () => setFlashNoteStage('confirm')
-
-                }
-
-              : null;
-
-
-
-        return (
-
-          <li
-
-            key={stage}
-
-            className={[
-
-              'flash-note-stage-pill',
-
-              stageIndex === currentIndex ? 'is-current' : '',
-
-              stageIndex < currentIndex ? 'is-done' : '',
-
-              stageReturnAction ? 'is-actionable' : ''
-
-            ]
-
-              .filter(Boolean)
-
-              .join(' ')}
-
-          >
-
-            {stageReturnAction ? (
-
-              <button
-
-                type="button"
-
-                className="flash-note-stage-pill__button"
-
-                title={stageReturnAction.label}
-
-                aria-label={stageReturnAction.label}
-
-                onClick={stageReturnAction.onClick}
-
-              >
-
-                {stageReturnAction.label}
-
-              </button>
-
-            ) : (
-
-              FLASH_NOTE_STAGE_LABELS[stage]
-
-            )}
-
-          </li>
-
-        );
-
-      })}
-
-    </ol>
-
-  );
-
-
-
-  const renderFlashSelectionToolbar = (showQuickRules: boolean) => (
-
-    <div className="flash-note-tool-row">
-
-      <div className="flash-note-icon-tools" aria-label="选区工具">
-
-        {FLASH_NOTE_SELECTION_TOOLS.map((tool) => (
-
-          <button
-
-            key={tool.mode}
-
-            type="button"
-
-            title={tool.title}
-
-            aria-label={tool.ariaLabel}
-
-            className={`flash-note-icon-tool${
-
-              flashSelectionMode === tool.mode ? ' is-active' : ''
-
-            }`}
-
-            onClick={() => setFlashSelectionMode(tool.mode)}
-
-          >
-
-            <NfSvgIcon svg={tool.icon} className="flash-note-selection-icon" decorative />
-
-          </button>
-
-        ))}
-
-      </div>
-
-      {showQuickRules ? (
-
-        <div className="flash-note-rule-tools" aria-label="快速日期规则">
-
-          {[
-
-            { rule: 'all' as const, label: '全', title: '每日' },
-
-            { rule: 'weekday' as const, label: '工', title: '工作日' },
-
-            { rule: 'weekend' as const, label: '末', title: '周末' }
-
-          ].map((item) => (
-
-            <button
-
-              key={item.rule}
-
-              type="button"
-
-              title={item.title}
-
-              aria-label={item.title}
-
-              className={flashActiveDateRule === item.rule ? 'is-active' : undefined}
-
-              disabled={!flashStartDate}
-
-              onClick={() => applyFlashDateRule(item.rule)}
-
-            >
-
-              {item.label}
-
-            </button>
-
-          ))}
-
-        </div>
-
-      ) : null}
-
-    </div>
-
-  );
-
-
-
-  const renderFlashAccountPicker = () => (
-
-    <section className="flash-note-account-picker" aria-label="选择闪记账户">
-
-      {groupTotals.map((group) => {
-
-        const accounts = group.activeAccounts;
-
-
-
-        if (accounts.length === 0) {
-
-          return null;
-
-        }
-
-
-
-        return (
-
-          <div key={group.name} className="flash-note-account-group">
-
-            <span>{group.name}</span>
-
-            <div>
-
-              {accounts.map((account) => {
-
-                const selected =
-
-                  flashNoteAccount?.groupName === group.name &&
-
-                  flashNoteAccount.accountId === account.id;
-
-
-
-                return (
-
-                  <button
-
-                    key={account.id}
-
-                    type="button"
-
-                    className={`flash-note-account-chip${selected ? ' is-selected' : ''}`}
-
-                    onClick={() => chooseFlashAccount(group.name, account)}
-
-                  >
-
-                    <span>{account.name}</span>
-
-                  </button>
-
-                );
-
-              })}
-
-            </div>
-
-          </div>
-
-        );
-
-      })}
-
-    </section>
-
-  );
-
-
+  const getQuickSingleEntryAccount = (groupName: string, accountId: string) =>
+    groupTotals
+      .find((group) => group.name === groupName)
+      ?.activeAccounts.find((account) => account.id === accountId);
+
+  const quickSingleEntryAccountGroups: QuickEntryAccountGroup[] = groupTotals.map((group) => ({
+    name: group.name,
+    accounts: group.activeAccounts.map((account) => ({
+      id: account.id,
+      name: account.name,
+      groupName: group.name,
+      archived: account.archived
+    }))
+  }));
 
   const renderQuickSingleEntryAccountPicker = () => (
+    <QuickEntryAccountPicker
+      groups={quickSingleEntryAccountGroups}
+      onChooseAccount={(groupName, accountId) => {
+        const account = getQuickSingleEntryAccount(groupName, accountId);
 
-    <section
-
-      className="flash-note-account-picker quick-single-entry-account-picker"
-
-      aria-label="选择记一笔账户"
-
-    >
-
-      {groupTotals.some((group) => group.activeAccounts.length > 0) ? (
-
-        groupTotals.map((group) => {
-
-          const accounts = group.activeAccounts;
-
-
-
-          if (accounts.length === 0) {
-
-            return null;
-
-          }
-
-
-
-          return (
-
-            <div
-
-              key={group.name}
-
-              className="flash-note-account-group quick-single-entry-account-group"
-
-            >
-
-              <span>{group.name}</span>
-
-              <div>
-
-                {accounts.map((account) => (
-
-                  <button
-
-                    key={account.id}
-
-                    type="button"
-
-                    className="flash-note-account-chip"
-
-                    onClick={() => chooseQuickSingleEntryAccount(group.name, account)}
-
-                  >
-
-                    <span>{account.name}</span>
-
-                  </button>
-
-                ))}
-
-              </div>
-
-            </div>
-
-          );
-
-        })
-
-      ) : (
-
-        <p className="quick-single-entry-empty">暂无可记账账户</p>
-
-      )}
-
-    </section>
-
+        if (account) {
+          chooseQuickSingleEntryAccount(groupName, account);
+        }
+      }}
+    />
   );
-
-
-
-  const renderFlashDateCell = (
-
-    dateValue: string,
-
-    options: {
-
-      currentMonth?: boolean;
-
-      mode: 'date-select' | 'sequence' | 'correction';
-
-      current?: boolean;
-
-      dimmed?: boolean;
-
-    }
-
-  ) => {
-
-    const date = getDateKeyFromValue(dateValue);
-
-    const isFuture = isFutureDateKey(dateValue);
-
-    const isSelected = flashSelectedDateSet.has(dateValue);
-
-    const isPreview = flashDragPreviewDateSet.has(dateValue);
-
-    const isCorrectionSelected = flashCorrectionSelectionSet.has(dateValue);
-
-    const isStart = dateValue === flashStartDate;
-
-    const isEnd = Boolean(flashEndDate && dateValue === flashEndDate);
-
-    const cell = getFlashCell(dateValue);
-
-    const isEditing = flashEditingDate === dateValue;
-
-    const hasValue = parseFlashNumberInput(cell.value) !== null;
-
-    const displayValue =
-
-      options.mode === 'sequence' && options.current ? flashCurrentInput : cell.value;
-
-
-
-    return (
-
-      <button
-
-        key={`${options.mode}-${dateValue}`}
-
-        type="button"
-
-        disabled={isFuture}
-
-        className={[
-
-          'flash-note-day',
-
-          options.currentMonth === false ? 'is-outside-month' : '',
-
-          isFuture ? 'is-future' : '',
-
-          isSelected ? 'is-selected' : '',
-
-          isPreview ? 'is-preview' : '',
-
-          isStart ? 'is-start' : '',
-
-          isEnd ? 'is-end' : '',
-
-          options.current ? 'is-current-input' : '',
-
-          hasValue ? 'has-value' : '',
-
-          cell.missing ? 'is-missing' : '',
-
-          cell.enabled && !hasValue ? 'is-enabled-blank' : '',
-
-          cell.pendingDelete ? 'is-pending-delete' : '',
-
-          isCorrectionSelected ? 'is-correction-selected' : '',
-
-          options.dimmed ? 'is-dimmed' : ''
-
-        ]
-
-          .filter(Boolean)
-
-          .join(' ')}
-
-        onPointerDown={(event) => {
-
-          if (options.mode === 'correction' && event.button !== 0) {
-
-            return;
-
-          }
-
-
-
-          if (options.mode === 'date-select') {
-
-            handleFlashDatePointerDown(dateValue);
-
-          } else if (options.mode === 'correction') {
-
-            handleFlashCorrectionPointerDown(dateValue);
-
-          }
-
-        }}
-
-        onPointerEnter={() => {
-
-          if (options.mode === 'date-select') {
-
-            handleFlashDatePointerEnter(dateValue);
-
-          } else if (options.mode === 'correction') {
-
-            handleFlashCorrectionPointerEnter(dateValue);
-
-          }
-
-        }}
-
-        onPointerUp={(event) => {
-
-          if (options.mode === 'correction' && event.button !== 0) {
-
-            return;
-
-          }
-
-
-
-          if (options.mode === 'date-select') {
-
-            handleFlashDatePointerUp(dateValue);
-
-          } else if (options.mode === 'correction') {
-
-            handleFlashCorrectionPointerUp(dateValue);
-
-          }
-
-        }}
-
-        onMouseDown={(event) => {
-
-          if (options.mode === 'sequence') {
-
-            event.preventDefault();
-
-          }
-
-        }}
-
-        onDoubleClick={() => {
-
-          if (options.mode === 'correction' && !isFuture) {
-
-            startFlashCellEdit(dateValue);
-
-          }
-
-        }}
-
-        onContextMenu={(event) => {
-
-          if (options.mode === 'correction') {
-
-            handleFlashCorrectionContextMenu(dateValue, event);
-
-          }
-
-        }}
-
-      >
-
-        <span className="flash-note-day__number">{date.getDate()}</span>
-
-        {isStart ? <span className="flash-note-day__marker">起</span> : null}
-
-        {isEnd ? <span className="flash-note-day__marker">终</span> : null}
-
-        {isEditing ? (
-
-          <input
-
-            ref={flashEditInputRef}
-
-            className="flash-note-day__editor"
-
-            value={flashEditingValue}
-
-            onChange={(event) => {
-
-              const nextValue = normalizeMoneyInput(event.target.value, { allowNegative: true });
-
-
-
-              if (isValidFlashNumberInput(nextValue)) {
-
-                setFlashEditingValue(nextValue);
-
-              }
-
-            }}
-
-            onKeyDown={handleFlashCellEditKeyDown}
-
-            onBlur={commitFlashCellEdit}
-
-            onClick={(event) => event.stopPropagation()}
-
-          />
-
-        ) : displayValue ? (
-
-          <span className="flash-note-day__value">{displayValue}</span>
-
-        ) : (
-
-          <span className="flash-note-day__value" aria-hidden="true" />
-
-        )}
-
-      </button>
-
-    );
-
-  };
-
-
-
-  const renderFlashMonth = (monthDate: Date, side: 'left' | 'right') => (
-
-    <section key={`${side}-${monthDate.toISOString()}`} className="flash-note-month">
-
-      <header>
-
-        <strong>{getFlashMonthLabel(monthDate)}</strong>
-
-      </header>
-
-      <div className="flash-note-week-header">
-
-        {FLASH_NOTE_WEEKDAYS.map((weekday) => (
-
-          <span key={weekday}>{weekday}</span>
-
-        ))}
-
-      </div>
-
-      <div className="flash-note-month-grid">
-
-        {getCalendarDays(monthDate).map((date) => {
-
-          const dateValue = toDateInputValue(date);
-
-          const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-
-          const nextMonthStart = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1);
-
-          const shouldShowDate =
-
-            side === 'left' ? date < nextMonthStart : date >= monthStart;
-
-
-
-          if (!shouldShowDate) {
-
-            return <span key={`${side}-${dateValue}`} aria-hidden="true" />;
-
-          }
-
-
-
-          return renderFlashDateCell(dateValue, {
-
-            currentMonth: date.getMonth() === monthDate.getMonth(),
-
-            mode: 'date-select'
-
-          });
-
-        })}
-
-      </div>
-
-    </section>
-
-  );
-
-
-
-  const renderFlashDateSelectionStage = () => (
-
-    <div className="flash-note-stage-body flash-note-stage-body--date-select">
-
-      {renderFlashAccountPicker()}
-
-
-
-      <section className="flash-note-calendar-panel">
-
-        <div className="flash-note-calendar-header">
-
-          <button
-
-            type="button"
-
-            aria-label="上两个月"
-
-            onClick={() =>
-
-              setFlashVisibleMonth(
-
-                new Date(flashVisibleMonth.getFullYear(), flashVisibleMonth.getMonth() - 2, 1)
-
-              )
-
-            }
-
-          >
-
-            ‹
-
-          </button>
-
-          {renderFlashSelectionToolbar(true)}
-
-          <button
-
-            type="button"
-
-            aria-label="下两个月"
-
-            onClick={() =>
-
-              setFlashVisibleMonth(
-
-                new Date(flashVisibleMonth.getFullYear(), flashVisibleMonth.getMonth() + 2, 1)
-
-              )
-
-            }
-
-          >
-
-            ›
-
-          </button>
-
-        </div>
-
-        <div className="flash-note-double-month">
-
-          {renderFlashMonth(flashVisibleMonth, 'left')}
-
-          {renderFlashMonth(
-
-            new Date(flashVisibleMonth.getFullYear(), flashVisibleMonth.getMonth() + 1, 1),
-
-            'right'
-
-          )}
-
-        </div>
-
-      </section>
-
-    </div>
-
-  );
-
-
-
-  const renderFlashModeSelectionStage = () => (
-
-    <div className="flash-note-mode-select">
-
-      <section>
-
-        <h2>选择本轮闪记的写入含义</h2>
-
-        <div className="flash-note-mode-options">
-
-          {[
-
-            {
-
-              mode: 'change' as const,
-
-              title: '净值变动（change）',
-
-              description: '输入的数值直接作为本日净值变动'
-
-            },
-
-            {
-
-              mode: 'balance' as const,
-
-              title: '账户余额（balance）',
-
-              description: '输入的数值作为该日账户余额'
-
-            }
-
-          ].map((item) => (
-
-            <button
-
-              key={item.mode}
-
-              type="button"
-
-              className={flashInputMode === item.mode ? 'is-selected' : ''}
-
-              onClick={() => setFlashInputMode(item.mode)}
-
-            >
-
-              <strong>{item.title}</strong>
-
-              <span>{item.description}</span>
-
-            </button>
-
-          ))}
-
-        </div>
-
-      </section>
-
-    </div>
-
-  );
-
-
-
-  const getFlashTypewriterWeeks = () => {
-
-    const currentDate = flashCurrentDate || flashTrackDates[0];
-
-
-
-    if (!currentDate) {
-
-      return [];
-
-    }
-
-
-
-    const currentMonday = getMondayDate(getDateKeyFromValue(currentDate));
-
-    const offsets = flashDirection === 'forward' ? [-1, 0, 1, 2, 3] : [-3, -2, -1, 0, 1];
-
-
-
-    return offsets.map((offset) =>
-
-      Array.from({ length: 7 }, (_, index) => addDays(currentMonday, offset * 7 + index))
-
-    );
-
-  };
-
-
-
-  const renderFlashWeekRows = (
-
-    weeks: Date[][],
-
-    mode: 'sequence' | 'correction'
-
-  ) => (
-
-    <div className={`flash-note-week-view flash-note-week-view--${mode}`}>
-
-      {weeks.map((week) => {
-
-        const weekKey = toDateInputValue(week[0] ?? new Date());
-
-        const isCurrentWeek =
-
-          Boolean(flashCurrentDate) && week.some((date) => toDateInputValue(date) === flashCurrentDate);
-
-        const hasCorrectionSelection =
-
-          mode === 'correction' &&
-
-          week.some((date) => flashCorrectionSelectionSet.has(toDateInputValue(date)));
-
-
-
-        return (
-
-          <section
-
-            key={`${mode}-${weekKey}`}
-
-            className={[
-
-              'flash-note-week-row',
-
-              isCurrentWeek ? 'is-current-week' : '',
-
-              hasCorrectionSelection ? 'has-correction-selection' : ''
-
-            ]
-
-              .filter(Boolean)
-
-              .join(' ')}
-
-          >
-
-            <div className="flash-note-week-header">
-
-              {FLASH_NOTE_WEEKDAYS.map((weekday) => (
-
-                <span key={weekday}>{weekday}</span>
-
-              ))}
-
-            </div>
-
-            <div className="flash-note-week-grid">
-
-              {week.map((date) => {
-
-                const dateValue = toDateInputValue(date);
-
-                const inSequenceTrack = flashTrackDates.includes(dateValue);
-
-                const inCorrectionTrack = flashCorrectionTrackDates.includes(dateValue);
-
-
-
-                return renderFlashDateCell(dateValue, {
-
-                  mode,
-
-                  current: mode === 'sequence' && dateValue === flashCurrentDate,
-
-                  dimmed:
-
-                    mode === 'sequence'
-
-                      ? !inSequenceTrack || !isCurrentWeek
-
-                      : !inCorrectionTrack
-
-                });
-
-              })}
-
-            </div>
-
-          </section>
-
-        );
-
-      })}
-
-    </div>
-
-  );
-
-
-
-  const getFlashCompletedInputCount = () =>
-
-    flashTrackDates.filter((dateValue) => parseFlashNumberInput(getFlashCell(dateValue).value) !== null)
-
-      .length;
-
-
-
-  const renderFlashSequenceStage = () => (
-
-    <div className="flash-note-stage-body flash-note-stage-body--sequence-input">
-
-      {renderFlashWeekRows(getFlashTypewriterWeeks(), 'sequence')}
-
-    </div>
-
-  );
-
-
-
-  const getFlashCorrectionWeeks = () => {
-
-    const naturalDates = flashCorrectionTrackDates.length
-
-      ? [...flashCorrectionTrackDates].sort()
-
-      : [...flashTrackDates].sort();
-
-    const firstDate = naturalDates[0];
-
-    const lastDate = naturalDates[naturalDates.length - 1];
-
-
-
-    if (!firstDate || !lastDate) {
-
-      return [];
-
-    }
-
-
-
-    const startMonday = getMondayDate(getDateKeyFromValue(firstDate));
-
-    const endMonday = getMondayDate(getDateKeyFromValue(lastDate));
-
-    const weekCount =
-
-      Math.max(0, Math.round((endMonday.getTime() - startMonday.getTime()) / (DAY_MS * 7))) + 1;
-
-
-
-    return Array.from({ length: weekCount }, (_, weekIndex) =>
-
-      Array.from({ length: 7 }, (_, dayIndex) =>
-
-        addDays(startMonday, weekIndex * 7 + dayIndex)
-
-      )
-
-    );
-
-  };
-
-
-
-  const renderFlashContextMenu = () => {
-
-    if (!flashContextMenu) {
-
-      return null;
-
-    }
-
-
-
-    return (
-
-      <div
-
-        className="flash-note-context-menu"
-
-        style={{
-
-          left: Math.min(flashContextMenu.x, window.innerWidth - 220),
-
-          top: Math.min(flashContextMenu.y, window.innerHeight - 180)
-
-        }}
-
-      >
-
-        {flashContextMenu.kind === 'block' ? (
-
-          <>
-
-            <button
-
-              type="button"
-
-              disabled={!canMoveFlashDataBlock(-1)}
-
-              onClick={() => moveFlashDataBlock(-1)}
-
-            >
-
-              前移 1 格
-
-            </button>
-
-            <button
-
-              type="button"
-
-              disabled={!canMoveFlashDataBlock(1)}
-
-              onClick={() => moveFlashDataBlock(1)}
-
-            >
-
-              后移 1 格
-
-            </button>
-
-            <button
-
-              type="button"
-
-              disabled={flashDataBlockDates.length === 0 || flashStashSegments.length >= 2}
-
-              onClick={stashFlashDataBlock}
-
-            >
-
-              顺序收纳
-
-            </button>
-
-          </>
-
-        ) : flashStashSegments.length === 0 ? (
-
-          <span>暂无可放置数据</span>
-
-        ) : (
-
-          flashStashSegments.map((segment, index) => (
-
-            <button
-
-              key={segment.id}
-
-              type="button"
-
-              disabled={!canPlaceFlashStashSegment(segment, flashContextMenu.date)}
-
-              onClick={() => placeFlashStashSegment(segment.id, flashContextMenu.date)}
-
-            >
-
-              放置第 {index + 1} 段
-
-            </button>
-
-          ))
-
-        )}
-
-      </div>
-
-    );
-
-  };
-
-
-
-  const renderFlashStashArea = () => (
-
-    <section className="flash-note-stash-area">
-
-      <header>
-
-        <strong>临时收纳区</strong>
-
-        <span>{flashStashSegments.length} / 2</span>
-
-      </header>
-
-      {flashStashSegments.length === 0 ? (
-
-        <p>暂无收纳数据</p>
-
-      ) : (
-
-        <div>
-
-          {flashStashSegments.map((segment, index) => (
-
-            <article key={segment.id}>
-
-              <strong>第 {index + 1} 段</strong>
-
-              <span>
-
-                {segment.items.slice(0, 5).map((item) => item.value).join('  ')}
-
-                {segment.items.length > 5 ? ' ...' : ''}
-
-              </span>
-
-            </article>
-
-          ))}
-
-        </div>
-
-      )}
-
-    </section>
-
-  );
-
-
-
-  const renderFlashCorrectionStage = () => (
-
-    <div className="flash-note-stage-body">
-
-      <section className="flash-note-calendar-panel">
-
-        <div className="flash-note-calendar-header">
-
-          <span />
-
-          {renderFlashSelectionToolbar(false)}
-
-          <span />
-
-        </div>
-
-        {renderFlashWeekRows(getFlashCorrectionWeeks(), 'correction')}
-
-      </section>
-
-      {renderFlashContextMenu()}
-
-    </div>
-
-  );
-
-
-
-  const renderFlashSignedAmount = (
-
-    amount: number | null,
-
-    displayValue: string,
-
-    className = ''
-
-  ) => {
-
-    const amountParts = getFlashSignedAmountParts(amount, displayValue);
-
-
-
-    if (!amountParts) {
-
-      return null;
-
-    }
-
-
-
-    return (
-
-      <span className={`flash-note-confirm-amount${className ? ` ${className}` : ''}`}>
-
-        <span className="flash-note-confirm-amount__sign">{amountParts.sign}</span>
-
-        <span className="flash-note-confirm-amount__value">{amountParts.value}</span>
-
-      </span>
-
-    );
-
-  };
-
-
-
-  const renderFlashConfirmStage = () => {
-
-    const rows = getFlashWriteRows();
-
-    const totalDelta = rows.reduce((sum, row) => sum + (row.delta ?? 0), 0);
-
-
-
-    return (
-
-      <div className="flash-note-confirm">
-
-        <table>
-
-          <thead>
-
-            <tr>
-
-              <th>日期</th>
-
-              <th>周</th>
-
-              <th>{flashInputMode === 'change' ? '变动' : '余额'}</th>
-
-              {flashInputMode === 'balance' ? <th aria-label="净值变动" /> : null}
-
-            </tr>
-
-          </thead>
-
-          <tbody>
-
-            {rows.map((row, index) => {
-
-              const previousRow = rows[index - 1];
-
-              const isNewWeek = previousRow && previousRow.weekKey !== row.weekKey;
-
-
-
-              return (
-
-                <tr key={`${row.date}-${index}`} className={isNewWeek ? 'is-new-week' : ''}>
-
-                  <td>{formatFlashShortDate(row.date)}</td>
-
-                  <td>周{getFlashWeekdayLabel(row.date)}</td>
-
-                  <td>
-
-                    {flashInputMode === 'change' ? (
-
-                      <strong>{renderFlashSignedAmount(row.inputAmount, row.value)}</strong>
-
-                    ) : (
-
-                      <strong>{row.value}</strong>
-
-                    )}
-
-                  </td>
-
-                  {flashInputMode === 'balance' ? (
-
-                    <td className="flash-note-confirm__delta">
-
-                      {row.delta === null
-
-                        ? ''
-
-                        : renderFlashSignedAmount(
-
-                            row.delta,
-
-                            formatHistoryAmount(Math.abs(row.delta)),
-
-                            'flash-note-confirm-amount--muted'
-
-                          )}
-
-                    </td>
-
-                  ) : null}
-
-                </tr>
-
-              );
-
-            })}
-
-          </tbody>
-
-        </table>
-
-        {flashInputMode === 'change' ? (
-
-          <p className="flash-note-confirm-total">
-
-            总净值变动 {formatHistoryAmount(totalDelta)}
-
-          </p>
-
-        ) : null}
-
-      </div>
-
-    );
-
-  };
-
-
-
-  const renderFlashAuxiliaryLayer = () => {
-
-    if (flashNoteStage === 'correction') {
-
-      return (
-
-        <section className="flash-note-auxiliary flash-note-auxiliary--correction">
-
-          {renderFlashStashArea()}
-
-        </section>
-
-      );
-
-    }
-
-
-
-    return null;
-
-  };
-
-
-
-  const renderFlashStatusBar = () => {
-
-    if (flashNoteStage === 'date-select') {
-
-      return (
-
-        <div className="flash-note-status">
-
-          <span>{flashDirection === 'forward' ? '正向输入' : '反向输入'}</span>
-
-          <span>已选取 {flashSelectedDates.length}天</span>
-
-          <span>{getFlashCoverageWeekCount(flashSelectedDates)} 周</span>
-
-        </div>
-
-      );
-
-    }
-
-
-
-    if (flashNoteStage === 'sequence-input') {
-
-      return (
-
-        <div className="flash-note-current-input">
-
-          <span className="flash-note-input-progress">
-
-            已输入 {getFlashCompletedInputCount()} / {flashTrackDates.length}
-
-          </span>
-
-          <input
-
-            ref={flashSequenceInputRef}
-
-            type="text"
-
-            aria-label="顺序输入金额"
-
-            inputMode="decimal"
-
-            value={flashCurrentInput}
-
-            onChange={(event) => {
-
-              const nextValue = normalizeMoneyInput(event.target.value, { allowNegative: true });
-
-
-
-              if (isValidFlashNumberInput(nextValue)) {
-
-                setFlashCurrentInput(nextValue);
-
-              }
-
-            }}
-
-            onKeyDown={handleFlashSequenceInputKeyDown}
-
-          />
-
-        </div>
-
-      );
-
-    }
-
-
-
-    return <div className="flash-note-status" />;
-
-  };
-
-
-
-  const renderFlashStageActions = () => {
-
-    if (flashNoteStage === 'date-select') {
-
-      return (
-
-        <>
-
-          <button type="button" className="flash-note-secondary" onClick={requestCloseFlashNote}>
-
-            退出
-
-          </button>
-
-          <button
-
-            type="button"
-
-            className="flash-note-primary"
-
-            disabled={!flashSelectedAccountEntry || flashTrackDates.length === 0 || !flashStartDate}
-
-            onClick={advanceFlashDateSelection}
-
-          >
-
-            选择输入模式
-
-          </button>
-
-        </>
-
-      );
-
-    }
-
-
-
-    if (flashNoteStage === 'mode-select') {
-
-      return (
-
-        <>
-
-          <button
-
-            type="button"
-
-            className="flash-note-secondary"
-
-            onClick={() => setFlashNoteStage('select')}
-
-          >
-
-            返回日期选择
-
-          </button>
-
-          <button type="button" className="flash-note-primary" onClick={startFlashSequenceInput}>
-
-            开始顺序输入
-
-          </button>
-
-        </>
-
-      );
-
-    }
-
-
-
-    if (flashNoteStage === 'sequence-input') {
-
-      return (
-
-        <>
-
-          <button type="button" className="flash-note-secondary" onClick={requestCloseFlashNote}>
-
-            退出
-
-          </button>
-
-          <button type="button" className="flash-note-primary" onClick={enterFlashCorrectionStage}>
-
-            进入确认
-
-          </button>
-
-        </>
-
-      );
-
-    }
-
-
-
-    if (flashNoteStage === 'correction') {
-
-      return (
-
-        <>
-
-          <button type="button" className="flash-note-secondary" onClick={requestCloseFlashNote}>
-
-            退出
-
-          </button>
-
-          <button
-
-            type="button"
-
-            className="flash-note-primary"
-
-            disabled={flashStashSegments.length > 0}
-
-            title={flashStashSegments.length > 0 ? '还有未放回的数据' : undefined}
-
-            onClick={() => setFlashNoteStage('confirm')}
-
-          >
-
-            进入确认
-
-          </button>
-
-        </>
-
-      );
-
-    }
-
-
-
-    if (flashNoteStage === 'confirm') {
-
-      return (
-
-        <>
-
-          <button type="button" className="flash-note-secondary" onClick={requestCloseFlashNote}>
-
-            退出
-
-          </button>
-
-          <button
-
-            type="button"
-
-            className="flash-note-primary"
-
-            disabled={getFlashWriteRows().length === 0}
-
-            onClick={confirmFlashNoteWrite}
-
-          >
-
-            确认写入
-
-          </button>
-
-        </>
-
-      );
-
-    }
-
-
-
-    return null;
-
-  };
-
-
-
-  const renderFlashStageContent = () => {
-
-    if (flashNoteStage === 'date-select') {
-
-      return renderFlashDateSelectionStage();
-
-    }
-
-
-
-    if (flashNoteStage === 'mode-select') {
-
-      return renderFlashModeSelectionStage();
-
-    }
-
-
-
-    if (flashNoteStage === 'sequence-input') {
-
-      return renderFlashSequenceStage();
-
-    }
-
-
-
-    if (flashNoteStage === 'correction') {
-
-      return renderFlashCorrectionStage();
-
-    }
-
-
-
-    if (flashNoteStage === 'confirm') {
-
-      return renderFlashConfirmStage();
-
-    }
-
-
-
-    return null;
-
-  };
 
 
 
@@ -20474,84 +14934,6 @@ function App() {
             >
 
               返回日期选择
-
-            </button>
-
-          </div>
-
-        </section>
-
-      </OverlayBackdrop>
-
-    ) : null;
-
-
-
-  const renderFlashReturnSequenceConfirm = () =>
-
-    isFlashReturnSequenceConfirmOpen ? (
-
-      <OverlayBackdrop
-
-        onBack={() => setIsFlashReturnSequenceConfirmOpen(false)}
-
-        className="modal-backdrop"
-
-      >
-
-        <section
-
-          role="dialog"
-
-          aria-modal="true"
-
-          aria-labelledby="flash-return-sequence-title"
-
-          className="modal-card"
-
-          onClick={(event) => event.stopPropagation()}
-
-        >
-
-          <p className="eyebrow" style={{ marginBottom: 8 }}>
-
-            返回顺序输入
-
-          </p>
-
-          <h2 id="flash-return-sequence-title" style={{ margin: '0 0 10px', fontSize: '1.26rem' }}>
-
-            返回顺序输入后，当前确认修改不会保留
-
-          </h2>
-
-          <div className="modal-actions">
-
-            <button
-
-              type="button"
-
-              className="modal-button modal-button--secondary"
-
-              onClick={() => setIsFlashReturnSequenceConfirmOpen(false)}
-
-            >
-
-              取消
-
-            </button>
-
-            <button
-
-              type="button"
-
-              className="modal-button modal-button--primary"
-
-              onClick={() => returnFlashSequenceInput(true)}
-
-            >
-
-              返回顺序输入
 
             </button>
 
@@ -21313,34 +15695,6 @@ function App() {
 
 
 
-  const openAccountTypeEditor = (groupName: string) => {
-
-    const group = groups.find((currentGroup) => currentGroup.name === groupName);
-
-
-
-    if (!group) {
-
-      return;
-
-    }
-
-
-
-    setAccountTypeEditor({ mode: 'edit', groupName });
-
-    setAccountTypeNameDraft(group.name);
-
-    setAccountTypeNatureDraft(group.nature);
-
-    setAccountTypeStatsDraft(group.includeInStats);
-
-    setAccountTypeError('');
-
-  };
-
-
-
   const closeAccountTypeEditor = () => {
 
     setAccountTypeEditor(null);
@@ -21384,8 +15738,6 @@ function App() {
     setIsHistoryOpen(false);
 
     setHistoryPanelView('history');
-
-    setBackupReminderPrompt(null);
 
     setIsTotalChartsOpen(false);
 
@@ -21991,8 +16343,6 @@ function App() {
 
     setHistoryPanelView('history');
 
-    setBackupReminderPrompt(null);
-
     setIsTotalChartsOpen(true);
 
     setIsAccountChartsOpen(false);
@@ -22032,8 +16382,6 @@ function App() {
     closePasswordDisableConfirm();
 
     closeSnapshotEncryptionDisableConfirm();
-
-    setBackupReminderPrompt(null);
 
     setConfirmationDialog(null);
 
@@ -22865,38 +17213,6 @@ function App() {
 
 
 
-    if (rollupImportReview.riskLevel === 'high') {
-
-      setConfirmationDialog({
-
-        title: '高风险汇总导入',
-
-        message: (
-
-          <>
-
-            <p>本次导入为高风险，不建议直接导入</p>
-
-            <strong>是否仍要整批导入？</strong>
-
-          </>
-
-        ),
-
-        confirmLabel: '仍要导入',
-
-        tone: 'danger',
-
-        onConfirm: performRollupImportWrite
-
-      });
-
-      return;
-
-    }
-
-
-
     performRollupImportWrite();
 
   };
@@ -23585,8 +17901,6 @@ function App() {
 
     resetAutoBackupDraft();
 
-    setBackupReminderPrompt(null);
-
     setConfirmationDialog(null);
 
     setIsArchivedAccountsOpen(false);
@@ -23694,8 +18008,6 @@ function App() {
     setHistoryRangeInput(snapshot.historyRangeInput);
 
     setCalendarMonth(new Date(snapshot.calendarMonth));
-
-    setBackupReminderPrompt(null);
 
     setConfirmationDialog(null);
 
@@ -23978,8 +18290,6 @@ function App() {
 
     setBackupReturnTarget('history');
 
-    setBackupReminderPrompt(null);
-
     setHighlightedHistoryRecordId('');
 
     setHighlightedBackupRecordId('');
@@ -24020,22 +18330,6 @@ function App() {
 
     setIsHistoryOpen(true);
 
-
-
-    if (shouldShowBackupReminderDot) {
-
-      setBackupReminderPrompt({
-
-        intervalDays: backupReminderStatus.intervalDays
-
-      });
-
-      return;
-
-    }
-
-
-
     setHistoryPanelView('backup');
 
   };
@@ -24049,8 +18343,6 @@ function App() {
     setHighlightedHistoryRecordId('');
 
     setHighlightedBackupRecordId('');
-
-    setBackupReminderPrompt(null);
 
     resetAutoBackupDraft();
 
@@ -24089,106 +18381,6 @@ function App() {
 
 
     setHistoryPanelView('history');
-
-  };
-
-
-
-  const returnFromBackupSettings = () => {
-
-    resetAutoBackupDraft();
-
-    setHistoryPanelView('history');
-
-  };
-
-
-
-  const confirmBackupReminder = () => {
-
-    setBackupReminderPrompt(null);
-
-    setHistoryPanelView('backup');
-
-  };
-
-
-
-  const openBackupReminderSettings = () => {
-
-    setBackupReminderPrompt(null);
-
-    resetAutoBackupDraft();
-
-    setBackupReturnTarget('history');
-
-    setIsHistoryOpen(true);
-
-    setHistoryPanelView('backup');
-
-  };
-
-
-
-  const updateBackupReminderCycle = (nextCycle: BackupReminderCycle) => {
-
-    const normalizedCycle = normalizeBackupReminderCycle(nextCycle);
-
-
-
-    dispatchSearchState({ type: 'clear-navigation' });
-
-    setBackupReminderCycle(normalizedCycle);
-
-    setHasStoredBackupReminderCycle(true);
-
-    setBackupReminderValueInput(String(normalizedCycle.value));
-
-    saveBackupReminderCycle(normalizedCycle);
-
-    cancelPendingFirstWelcomeForRealChange();
-
-  };
-
-
-
-  const updateBackupReminderValue = (value: string) => {
-
-    const nextValue = value.replace(/[^\d]/g, '');
-
-    setBackupReminderValueInput(nextValue);
-
-
-
-    if (!nextValue) {
-
-      return;
-
-    }
-
-
-
-    updateBackupReminderCycle({
-
-      ...backupReminderCycle,
-
-      value: Number(nextValue)
-
-    });
-
-  };
-
-
-
-  const adjustBackupReminderValue = (direction: 1 | -1) => {
-
-    updateBackupReminderCycle({
-
-      ...backupReminderCycle,
-
-      value: Math.max(1, backupReminderCycle.value + direction)
-
-    });
 
   };
 
@@ -24332,7 +18524,7 @@ function App() {
 
 
 
-  const updateAutoBackupCycleUnit = (unit: BackupReminderUnit) => {
+  const updateAutoBackupCycleUnit = (unit: BackupCycleUnit) => {
 
     if (isExampleMode) {
 
@@ -24501,8 +18693,6 @@ function App() {
     lastBackupAt: backupAt,
 
     lastBackupHistoryCount: backupRecord.historyCount,
-
-    backupReminderCycle,
 
     backupRecords: nextBackupRecords,
 
@@ -24818,7 +19008,7 @@ function App() {
 
     const lastBackupTimestamp = getValidTimestamp(loadLastBackupAt());
 
-    const cycleDays = getBackupReminderCycleDays(settings.cycle);
+    const cycleDays = getBackupCycleDays(settings.cycle);
 
     const shouldRun =
 
@@ -25105,18 +19295,6 @@ function App() {
       setLastBackupAt(importedLastBackupAt);
 
       saveLastBackupAt(importedLastBackupAt);
-
-    }
-
-
-
-    const importedReminderCycle = getBackupFieldValue(value, ['backupReminderCycle']);
-
-
-
-    if (importedReminderCycle !== undefined) {
-
-      updateBackupReminderCycle(normalizeBackupReminderCycle(importedReminderCycle));
 
     }
 
@@ -26258,812 +20436,6 @@ function App() {
 
 
 
-  const renderHistoryCardContent = (
-
-    record: HistoryRecord,
-
-    tone: HistoryTone,
-
-    change: HistoryChangeDisplay,
-
-    options: Required<Pick<HistoryCardOptions, 'nested' | 'timeLabel'>> &
-
-      Pick<HistoryCardOptions, 'extraInfo'>
-
-  ) => {
-
-    const { nested, timeLabel, extraInfo } = options;
-
-
-
-    return (
-
-      <>
-
-        <div
-
-          style={{
-
-            display: 'flex',
-
-            justifyContent: 'space-between',
-
-            gap: 12,
-
-            alignItems: 'flex-start'
-
-          }}
-
-        >
-
-          <strong
-
-            style={{
-
-              flex: 1,
-
-              minWidth: 0,
-
-              color: 'var(--text-main)',
-
-              fontSize: nested ? '0.94rem' : '1rem',
-
-              lineHeight: 1.35
-
-            }}
-
-          >
-
-            {record.groupName} - {record.accountName}
-
-          </strong>
-
-          <span
-
-            style={{
-
-              flex: '0 0 auto',
-
-              borderRadius: 999,
-
-              padding: nested ? '3px 8px' : '4px 9px',
-
-              background: tone.labelBackground,
-
-              color: tone.text,
-
-              fontSize: nested ? '0.76rem' : '0.82rem',
-
-              fontWeight: 700,
-
-              lineHeight: 1
-
-            }}
-
-          >
-
-            {getHistoryTypeLabel(record.type)}
-
-          </span>
-
-        </div>
-
-
-
-        <div
-
-          style={{
-
-            display: 'grid',
-
-            gridTemplateColumns: 'minmax(0, 1fr) auto',
-
-            gap: 12,
-
-            alignItems: 'center'
-
-          }}
-
-        >
-
-          <span
-
-            style={{
-
-              minWidth: 0,
-
-              color: 'var(--text-secondary)',
-
-              fontSize: nested ? '0.92rem' : '0.98rem',
-
-              fontWeight: 600,
-
-              lineHeight: 1.4
-
-            }}
-
-          >
-
-            {formatHistoryAmount(record.beforeAmount)} → {formatHistoryAmount(record.afterAmount)}
-
-          </span>
-
-          <strong
-
-            style={{
-
-              justifySelf: 'end',
-
-              borderRadius: 999,
-
-              padding: nested ? '4px 9px' : '5px 10px',
-
-              background: change.background,
-
-              color: change.color,
-
-              fontSize: nested ? '0.84rem' : '0.9rem',
-
-              lineHeight: 1,
-
-              whiteSpace: 'nowrap'
-
-            }}
-
-          >
-
-            {change.label}
-
-          </strong>
-
-        </div>
-
-
-
-        {record.note ? (
-
-          <p
-
-            style={{
-
-              margin: 0,
-
-              color: 'var(--text-muted)',
-
-              fontSize: nested ? '0.78rem' : '0.84rem',
-
-              lineHeight: 1.35
-
-            }}
-
-          >
-
-            备注：{record.note}
-
-          </p>
-
-        ) : null}
-
-
-
-        <div
-
-          style={{
-
-            display: 'flex',
-
-            justifyContent: 'space-between',
-
-            gap: 12,
-
-            alignItems: 'center',
-
-            color: 'var(--text-muted)',
-
-            fontSize: nested ? '0.78rem' : '0.84rem',
-
-            lineHeight: 1.35
-
-          }}
-
-        >
-
-          <span>{timeLabel}</span>
-
-          <span className="history-card-source-row">
-
-            {extraInfo ? (
-
-              <span
-
-                style={{
-
-                  whiteSpace: 'nowrap',
-
-                  color: 'var(--text-secondary)',
-
-                  fontWeight: 600
-
-                }}
-
-              >
-
-                {extraInfo}
-
-              </span>
-
-            ) : null}
-
-            {record.source === 'flash-note'
-
-              ? renderFlashLightningIcon('history-flash-source')
-
-              : null}
-
-            {record.source === 'rollup' ? (
-
-              <NfSvgIcon
-
-                svg={NfRollupSourceWideIcon}
-
-                className="history-rollup-source"
-
-                title="汇总导入"
-
-                decorative
-
-              />
-
-            ) : null}
-
-            {!extraInfo && !record.source ? (
-
-              <span aria-hidden="true" style={{ minWidth: nested ? 44 : 60 }} />
-
-            ) : null}
-
-          </span>
-
-        </div>
-
-      </>
-
-    );
-
-  };
-
-
-
-  const renderHistoryCard = (
-
-    record: HistoryRecord,
-
-    options: HistoryCardOptions = {}
-
-  ) => {
-
-    const {
-
-      nested = false,
-
-      timeLabel = record.relatedTime
-
-        ? `${formatShortTime(record.relatedTime)} · ${formatShortTime(record.time)}`
-
-        : formatShortTime(record.time),
-
-      extraInfo,
-
-      interactive = false,
-
-      expanded = false,
-
-      highlighted = false,
-
-      onClick,
-
-      children
-
-    } = options;
-
-    const tone = getHistoryTone(record);
-
-    const change = getAmountChange(record);
-
-    const contentGap = nested ? 10 : 12;
-
-    const cardRadius = nested ? 14 : 16;
-
-    const cardPadding = nested ? '12px 14px' : '14px 16px';
-
-    const cardStyle = {
-
-      borderRadius: cardRadius,
-
-      padding: cardPadding,
-
-      background: nested ? tone.nestedBackground : tone.background,
-
-      border: `1px solid ${
-
-        highlighted ? 'var(--accent-border)' : interactive ? tone.emphasisBorder : tone.border
-
-      }`,
-
-      boxShadow: highlighted
-
-        ? '0 0 0 3px var(--accent-bg), var(--shadow-panel)'
-
-        : interactive && expanded
-
-          ? 'var(--shadow-panel)'
-
-          : 'none'
-
-    } as const;
-
-    const cardContent = renderHistoryCardContent(record, tone, change, {
-
-      nested,
-
-      timeLabel,
-
-      extraInfo
-
-    });
-
-
-
-    if (interactive) {
-
-      return (
-
-        <section
-
-          key={record.id}
-
-          id={`history-record-${record.id}`}
-
-          style={{
-
-            ...cardStyle,
-
-            display: 'grid',
-
-            gap: children ? 10 : 0
-
-          }}
-
-        >
-
-          <button
-
-            type="button"
-
-            onClick={onClick}
-
-            aria-expanded={expanded}
-
-            style={{
-
-              display: 'grid',
-
-              gap: contentGap,
-
-              width: '100%',
-
-              border: 0,
-
-              padding: 0,
-
-              background: 'transparent',
-
-              color: 'var(--text-main)',
-
-              cursor: 'pointer',
-
-              font: 'inherit',
-
-              textAlign: 'left'
-
-            }}
-
-          >
-
-            {cardContent}
-
-          </button>
-
-
-
-          {children ? (
-
-            <div
-
-              style={{
-
-                display: 'grid',
-
-                gap: 8,
-
-                paddingTop: 10,
-
-                paddingLeft: 12,
-
-                borderTop: `1px solid ${tone.divider}`
-
-              }}
-
-            >
-
-              {children}
-
-            </div>
-
-          ) : null}
-
-        </section>
-
-      );
-
-    }
-
-
-
-    return (
-
-      <article
-
-        key={record.id}
-
-        id={`history-record-${record.id}`}
-
-        style={{
-
-          ...cardStyle,
-
-          display: 'grid',
-
-          gap: contentGap
-
-        }}
-
-      >
-
-        {cardContent}
-
-      </article>
-
-    );
-
-  };
-
-
-
-  const renderDetailHistoryGroup = (group: { date: string; records: HistoryRecord[] }) => {
-
-    if (group.records.length === 1) {
-
-      const record = group.records[0];
-
-      return record ? renderHistoryCard(record) : null;
-
-    }
-
-
-
-    const recordsByTimeDesc = [...group.records].sort(compareHistoryByTimeDesc);
-
-    const firstRecord = recordsByTimeDesc[recordsByTimeDesc.length - 1];
-
-    const lastRecord = recordsByTimeDesc[0];
-
-
-
-    if (!firstRecord || !lastRecord) {
-
-      return null;
-
-    }
-
-
-
-    const beforeAmount = firstRecord.beforeAmount;
-
-    const afterAmount = lastRecord.afterAmount;
-
-    const expanded = expandedDetailDates.includes(group.date);
-
-    const summaryRecord: HistoryRecord = {
-
-      ...lastRecord,
-
-      id: `history-group-${group.date}`,
-
-      beforeAmount,
-
-      afterAmount,
-
-      source: group.records.some((record) => record.source === 'flash-note')
-
-        ? 'flash-note'
-
-        : group.records.some((record) => record.source === 'rollup')
-
-          ? 'rollup'
-
-          : lastRecord.source
-
-    };
-
-
-
-    return (
-
-      <div key={group.date}>
-
-        {renderHistoryCard(summaryRecord, {
-
-          interactive: true,
-
-          expanded,
-
-          timeLabel: group.date,
-
-          extraInfo: `${group.records.length}条记录`,
-
-          onClick: () => toggleDetailDate(group.date),
-
-          children: expanded
-
-            ? recordsByTimeDesc.map((record) =>
-                renderHistoryCard(record, {
-                  nested: true
-                })
-              )
-
-            : undefined
-
-        })}
-
-      </div>
-
-    );
-
-  };
-
-
-
-  const renderBackupRecordList = () => (
-
-    <section
-
-      style={{
-
-        display: 'grid',
-
-        gap: 12,
-
-        border: '1px solid var(--border-soft)',
-
-        borderRadius: 12,
-
-        padding: 14,
-
-        background: 'var(--surface-strong)'
-
-      }}
-
-    >
-
-      <strong>快照记录列表</strong>
-
-      {backupRecords.length === 0 ? (
-
-        <p style={{ margin: 0, color: 'var(--text-muted)' }}>暂无快照记录</p>
-
-      ) : (
-
-        <div style={{ display: 'grid', gap: 10 }}>
-
-          {backupRecords.map((record) => (
-
-              <article
-
-                key={record.id}
-
-                id={`backup-record-${record.id}`}
-
-                style={{
-
-                  display: 'grid',
-
-                  gap: 12,
-
-                  border: `1px solid ${
-                    record.method === 'auto' ? 'rgba(37, 99, 235, 0.16)' : 'var(--border-soft)'
-                  }`,
-
-                  borderRadius: 10,
-
-                  padding: 14,
-
-                  background:
-                    record.method === 'auto' ? 'rgba(37, 99, 235, 0.08)' : 'var(--surface-muted)',
-
-                  boxShadow: 'none'
-
-                }}
-
-              >
-
-                <div
-
-                  style={{
-
-                    display: 'flex',
-
-                    justifyContent: 'space-between',
-
-                    alignItems: 'flex-start',
-
-                    flexWrap: 'wrap',
-
-                    gap: 12
-
-                  }}
-
-                >
-
-                  <div style={{ minWidth: 0 }}>
-
-                    <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-
-                      精确时间
-
-                    </p>
-
-                    <strong
-
-                      style={{
-
-                        display: 'block',
-
-                        marginTop: 3,
-
-                        color: 'var(--text-main)',
-
-                        overflowWrap: 'anywhere'
-
-                      }}
-
-                    >
-
-                      {formatPreciseBackupTime(record.backedUpAt)}
-
-                    </strong>
-
-                  </div>
-
-                  <span
-
-                    style={{
-
-                      flex: '0 0 auto',
-
-                      borderRadius: 999,
-
-                      padding: '4px 8px',
-
-                      background:
-
-                        record.method === 'auto'
-
-                          ? 'rgba(37, 99, 235, 0.12)'
-
-                          : 'var(--surface-muted)',
-
-                      color: record.method === 'auto' ? '#2563eb' : 'var(--text-secondary)',
-
-                      fontSize: '0.78rem',
-
-                      fontWeight: 700
-
-                    }}
-
-                  >
-
-                    {getBackupMethodLabel(record.method)}
-
-                  </span>
-
-                </div>
-
-                <div
-
-                  style={{
-
-                    display: 'grid',
-
-                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-
-                    gap: 10
-
-                  }}
-
-                >
-
-                  {[
-
-                    { label: '快照总条数', value: `${record.historyCount} 条` },
-
-                    { label: '增量记录', value: `${record.incrementCount} 条` }
-
-                  ].map((item) => (
-
-                    <div
-
-                      key={item.label}
-
-                      style={{
-
-                        minWidth: 0,
-
-                        borderRadius: 8,
-
-                        padding: '9px 10px',
-
-                        background: 'var(--surface-bg)'
-
-                      }}
-
-                    >
-
-                      <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-
-                        {item.label}
-
-                      </p>
-
-                      <strong
-
-                        style={{
-
-                          display: 'block',
-
-                          marginTop: 3,
-
-                          color: 'var(--text-main)',
-
-                          fontSize: '0.95rem'
-
-                        }}
-
-                      >
-
-                        {item.value}
-
-                      </strong>
-
-                    </div>
-
-                  ))}
-
-                </div>
-
-              </article>
-          ))}
-
-        </div>
-
-      )}
-
-    </section>
-
-  );
-
-
-
   const renderAccountOperationDatePicker = ({
 
     value,
@@ -27302,137 +20674,53 @@ function App() {
 
 
 
-  const renderCalendarMonth = (monthDate: Date, side: 'left' | 'right') => (
+  const getHistoryCalendarDateState = (date: Date, monthDate: Date) => {
 
-    <div className="history-calendar-month" key={`${monthDate.getFullYear()}-${monthDate.getMonth()}`}>
+    const dateValue = toDateInputValue(date);
 
-      <strong className="history-calendar-month__title">
 
-        {monthDate.getFullYear()}年{monthDate.getMonth() + 1}月
 
-      </strong>
+    return {
 
-      <div className="history-calendar-weekdays" aria-hidden="true">
+      isCurrentMonth: date.getMonth() === monthDate.getMonth(),
 
-        {['一', '二', '三', '四', '五', '六', '日'].map((dayName) => (
+      isBoundary: dateValue === historyStartDate || dateValue === historyEndDate,
 
-          <span key={dayName}>{dayName}</span>
+      isInsideRange:
 
-        ))}
+        Boolean(historyStartDate && historyEndDate) &&
 
-      </div>
+        dateValue > historyStartDate &&
 
-      <div className="history-calendar-grid">
+        dateValue < historyEndDate,
 
-        {getCalendarDays(monthDate).map((date) => {
+      isFuture: isFutureDateKey(dateValue),
 
-          const dateValue = toDateInputValue(date);
+      recordCount: historyDateCounts[dateValue] ?? 0
 
-          const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+    };
 
-          const nextMonthStart = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1);
+  };
 
-          const shouldShowDate =
 
-            side === 'left' ? date < nextMonthStart : date >= monthStart;
 
-          const isCurrentMonth = date.getMonth() === monthDate.getMonth();
+  const historyRecordListProps = {
 
-          const isBoundary = dateValue === historyStartDate || dateValue === historyEndDate;
+    compareRecords: compareHistoryByTimeDesc,
 
-          const isInsideRange =
+    getTypeLabel: getHistoryTypeLabel,
 
-            Boolean(historyStartDate && historyEndDate) &&
+    getTone: getHistoryTone,
 
-            dateValue > historyStartDate &&
+    getAmountChange,
 
-            dateValue < historyEndDate;
+    formatAmount: formatHistoryAmount,
 
-          const isFuture = isFutureDateKey(dateValue);
+    formatShortTime,
 
-          const recordCount = historyDateCounts[dateValue] ?? 0;
+    renderFlashSourceIcon: renderFlashLightningIcon
 
-          const dotCount = Math.min(3, Math.ceil(recordCount / 10));
-
-
-
-          if (!shouldShowDate) {
-
-            return (
-
-              <span
-
-                key={`${monthDate.toISOString()}-${dateValue}`}
-
-                className="history-calendar-day-placeholder"
-
-                aria-hidden="true"
-
-              />
-
-            );
-
-          }
-
-
-
-          return (
-
-            <button
-
-              key={`${monthDate.toISOString()}-${dateValue}`}
-
-              type="button"
-
-              disabled={isFuture}
-
-              className={[
-
-                'history-calendar-day',
-
-                isCurrentMonth ? '' : 'is-outside-month',
-
-                isBoundary ? 'is-boundary' : '',
-
-                isInsideRange ? 'is-inside-range' : '',
-
-                isFuture ? 'is-future' : '',
-
-                recordCount > 0 ? 'has-records' : ''
-
-              ]
-
-                .filter(Boolean)
-
-                .join(' ')}
-
-              onClick={() => selectCalendarDate(date)}
-
-            >
-
-              <span className="history-calendar-day__number">{date.getDate()}</span>
-
-              <span className="history-calendar-day__dots" aria-hidden="true">
-
-                {Array.from({ length: dotCount }, (_, index) => (
-
-                  <span key={index} />
-
-                ))}
-
-              </span>
-
-            </button>
-
-          );
-
-        })}
-
-      </div>
-
-    </div>
-
-  );
+  };
 
 
 
@@ -27586,12 +20874,6 @@ function App() {
 
 
 
-  const requestReturnFromBackupSettings = () =>
-
-    requestDiscardableBack(hasSnapshotUnsavedChanges, returnFromBackupSettings);
-
-
-
   const requestReturnFromSearchNavigation = () =>
 
     requestDiscardableBack(hasSnapshotUnsavedChanges, returnFromSearchNavigation);
@@ -27599,16 +20881,6 @@ function App() {
 
 
   const handleHistoryPanelBack = () => {
-
-    if (historyPanelView === 'backup-settings') {
-
-      requestReturnFromBackupSettings();
-
-      return;
-
-    }
-
-
 
     if (historyPanelView === 'backup') {
 
@@ -27647,14 +20919,6 @@ function App() {
     if (searchState.isOpen) {
 
       return closeSearch;
-
-    }
-
-
-
-    if (backupReminderPrompt) {
-
-      return () => setBackupReminderPrompt(null);
 
     }
 
@@ -28535,12 +21799,6 @@ function App() {
   const appShellBackProps = useOverlayBack<HTMLElement>(handleAppShellBack);
   const windowShellBackProps = useOverlayBack<HTMLDivElement>(handleAppShellBack);
 
-  const accountActionMenuBackdropProps = useOverlayBack<HTMLButtonElement>(() =>
-
-    setIsAccountActionMenuOpen(false)
-
-  );
-
 
 
   const renderRightPanelSection = (
@@ -28557,7 +21815,34 @@ function App() {
 
   ) => (
 
-    <section className={`right-panel-section${className ? ` ${className}` : ''}`}>
+    <RightPanelSection
+      title={title}
+      eyebrow={eyebrow}
+      className={className}
+      titleAccessory={titleAccessory}
+    >
+      {children}
+    </RightPanelSection>
+
+  );
+
+
+
+  const renderRightPanelPage = (
+
+    title: string | null,
+
+    children: ReactNode,
+
+    eyebrow: string | null = null,
+
+    className = '',
+
+    titleAccessory: ReactNode = null
+
+  ) => (
+
+    <section className={`right-panel-page${className ? ` ${className}` : ''}`}>
 
       {eyebrow ? <p className="eyebrow right-panel-eyebrow">{eyebrow}</p> : null}
 
@@ -28581,54 +21866,8 @@ function App() {
 
 
 
-  const renderRightPanelActionButton = ({
-
-    label,
-
-    description,
-
-    onClick,
-
-    tone = 'default',
-
-    disabled = false,
-
-    className = ''
-
-  }: {
-
-    label: ReactNode;
-
-    description?: ReactNode;
-
-    onClick?: () => void;
-
-    tone?: 'default' | 'primary' | 'danger';
-
-    disabled?: boolean;
-
-    className?: string;
-
-  }) => (
-
-    <button
-
-      type="button"
-
-      className={`right-panel-action right-panel-action--${tone}${className ? ` ${className}` : ''}`}
-
-      disabled={disabled}
-
-      onClick={disabled ? undefined : onClick}
-
-    >
-
-      <strong>{label}</strong>
-
-      {description ? <span>{description}</span> : null}
-
-    </button>
-
+  const renderRightPanelActionButton = (props: RightPanelActionButtonProps) => (
+    <RightPanelActionButton {...props} />
   );
 
 
@@ -28639,7 +21878,13 @@ function App() {
 
       {[
 
-        { label: '上次快照', value: formatBackupTime(lastBackupAt) },
+        {
+          label: '上次快照',
+          value:
+            backupRecords.length === 0
+              ? '从未备份'
+              : formatRelativeBackupTime(backupRecords[0].backedUpAt)
+        },
 
         { label: '账户数量', value: `${accountCount}` },
 
@@ -28913,7 +22158,7 @@ function App() {
 
                 onClick={() =>
 
-                  updateAutoBackupCycleUnit(option.value as BackupReminderUnit)
+                  updateAutoBackupCycleUnit(option.value as BackupCycleUnit)
 
                 }
 
@@ -28997,427 +22242,25 @@ function App() {
 
 
 
-    return isExampleMode ? renderExampleModeDisabledPanel(controls) : controls;
+    return controls;
 
   };
 
 
 
-  const renderReminderCycleControls = () => (
-
-    <div className="right-panel-form-grid">
-
-      <label className="right-panel-label">
-
-        提醒周期
-
-        <input
-
-          type="number"
-
-          min={1}
-
-          step={1}
-
-          inputMode="numeric"
-
-          value={backupReminderValueInput}
-
-          onChange={(event) => updateBackupReminderValue(event.target.value)}
-
-          onBlur={() => {
-
-            if (!backupReminderValueInput) {
-
-              setBackupReminderValueInput(String(backupReminderCycle.value));
-
-            }
-
-          }}
-
-          onWheel={(event) => {
-
-            event.preventDefault();
-
-            event.stopPropagation();
-
-            if (event.deltaY === 0) {
-
-              return;
-
-            }
-
-
-
-            adjustBackupReminderValue(event.deltaY > 0 ? -1 : 1);
-
-          }}
-
-        />
-
-      </label>
-
-      <div className="right-panel-form-grid">
-
-        <span className="right-panel-label-text">单位</span>
-
-        <div
-
-          className="segmented-control right-panel-segmented"
-
-          style={getSegmentedControlStyle(3)}
-
-        >
-
-          {[
-
-            { value: 'day', label: '日' },
-
-            { value: 'week', label: '周' },
-
-            { value: 'month', label: '月' }
-
-          ].map((option) => (
-
-            <button
-
-              key={option.value}
-
-              type="button"
-
-              onClick={() =>
-
-                updateBackupReminderCycle({
-
-                  ...backupReminderCycle,
-
-                  unit: option.value as BackupReminderUnit
-
-                })
-
-              }
-
-              className={backupReminderCycle.unit === option.value ? 'is-selected' : undefined}
-
-            >
-
-              {option.label}
-
-            </button>
-
-          ))}
-
-        </div>
-
-      </div>
-
-      <p className="right-panel-note">
-
-        当前间隔 {backupReminderStatus.intervalDays} 天，提醒周期{' '}
-
-        {backupReminderStatus.reminderCycleDays} 天。
-
-      </p>
-
-    </div>
-
+  const renderSearchPreview = () => (
+    <SearchPreviewPanel
+      hasQuery={searchOutput.hasQuery}
+      focusedResult={focusedSearchResult}
+      sortedHistory={sortedHistory}
+      onOpenResult={handleSearchResultOpen}
+      onCloseSearch={closeSearch}
+      formatMoney={formatMoney}
+      formatShortTime={formatShortTime}
+      getAmountChange={getAmountChange}
+      getAccountNatureLabel={getAccountNatureLabel}
+    />
   );
-
-
-
-  const getSearchPreviewTypeLabel = (result: GlobalSearchResult) => {
-    if (result.category === 'account') {
-      return '账户';
-    }
-
-    if (result.category === 'history') {
-      return '历史记录';
-    }
-
-    if (result.category === 'snapshot') {
-      return '快照';
-    }
-
-    return '设置';
-  };
-
-
-
-  const getSearchPreviewNote = (result: GlobalSearchResult) => {
-    if (result.category === 'history') {
-      return result.record.note ?? '';
-    }
-
-    if (result.category === 'settings') {
-      return result.item.description;
-    }
-
-    if (result.category === 'snapshot') {
-      return `历史记录 ${result.record.historyCount} · 增量 ${result.record.incrementCount}`;
-    }
-
-    if (result.account.archived) {
-      return '已归档账户';
-    }
-
-    return '';
-  };
-
-  const getSearchAccountHistoryRecords = (result: Extract<GlobalSearchResult, { category: 'account' }>) =>
-    sortedHistory.filter(
-      (record) =>
-        record.accountId === result.account.id ||
-        (record.groupName === result.group.name && record.accountName === result.account.name)
-    );
-
-  const getSearchAccountLastUpdateLabel = (records: HistoryRecord[]) => {
-    const latestRecord = records[0];
-
-    if (!latestRecord) {
-      return '暂无更新';
-    }
-
-    const today = new Date();
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-    const targetDate = toDateInputValue(new Date(latestRecord.time));
-    const targetStart = getDateTimestamp(targetDate);
-    const dayDistance =
-      targetStart === 0 ? 0 : Math.max(0, Math.floor((todayStart - targetStart) / DAY_MS));
-
-    return dayDistance === 0 ? '今天' : `${dayDistance}天前`;
-  };
-
-  const getHistoryPreviewSourceLabel = (record: HistoryRecord) => {
-    if (record.source === 'flash-note') {
-      return '闪记';
-    }
-
-    if (record.source === 'rollup' || record.relatedTime) {
-      return '汇总导入';
-    }
-
-    return '手动';
-  };
-
-  const getHistoryPreviewTypeModeLabel = (
-    result: Extract<GlobalSearchResult, { category: 'history' }>
-  ) => {
-    const matchField = result.matchedAmount?.field ?? result.primaryMatch.field;
-    const mode =
-      matchField === 'balanceBefore' || matchField === 'balanceAfter' ? 'balance' : 'change';
-
-    return `${result.record.type}-${mode}`;
-  };
-
-  const renderSearchPreviewLead = (result: GlobalSearchResult) => {
-    if (result.category === 'snapshot') {
-      return null;
-    }
-
-    if (result.category === 'account') {
-      return (
-        <p>
-          {result.group.name} · {getAccountNatureLabel(result.group.nature)} ·{' '}
-          {result.group.includeInStats ? '参与统计' : '不参与统计'}
-        </p>
-      );
-    }
-
-    if (result.category === 'settings') {
-      return <p>{result.subtitle}</p>;
-    }
-
-    return null;
-  };
-
-  const renderSearchPreviewValue = (result: GlobalSearchResult) => {
-    if (result.category === 'account' || result.category === 'history' || result.category === 'snapshot') {
-      return null;
-    }
-
-    return <em>{result.value}</em>;
-  };
-
-  const renderSearchPreviewDetails = (result: GlobalSearchResult) => {
-    if (result.category === 'account') {
-      const accountHistoryRecords = getSearchAccountHistoryRecords(result);
-
-      return (
-        <div className="search-preview-details">
-          <div>
-            <span>当前余额</span>
-            <strong>{result.value}</strong>
-          </div>
-          <div>
-            <span>上次更新</span>
-            <strong>{getSearchAccountLastUpdateLabel(accountHistoryRecords)}</strong>
-          </div>
-          <div>
-            <span>历史记录</span>
-            <strong>{accountHistoryRecords.length}条历史记录</strong>
-          </div>
-        </div>
-      );
-    }
-
-    if (result.category === 'snapshot') {
-      return (
-        <div className="search-preview-details">
-          <div>
-            <span>快照类型</span>
-            <strong>{result.subtitle}</strong>
-          </div>
-          <div>
-            <span>历史记录</span>
-            <strong>{result.record.historyCount}</strong>
-          </div>
-          <div>
-            <span>增量记录</span>
-            <strong>{result.record.incrementCount}</strong>
-          </div>
-        </div>
-      );
-    }
-
-    if (result.category !== 'history') {
-      return (
-        <small className="right-panel-preview__note">
-          {getSearchPreviewNote(result)}
-        </small>
-      );
-    }
-
-    const record = result.record;
-    const change = getAmountChange(record);
-    const sourceLabel = getHistoryPreviewSourceLabel(record);
-
-    return (
-      <div className="search-preview-details">
-        <div>
-          <span>记录类型</span>
-          <strong>{getHistoryPreviewTypeModeLabel(result)}</strong>
-        </div>
-        <div>
-          <span>时间</span>
-          <strong>{formatShortTime(record.time)}</strong>
-        </div>
-        <div>
-          <span>余额变化</span>
-          <strong>
-            {formatMoney(record.beforeAmount)} → {formatMoney(record.afterAmount)}
-          </strong>
-        </div>
-        <div>
-          <span>净变动</span>
-          <strong>{change.label}</strong>
-        </div>
-        <div>
-          <span>来源</span>
-          <strong>{sourceLabel}</strong>
-        </div>
-        <div className="search-preview-details__note">
-          <span>备注</span>
-          <p>{record.note ?? ''}</p>
-        </div>
-      </div>
-    );
-  };
-
-
-
-  const renderSearchPreview = () =>
-
-    renderRightPanelSection(
-
-      '搜索结果预览',
-
-      !searchOutput.hasQuery ? (
-
-        <>
-
-          <article className="right-panel-preview right-panel-preview--search-empty">
-
-            <span className="global-search-preview-empty">键入关键词开始搜索</span>
-
-          </article>
-
-          {renderRightPanelActionButton({
-
-            label: '退出搜索',
-
-            onClick: closeSearch
-
-          })}
-
-        </>
-
-      ) : focusedSearchResult ? (
-
-        <>
-
-          <article className="right-panel-preview right-panel-preview--search-result">
-
-            <span>
-
-              {getSearchPreviewTypeLabel(focusedSearchResult)}
-
-            </span>
-
-            <strong>{focusedSearchResult.title}</strong>
-
-            {renderSearchPreviewLead(focusedSearchResult)}
-
-            {renderSearchPreviewValue(focusedSearchResult)}
-
-            {renderSearchPreviewDetails(focusedSearchResult)}
-
-          </article>
-
-          {renderRightPanelActionButton({
-
-            label: '打开 / 定位',
-
-            tone: 'primary',
-
-            onClick: () => handleSearchResultOpen(focusedSearchResult)
-
-          })}
-
-          {renderRightPanelActionButton({
-
-            label: '退出搜索',
-
-            onClick: closeSearch
-
-          })}
-
-        </>
-
-      ) : (
-
-        <>
-
-          <article className="right-panel-preview right-panel-preview--search-empty">
-
-            <span className="global-search-preview-empty">暂无预览项</span>
-
-          </article>
-
-          {renderRightPanelActionButton({
-
-            label: '退出搜索',
-
-            onClick: closeSearch
-
-          })}
-
-        </>
-
-      ),
-
-      null
-
-    );
 
 
 
@@ -29431,64 +22274,19 @@ function App() {
 
 
 
-    return renderRightPanelSection(
-
-      '账户变更',
-
-      <>
-
-        {renderRightPanelActionButton({
-
-          label: '修改余额',
-
-          tone: 'primary',
-
-          onClick: () => openEditor(selectedAccount.groupName, selectedAccountEntry, 'set')
-
-        })}
-
-        {renderRightPanelActionButton({
-
-          label: '编辑账户',
-
-          onClick: () => openAccountInfoEditor(selectedAccount.groupName, selectedAccountEntry)
-
-        })}
-
-        {selectedAccountIsArchived
-
-          ? renderRightPanelActionButton({
-
-              label: '恢复账户',
-
-              onClick: () => restoreAccount(selectedAccount.groupName, selectedAccountEntry)
-
-            })
-
-          : null}
-
-        {renderRightPanelActionButton({
-
-          label: '危险操作',
-
-          tone: 'danger',
-
-          onClick: openDangerActions
-
-        })}
-
-        {renderRightPanelActionButton({
-
-          label: '返回上一层',
-
-          onClick: () => currentLayerBack?.()
-
-        })}
-
-      </>,
-
-      null
-
+    return (
+      <AccountActionsPanel
+        isArchived={selectedAccountIsArchived}
+        onEditBalance={() => openEditor(selectedAccount.groupName, selectedAccountEntry, 'set')}
+        onEditAccount={() => openAccountInfoEditor(selectedAccount.groupName, selectedAccountEntry)}
+        onRestoreAccount={
+          selectedAccountIsArchived
+            ? () => restoreAccount(selectedAccount.groupName, selectedAccountEntry)
+            : undefined
+        }
+        onOpenDangerActions={openDangerActions}
+        onBack={() => currentLayerBack?.()}
+      />
     );
 
   };
@@ -29507,126 +22305,18 @@ function App() {
 
     const isLockedByGlobal = assetChartSettings.globalChartControlMode === 'locked';
 
-    const lockedNote = isLockedByGlobal ? '由全局图表设置锁定' : undefined;
-
-
-
-    return renderRightPanelSection(
-
-      '图表参数设置',
-
-      <>
-
-        {isLockedByGlobal ? (
-
-          <p className="right-panel-note chart-settings-lock-note">由全局图表设置锁定</p>
-
-        ) : null}
-
-        {renderChartSegmentedControl(
-
-          '自适应纵轴',
-
-          [
-
-            { value: 'on', label: '开' },
-
-            { value: 'off', label: '关' }
-
-          ],
-
-          selectedAccountChartSettings.adaptiveYAxis ? 'on' : 'off',
-
-          (value) =>
-
-            updateLocalAccountDetailChartSettings(selectedAccountEntry.id, (currentSettings) => ({
-
-              ...currentSettings,
-
-              adaptiveYAxis: value === 'on'
-
-            })),
-
-          isLockedByGlobal,
-
-          lockedNote
-
-        )}
-
-        {renderChartSegmentedControl(
-
-          '横轴范围显示',
-
-          [
-
-            { value: '1m', label: '近 1 月' },
-
-            { value: '3m', label: '近 3 月' },
-
-            { value: '6m', label: '近 6 月' },
-
-            { value: '1y', label: '近 1 年' }
-
-          ],
-
-          selectedAccountChartSettings.xAxisRange,
-
-          (value) =>
-
-            updateLocalAccountDetailChartSettings(selectedAccountEntry.id, (currentSettings) => ({
-
-              ...currentSettings,
-
-              xAxisRange: value as TrendXAxisRange
-
-            })),
-
-          isLockedByGlobal
-
-        )}
-
-        {renderChartSegmentedControl(
-
-          '点值显示',
-
-          [
-
-            { value: 'adaptive', label: '自适应' },
-
-            { value: 'minmax', label: '最高最低' },
-
-            { value: 'none', label: '不显示' }
-
-          ],
-
-          selectedAccountChartSettings.pointValueMode,
-
-          (value) =>
-
-            updateLocalAccountDetailChartSettings(selectedAccountEntry.id, (currentSettings) => ({
-
-              ...currentSettings,
-
-              pointValueMode: value as TrendPointValueMode
-
-            })),
-
-          isLockedByGlobal
-
-        )}
-
-        {renderRightPanelActionButton({
-
-          label: '返回账户明细',
-
-          onClick: closeAccountChartsPage
-
-        })}
-
-      </>,
-
-      null
-
+    return (
+      <AccountChartSettingsPanel
+        isLockedByGlobal={isLockedByGlobal}
+        settings={selectedAccountChartSettings}
+        onUpdateSettings={(updater) =>
+          updateLocalAccountDetailChartSettings(selectedAccountEntry.id, (currentSettings) =>
+            updater(currentSettings) as AccountDetailChartSettings
+          )
+        }
+        onBackToAccountDetail={closeAccountChartsPage}
+        renderSegmentedControl={renderChartSegmentedControl}
+      />
     );
 
   };
@@ -29643,48 +22333,13 @@ function App() {
 
 
 
-    return renderRightPanelSection(
-
-      '危险操作',
-
-      <>
-
-        {!selectedAccountIsArchived
-
-          ? renderRightPanelActionButton({
-
-              label: '归档账户',
-
-              tone: 'danger',
-
-              onClick: () => archiveAccount(selectedAccount.groupName, selectedAccountEntry)
-
-            })
-
-          : null}
-
-        {renderRightPanelActionButton({
-
-          label: '删除账户',
-
-          tone: 'danger',
-
-          onClick: () => deleteAccount(selectedAccount.groupName, selectedAccountEntry)
-
-        })}
-
-        {renderRightPanelActionButton({
-
-          label: '返回账户明细',
-
-          onClick: closeDangerActions
-
-        })}
-
-      </>,
-
-      null
-
+    return (
+      <AccountDangerActionsPanel
+        isArchived={selectedAccountIsArchived}
+        onArchiveAccount={() => archiveAccount(selectedAccount.groupName, selectedAccountEntry)}
+        onDeleteAccount={() => deleteAccount(selectedAccount.groupName, selectedAccountEntry)}
+        onBackToAccountDetail={closeDangerActions}
+      />
     );
 
   };
@@ -29693,7 +22348,7 @@ function App() {
 
   const renderHistoryActions = () =>
 
-    renderRightPanelSection(
+    renderRightPanelPage(
 
       '历史',
 
@@ -29727,7 +22382,7 @@ function App() {
 
   const renderSnapshotActions = () => (
 
-    <section className="right-panel-section right-panel-section--snapshot">
+    <section className="right-panel-page right-panel-page--snapshot">
 
       <div className="right-panel-stack right-panel-stack--snapshot">
 
@@ -29741,8 +22396,6 @@ function App() {
 
             label: '导出快照',
 
-            description: '选择目录并生成 JSON 快照文件',
-
             tone: 'primary',
 
             onClick: exportBackup
@@ -29753,8 +22406,6 @@ function App() {
 
             label: '导入快照',
 
-            description: '选择 JSON 文件并按现有合并逻辑导入',
-
             onClick: () => backupFileInputRef.current?.click()
 
           })}
@@ -29763,17 +22414,24 @@ function App() {
 
 
 
-        <section className="right-panel-subsection">
+        <section
+          className={`right-panel-subsection${
+            isExampleMode ? ' example-mode-disabled-panel right-panel-subsection--auto-snapshot-disabled' : ''
+          }`}
+          aria-disabled={isExampleMode ? 'true' : undefined}
+        >
 
           <h2>自动快照</h2>
 
           {renderAutoBackupControls()}
 
+          {isExampleMode ? (
+            <div className="example-mode-disabled-panel__banner">示例模式下不可用</div>
+          ) : null}
+
         </section>
 
 
-
-        <div className="right-panel-spacer" />
 
         {renderRightPanelActionButton({
 
@@ -29791,41 +22449,9 @@ function App() {
 
   );
 
-
-
-  const renderBackupSettingsActions = () =>
-
-    renderRightPanelSection(
-
-      '快照',
-
-      <>
-
-        {renderReminderCycleControls()}
-
-        <div className="right-panel-divider" />
-
-        {renderAutoBackupControls()}
-
-        {renderRightPanelActionButton({
-
-          label: '返回历史记录',
-
-          onClick: () => currentLayerBack?.()
-
-        })}
-
-      </>,
-
-      '快照'
-
-    );
-
-
-
   const renderArchivedActions = () =>
 
-    renderRightPanelSection(
+    renderRightPanelPage(
 
       '已归档账户',
 
@@ -29931,255 +22557,31 @@ function App() {
 
     const isLockedByGlobal = assetChartSettings.globalChartControlMode === 'locked';
 
-    const lockedNote = isLockedByGlobal ? '由全局图表设置锁定' : undefined;
 
 
+    return (
 
-    return renderRightPanelSection(
+      <ChartSettingsPanel
 
-      '图表设置',
+        isLockedByGlobal={isLockedByGlobal}
 
-      <>
+        settings={assetChartSettings}
 
-        {isLockedByGlobal ? (
+        onUpdateSettings={(updater) =>
 
-          <p className="right-panel-note chart-settings-lock-note">由全局图表设置锁定</p>
+          updateAssetChartSettings((currentSettings) =>
 
-        ) : null}
+            updater(currentSettings as TotalAssetChartSettings) as AssetChartSettings
 
-        {renderChartSegmentedControl(
+          )
 
-          '资产结构显示',
+        }
 
-          [
+        onBackToOverview={closeTotalChartsPage}
 
-            { value: 'positive', label: '正资产' },
+        renderSegmentedControl={renderChartSegmentedControl}
 
-            { value: 'negative', label: '负资产' },
-
-            { value: 'both', label: '正负资产' }
-
-          ],
-
-          assetChartSettings.structure.assetDisplay,
-
-          (value) =>
-
-            updateAssetChartSettings((currentSettings) => ({
-
-              ...currentSettings,
-
-              structure: {
-
-                ...currentSettings.structure,
-
-                assetDisplay: value as StructureAssetDisplay
-
-              }
-
-            })),
-
-          isLockedByGlobal,
-
-          lockedNote
-
-        )}
-
-        {renderChartSegmentedControl(
-
-          '多重叠加数字',
-
-          [
-
-            { value: 'yes', label: '是' },
-
-            { value: 'no', label: '否' }
-
-          ],
-
-          assetChartSettings.structure.showDebtMultiple ? 'yes' : 'no',
-
-          (value) =>
-
-            updateAssetChartSettings((currentSettings) => ({
-
-              ...currentSettings,
-
-              structure: {
-
-                ...currentSettings.structure,
-
-                showDebtMultiple: value === 'yes'
-
-              }
-
-            })),
-
-          isLockedByGlobal
-
-        )}
-
-
-
-        <div className="right-panel-divider" />
-
-
-
-        {renderChartSegmentedControl(
-
-          '资产趋势显示',
-
-          [
-
-            { value: 'net', label: '净资产' },
-
-            { value: 'positive', label: '正资产' },
-
-            { value: 'positive-negative', label: '正负资产' }
-
-          ],
-
-          assetChartSettings.trend.assetDisplay,
-
-          (value) =>
-
-            updateAssetChartSettings((currentSettings) => ({
-
-              ...currentSettings,
-
-              trend: {
-
-                ...currentSettings.trend,
-
-                assetDisplay: value as TrendAssetDisplay
-
-              }
-
-            })),
-
-          isLockedByGlobal
-
-        )}
-
-        {renderChartSegmentedControl(
-
-          '自适应纵轴',
-
-          [
-
-            { value: 'on', label: '开' },
-
-            { value: 'off', label: '关' }
-
-          ],
-
-          assetChartSettings.trend.adaptiveYAxis ? 'on' : 'off',
-
-          (value) =>
-
-            updateAssetChartSettings((currentSettings) => ({
-
-              ...currentSettings,
-
-              trend: {
-
-                ...currentSettings.trend,
-
-                adaptiveYAxis: value === 'on'
-
-              }
-
-            })),
-
-          isLockedByGlobal
-
-        )}
-
-        {renderChartSegmentedControl(
-
-          '横轴范围显示',
-
-          [
-
-            { value: '1m', label: '近 1 月' },
-
-            { value: '3m', label: '近 3 月' },
-
-            { value: '6m', label: '近 6 月' },
-
-            { value: '1y', label: '近 1 年' }
-
-          ],
-
-          assetChartSettings.trend.xAxisRange,
-
-          (value) =>
-
-            updateAssetChartSettings((currentSettings) => ({
-
-              ...currentSettings,
-
-              trend: {
-
-                ...currentSettings.trend,
-
-                xAxisRange: value as TrendXAxisRange
-
-              }
-
-            })),
-
-          isLockedByGlobal
-
-        )}
-
-        {renderChartSegmentedControl(
-
-          '点值显示',
-
-          [
-
-            { value: 'adaptive', label: '自适应' },
-
-            { value: 'minmax', label: '最高最低' },
-
-            { value: 'none', label: '不显示' }
-
-          ],
-
-          assetChartSettings.trend.pointValueMode,
-
-          (value) =>
-
-            updateAssetChartSettings((currentSettings) => ({
-
-              ...currentSettings,
-
-              trend: {
-
-                ...currentSettings.trend,
-
-                pointValueMode: value as TrendPointValueMode
-
-              }
-
-            })),
-
-          isLockedByGlobal
-
-        )}
-
-        {renderRightPanelActionButton({
-
-          label: '返回资产总览',
-
-          onClick: closeTotalChartsPage
-
-        })}
-
-      </>,
-
-      null
+      />
 
     );
 
@@ -30198,10 +22600,6 @@ function App() {
 
 
     const isLockedByGlobal = assetChartSettings.globalChartControlMode === 'locked';
-
-    const lockedNote = isLockedByGlobal ? '由全局图表设置锁定' : undefined;
-
-
 
     return (
 
@@ -30311,21 +22709,17 @@ function App() {
 
 
 
-        <div className="right-panel-divider" />
-
-
-
-        {renderRightPanelSection(
-
-          '图表参数设置',
-
-          <>
-
-            {isLockedByGlobal ? (
-
-              <p className="right-panel-note chart-settings-lock-note">由全局图表设置锁定</p>
-
-            ) : null}
+        <RightPanelSection
+          title="图表参数设置"
+          eyebrow={null}
+          contentClassName={isLockedByGlobal ? 'example-mode-disabled-panel chart-settings-locked-panel' : ''}
+          contentOverlay={
+            isLockedByGlobal ? (
+              <div className="example-mode-disabled-panel__banner">由全局图表设置锁定</div>
+            ) : null
+          }
+          ariaDisabled={isLockedByGlobal}
+        >
 
             {renderChartSegmentedControl(
 
@@ -30361,9 +22755,7 @@ function App() {
 
                 ),
 
-              isLockedByGlobal,
-
-              lockedNote
+              isLockedByGlobal
 
             )}
 
@@ -30403,19 +22795,13 @@ function App() {
 
             )}
 
-            {renderRightPanelActionButton({
+        </RightPanelSection>
 
-              label: '返回资产总览',
-
-              onClick: closeGroupDetailPage
-
-            })}
-
-          </>,
-
-          null
-
-        )}
+        {renderRightPanelActionButton({
+          label: '返回资产总览',
+          className: 'right-panel-page-action',
+          onClick: closeGroupDetailPage
+        })}
 
       </>
 
@@ -30609,34 +22995,6 @@ function App() {
 
 
 
-  const renderGlobalSettingsPlaceholder = (title: string) => (
-
-    <section className="global-settings-empty">
-
-      <h2>{title}</h2>
-
-      <p>暂时留空，稍后再做</p>
-
-    </section>
-
-  );
-
-
-
-  const renderExampleModeDisabledPanel = (children: ReactNode) => (
-
-    <div className="example-mode-disabled-panel" aria-disabled="true">
-
-      <div className="example-mode-disabled-panel__content">{children}</div>
-
-      <div className="example-mode-disabled-panel__banner">示例模式下不可用</div>
-
-    </div>
-
-  );
-
-
-
   const renderSecuritySettingsContentInner = () => (
 
     <>
@@ -30779,13 +23137,7 @@ function App() {
 
 
 
-  const renderSecuritySettingsContent = () =>
-
-    isExampleMode
-
-      ? renderExampleModeDisabledPanel(renderSecuritySettingsContentInner())
-
-      : renderSecuritySettingsContentInner();
+  const renderSecuritySettingsContent = () => renderSecuritySettingsContentInner();
 
 
 
@@ -30797,214 +23149,29 @@ function App() {
 
     }
 
-
-
-    const isEditingExistingPassword = passwordEditorMode === 'edit';
-
-
-
     return (
-
-      <OverlayBackdrop
-
-        onBack={resetPasswordEditor}
-
-        className="layout-layer layout-layer--right"
-
-        style={{
-
-          position: 'fixed',
-
-          inset: 0,
-
-          display: 'grid',
-
-          placeItems: 'center',
-
-          padding: 24,
-
-          background: 'var(--modal-backdrop)'
-
+      <PasswordEditorDialog
+        mode={passwordEditorMode}
+        oldPassword={oldPasswordInput}
+        newPassword={newPasswordInput}
+        confirmPassword={confirmPasswordInput}
+        error={passwordEditorError}
+        isSaving={isSavingPassword}
+        onOldPasswordChange={(value) => {
+          setOldPasswordInput(value);
+          setPasswordEditorError('');
         }}
-
-      >
-
-        <form
-
-          onClick={(event) => event.stopPropagation()}
-
-          onSubmit={saveLoginPassword}
-
-          style={{
-
-            width: 'min(420px, 100%)',
-
-            maxHeight: '84vh',
-
-            overflowY: 'auto',
-
-            borderRadius: 12,
-
-            padding: 24,
-
-            background: 'var(--panel-bg-strong)',
-
-            color: 'var(--text-main)',
-
-            boxShadow: 'var(--shadow-popover)'
-
-          }}
-
-        >
-
-          <p className="eyebrow" style={{ marginBottom: 8 }}>
-
-            全局设置 / 安全
-
-          </p>
-
-          <h2 style={{ margin: '0 0 18px', fontSize: '1.35rem', lineHeight: 1.2 }}>
-
-            {isEditingExistingPassword ? '修改登录密码' : '设置登录密码'}
-
-          </h2>
-
-
-
-          {isEditingExistingPassword ? (
-
-            <label className="right-panel-label" style={{ marginTop: 14 }}>
-
-              旧密码
-
-              <input
-
-                autoFocus
-
-                type="password"
-
-                autoComplete="current-password"
-
-                value={oldPasswordInput}
-
-                onChange={(event) => {
-
-                  setOldPasswordInput(event.target.value);
-
-                  setPasswordEditorError('');
-
-                }}
-
-              />
-
-            </label>
-
-          ) : null}
-
-
-
-          <label className="right-panel-label" style={{ marginTop: 14 }}>
-
-            新密码
-
-            <input
-
-              autoFocus={!isEditingExistingPassword}
-
-              type="password"
-
-              autoComplete="new-password"
-
-              value={newPasswordInput}
-
-              onChange={(event) => {
-
-                setNewPasswordInput(event.target.value);
-
-                setPasswordEditorError('');
-
-              }}
-
-            />
-
-          </label>
-
-
-
-          <label className="right-panel-label" style={{ marginTop: 14 }}>
-
-            确认新密码
-
-            <input
-
-              type="password"
-
-              autoComplete="new-password"
-
-              value={confirmPasswordInput}
-
-              onChange={(event) => {
-
-                setConfirmPasswordInput(event.target.value);
-
-                setPasswordEditorError('');
-
-              }}
-
-            />
-
-          </label>
-
-
-
-          {passwordEditorError ? (
-
-            <p style={{ margin: '12px 0 0', color: '#b91c1c', fontSize: '0.92rem' }}>
-
-              {passwordEditorError}
-
-            </p>
-
-          ) : null}
-
-
-
-          <div className="modal-actions">
-
-            <button
-
-              type="button"
-
-              onClick={resetPasswordEditor}
-
-              className="modal-button modal-button--secondary"
-
-            >
-
-              取消
-
-            </button>
-
-            <button
-
-              type="submit"
-
-              disabled={isSavingPassword}
-
-              className="modal-button modal-button--primary"
-
-            >
-
-              {isSavingPassword ? '保存中' : '保存'}
-
-            </button>
-
-          </div>
-
-        </form>
-
-      </OverlayBackdrop>
-
+        onNewPasswordChange={(value) => {
+          setNewPasswordInput(value);
+          setPasswordEditorError('');
+        }}
+        onConfirmPasswordChange={(value) => {
+          setConfirmPasswordInput(value);
+          setPasswordEditorError('');
+        }}
+        onSubmit={saveLoginPassword}
+        onCancel={resetPasswordEditor}
+      />
     );
 
   };
@@ -31019,274 +23186,31 @@ function App() {
 
     }
 
-
-
-    const isEditingExistingPassword = snapshotPasswordEditorMode === 'edit';
-
-    const renderSnapshotPasswordInput = (
-
-      label: string,
-
-      value: string,
-
-      onChange: (value: string) => void,
-
-      field: 'new' | 'confirm',
-
-      autoFocus = false
-
-    ) => (
-
-      <label className="right-panel-label" style={{ marginTop: 14 }}>
-
-        {label}
-
-        <div
-
-          style={{
-
-            display: 'grid',
-
-            gridTemplateColumns: 'minmax(0, 1fr) auto',
-
-            gap: 8,
-
-            alignItems: 'center'
-
-          }}
-
-        >
-
-          <input
-
-            autoFocus={autoFocus}
-
-            type={visibleSnapshotPasswordField === field ? 'text' : 'password'}
-
-            autoComplete="new-password"
-
-            value={value}
-
-            onChange={(event) => {
-
-              onChange(event.target.value);
-
-              setSnapshotPasswordEditorError('');
-
-            }}
-
-          />
-
-          <button
-
-            type="button"
-
-            onClick={() => toggleSnapshotPasswordVisibility(field)}
-
-            className="modal-button modal-button--secondary"
-
-            style={{ minHeight: 40 }}
-
-          >
-
-            {visibleSnapshotPasswordField === field ? '隐藏' : '显示'}
-
-          </button>
-
-        </div>
-
-      </label>
-
-    );
-
-
-
     return (
-
-      <OverlayBackdrop
-
-        onBack={resetSnapshotPasswordEditor}
-
-        className="layout-layer layout-layer--right"
-
-        style={{
-
-          position: 'fixed',
-
-          inset: 0,
-
-          display: 'grid',
-
-          placeItems: 'center',
-
-          padding: 24,
-
-          background: 'var(--modal-backdrop)'
-
+      <SnapshotPasswordEditorDialog
+        mode={snapshotPasswordEditorMode}
+        oldPassword={oldSnapshotPasswordInput}
+        newPassword={newSnapshotPasswordInput}
+        confirmPassword={confirmSnapshotPasswordInput}
+        visibleField={visibleSnapshotPasswordField}
+        error={snapshotPasswordEditorError}
+        isSaving={isSavingSnapshotPassword}
+        onOldPasswordChange={(value) => {
+          setOldSnapshotPasswordInput(value);
+          setSnapshotPasswordEditorError('');
         }}
-
-      >
-
-        <form
-
-          onClick={(event) => event.stopPropagation()}
-
-          onSubmit={saveSnapshotPassword}
-
-          style={{
-
-            width: 'min(420px, 100%)',
-
-            maxHeight: '84vh',
-
-            overflowY: 'auto',
-
-            borderRadius: 12,
-
-            padding: 24,
-
-            background: 'var(--panel-bg-strong)',
-
-            color: 'var(--text-main)',
-
-            boxShadow: 'var(--shadow-popover)'
-
-          }}
-
-        >
-
-          <p className="eyebrow" style={{ marginBottom: 8 }}>
-
-            全局设置 / 安全
-
-          </p>
-
-          <h2 style={{ margin: '0 0 12px', fontSize: '1.35rem', lineHeight: 1.2 }}>
-
-            {isEditingExistingPassword ? '修改快照密码' : '设置快照密码'}
-
-          </h2>
-
-          {!isEditingExistingPassword ? (
-
-            <p style={{ margin: '0 0 4px', color: 'var(--text-muted)', fontSize: '0.92rem' }}>
-
-              忘记快照密码，将无法恢复已加密的快照，请妥善保存
-
-            </p>
-
-          ) : null}
-
-
-
-          {isEditingExistingPassword ? (
-
-            <label className="right-panel-label" style={{ marginTop: 14 }}>
-
-              旧快照密码
-
-              <input
-
-                autoFocus
-
-                type="password"
-
-                autoComplete="current-password"
-
-                value={oldSnapshotPasswordInput}
-
-                onChange={(event) => {
-
-                  setOldSnapshotPasswordInput(event.target.value);
-
-                  setSnapshotPasswordEditorError('');
-
-                }}
-
-              />
-
-            </label>
-
-          ) : null}
-
-
-
-          {renderSnapshotPasswordInput(
-
-            '新快照密码',
-
-            newSnapshotPasswordInput,
-
-            setNewSnapshotPasswordInput,
-
-            'new',
-
-            !isEditingExistingPassword
-
-          )}
-
-          {renderSnapshotPasswordInput(
-
-            '确认新快照密码',
-
-            confirmSnapshotPasswordInput,
-
-            setConfirmSnapshotPasswordInput,
-
-            'confirm'
-
-          )}
-
-
-
-          {snapshotPasswordEditorError ? (
-
-            <p style={{ margin: '12px 0 0', color: '#b91c1c', fontSize: '0.92rem' }}>
-
-              {snapshotPasswordEditorError}
-
-            </p>
-
-          ) : null}
-
-
-
-          <div className="modal-actions">
-
-            <button
-
-              type="button"
-
-              onClick={resetSnapshotPasswordEditor}
-
-              className="modal-button modal-button--secondary"
-
-            >
-
-              取消
-
-            </button>
-
-            <button
-
-              type="submit"
-
-              disabled={isSavingSnapshotPassword}
-
-              className="modal-button modal-button--primary"
-
-            >
-
-              {isSavingSnapshotPassword ? '保存中' : '保存'}
-
-            </button>
-
-          </div>
-
-        </form>
-
-      </OverlayBackdrop>
-
+        onNewPasswordChange={(value) => {
+          setNewSnapshotPasswordInput(value);
+          setSnapshotPasswordEditorError('');
+        }}
+        onConfirmPasswordChange={(value) => {
+          setConfirmSnapshotPasswordInput(value);
+          setSnapshotPasswordEditorError('');
+        }}
+        onToggleVisibility={toggleSnapshotPasswordVisibility}
+        onSubmit={saveSnapshotPassword}
+        onCancel={resetSnapshotPasswordEditor}
+      />
     );
 
   };
@@ -31299,179 +23223,23 @@ function App() {
 
       return (
 
-        <>
-
-          {renderGlobalSettingsSegmented(
-
-            '数字正负值显示',
-
-            [
-
-              { value: 'red-positive', label: '红正绿负' },
-
-              { value: 'green-positive', label: '绿正红负' }
-
-            ],
-
-            globalSettings.positiveNegativeColorMode,
-
-            undefined,
-
-            updatePositiveNegativeColorMode,
-
-            null
-
-          )}
-
-          {renderGlobalSettingsFieldGroup(
-
-            '首页资产统计',
-
-            <>
-
-              {renderGlobalSettingsControl(
-
-                '资产统计数值类型',
-
-                [
-
-                  { value: 'netWorth', label: '净值 NW' },
-
-                  { value: 'totalAssets', label: '总资产 TA' }
-
-                ],
-
-                globalSettings.homeAssetStatMetric,
-
-                updateHomeAssetStatMetric
-
-              )}
-
-              {renderGlobalSettingsControl(
-
-                '显示类型',
-
-                [
-
-                  { value: 'full', label: '全称' },
-
-                  { value: 'short', label: '缩写' }
-
-                ],
-
-                globalSettings.homeAssetStatLabelMode,
-
-                updateHomeAssetStatLabelMode
-
-              )}
-
-              {renderGlobalSettingsControl(
-
-                '紧凑数字格式',
-
-                [
-
-                  { value: 'yes', label: '是' },
-
-                  { value: 'no', label: '否' }
-
-                ],
-
-                globalSettings.homeAssetStatCompact ? 'yes' : 'no',
-
-                updateHomeAssetStatCompact
-
-              )}
-
-            </>
-
-          )}
-
-          {renderGlobalSettingsSegmented(
-
-            '页面主题',
-
-            [
-
-              { value: 'light', label: '浅色' },
-
-              { value: 'dark', label: '深色' },
-
-              { value: 'system', label: '跟随系统' }
-
-            ],
-
-            globalSettings.themeMode,
-
-            undefined,
-
-            updateThemeMode,
-
-            null
-
-          )}
-
-          {globalSettings.nyaaThemeUnlocked
-
-            ? renderGlobalSettingsSegmented(
-
-                '主题风格',
-
-                [
-
-                  { value: 'default', label: '默认' },
-
-                  { value: 'nyaa', label: 'nyaa~' }
-
-                ],
-
-                globalSettings.themeStyle,
-
-                undefined,
-
-                updateThemeStyle,
-
-                null
-
-              )
-
-            : null}
-
-          <div id="global-settings-page-position-memory">
-
-            {renderGlobalSettingsSegmented(
-
-              '页面位置记忆',
-
-              [
-
-                { value: 'global', label: '全局记忆' },
-
-                { value: 'covered-reset', label: '覆盖后重置' }
-
-              ],
-
-              globalSettings.pagePositionMemoryMode,
-
-              <>
-
-                全局记忆：切换页面保留滚动位置和堆叠组状态
-
-                <br />
-
-                覆盖后重置：页面被覆盖将重置滚动位置和堆叠组状态
-
-              </>,
-
-              updatePagePositionMemoryMode,
-
-              null
-
-            )}
-
-          </div>
-
-        </>
+        <AppearanceSettingsPanel
+          positiveNegativeColorMode={globalSettings.positiveNegativeColorMode}
+          homeAssetStatMetric={globalSettings.homeAssetStatMetric}
+          homeAssetStatLabelMode={globalSettings.homeAssetStatLabelMode}
+          homeAssetStatCompact={globalSettings.homeAssetStatCompact}
+          themeMode={globalSettings.themeMode}
+          themeStyle={globalSettings.themeStyle}
+          nyaaThemeUnlocked={globalSettings.nyaaThemeUnlocked}
+          pagePositionMemoryMode={globalSettings.pagePositionMemoryMode}
+          onPositiveNegativeColorModeChange={updatePositiveNegativeColorMode}
+          onHomeAssetStatMetricChange={updateHomeAssetStatMetric}
+          onHomeAssetStatLabelModeChange={updateHomeAssetStatLabelMode}
+          onHomeAssetStatCompactChange={updateHomeAssetStatCompact}
+          onThemeModeChange={updateThemeMode}
+          onThemeStyleChange={updateThemeStyle}
+          onPagePositionMemoryModeChange={updatePagePositionMemoryMode}
+        />
 
       );
 
@@ -31919,36 +23687,11 @@ function App() {
 
     if (globalSettingsSection === 'search') {
 
-      return renderGlobalSettingsSegmented(
-
-        '允许推断',
-
-        [
-
-          { value: 'infer', label: '开启' },
-
-          { value: 'strict', label: '关闭' }
-
-        ],
-
-        globalSettings.searchLogicMode,
-
-        <>
-
-          开启：包含拼音、首字母、错字与近似金额等推断匹配
-
-          <br />
-
-          关闭：只显示能在字段中直接对应的命中结果
-
-        </>,
-
-        updateSearchLogicMode,
-
-        null,
-
-        'global-settings-field--search-logic'
-
+      return (
+        <SearchSettingsPanel
+          searchLogicMode={globalSettings.searchLogicMode}
+          onSearchLogicModeChange={updateSearchLogicMode}
+        />
       );
 
     }
@@ -31967,227 +23710,20 @@ function App() {
 
       return (
 
-        <>
-
-          <section className="global-settings-field">
-
-            <div className="global-settings-field__header">
-
-              <h3>用户配置文件</h3>
-
-            </div>
-
-            <input
-
-              ref={userSettingsFileInputRef}
-
-              type="file"
-
-              accept="application/json,.json,.netraflow-settings.json"
-
-              onChange={importUserSettings}
-
-              style={{ display: 'none' }}
-
-            />
-
-            <div className="global-settings-button-row">
-
-              <button type="button" onClick={exportUserSettings}>
-
-                导出用户配置文件
-
-              </button>
-
-              <button type="button" onClick={() => userSettingsFileInputRef.current?.click()}>
-
-                导入用户配置文件
-
-              </button>
-
-            </div>
-
-            <p className="global-settings-note">
-
-              用户配置无法对安全功能区的所有设置进行备份/恢复
-
-            </p>
-
-          </section>
-
-
-
-          <section className="global-settings-field">
-
-            <div className="global-settings-field__header">
-
-              <h3>历史记录备份</h3>
-
-            </div>
-
-            <button
-
-              type="button"
-
-              className="global-settings-reserved-button"
-
-              onClick={openBackupPanelFromGlobalSettings}
-
-            >
-
-              跳转至快照
-
-            </button>
-
-          </section>
-
-
-
-          <section className="global-settings-field">
-
-            <div className="global-settings-field__header">
-
-              <h3>示例数据</h3>
-
-              <span>{isExampleMode ? '正处于示例模式中' : '未处于示例模式中'}</span>
-
-            </div>
-
-            <div className="example-template-grid" role="radiogroup" aria-label="示例数据模板">
-
-              {EXAMPLE_TEMPLATES.map((template) => {
-
-                const isSelected = selectedExampleTemplateId === template.id;
-
-
-
-                return (
-
-                  <button
-
-                    key={template.id}
-
-                    type="button"
-
-                    role="radio"
-
-                    aria-checked={isSelected}
-
-                    className={`example-template-card${isSelected ? ' is-selected' : ''}`}
-
-                    onClick={() => setSelectedExampleTemplateId(template.id)}
-
-                  >
-
-                    <span className="example-template-card__check" aria-hidden="true" />
-
-                    <strong>{template.name}</strong>
-
-                    <p>{template.description}</p>
-
-                    <span>{template.meta}</span>
-
-                  </button>
-
-                );
-
-              })}
-
-            </div>
-
-            <div className="global-settings-button-row">
-
-              <button type="button" onClick={isExampleMode ? switchExampleTemplate : enterExampleMode}>
-
-                {isExampleMode ? '切换示例模板' : '进入示例模式'}
-
-              </button>
-
-              <button type="button" disabled={!isExampleMode} onClick={exitExampleMode}>
-
-                退出示例模式
-
-              </button>
-
-            </div>
-
-          </section>
-
-
-
-          <section
-
-            className={`global-settings-field global-settings-field--danger${
-
-              isExampleMode ? ' example-mode-disabled-panel' : ''
-
-            }`}
-
-            aria-disabled={isExampleMode ? 'true' : undefined}
-
-          >
-
-            <div className="global-settings-field__header">
-
-              <h3>重置功能</h3>
-
-            </div>
-
-            <div className="global-settings-button-row global-settings-button-row--reset">
-
-              <button
-
-                type="button"
-
-                className="global-settings-danger-button"
-
-                onClick={() => openResetConfirmation('settings')}
-
-              >
-
-                清除用户配置
-
-              </button>
-
-              <button
-
-                type="button"
-
-                className="global-settings-danger-button"
-
-                onClick={() => openResetConfirmation('history')}
-
-              >
-
-                清除历史记录
-
-              </button>
-
-              <button
-
-                type="button"
-
-                className="global-settings-danger-button"
-
-                onClick={() => openResetConfirmation('all')}
-
-              >
-
-                清除所有
-
-              </button>
-
-            </div>
-
-            {isExampleMode ? (
-
-              <div className="example-mode-disabled-panel__banner">示例模式下不可用</div>
-
-            ) : null}
-
-          </section>
-
-        </>
+        <BackupSettingsPanel
+          userSettingsFileInputRef={userSettingsFileInputRef}
+          exampleTemplates={EXAMPLE_TEMPLATES}
+          selectedExampleTemplateId={selectedExampleTemplateId}
+          isExampleMode={isExampleMode}
+          onImportUserSettings={importUserSettings}
+          onExportUserSettings={exportUserSettings}
+          onOpenUserSettingsFile={() => userSettingsFileInputRef.current?.click()}
+          onOpenBackupPanel={openBackupPanelFromGlobalSettings}
+          onSelectExampleTemplate={setSelectedExampleTemplateId}
+          onEnterOrSwitchExampleMode={isExampleMode ? switchExampleTemplate : enterExampleMode}
+          onExitExampleMode={exitExampleMode}
+          onOpenResetConfirmation={openResetConfirmation}
+        />
 
       );
 
@@ -32197,149 +23733,18 @@ function App() {
 
     return (
 
-      <section className="about-netraflow">
-
-        <div className="about-netraflow__summary">
-
-          <img src={PRODUCT_ICON_PATH} alt="净流图标" />
-
-          <div>
-
-            <h2>{PRODUCT_NAME_ZH}</h2>
-
-            <p>{PRODUCT_NAME_EN}</p>
-
-            <span
-
-              className="about-netraflow__version-trigger"
-
-              onPointerDown={startAboutVersionLongPress}
-
-              onPointerUp={clearSecretConsoleLongPress}
-
-              onPointerCancel={clearSecretConsoleLongPress}
-
-              onPointerLeave={clearSecretConsoleLongPress}
-
-              onContextMenu={(event) => event.preventDefault()}
-
-            >
-
-              当前版本：{window.appInfo?.version ?? APP_VERSION}
-
-            </span>
-
-          </div>
-
-        </div>
-
-
-
-        <section
-
-          className="about-netraflow__license"
-
-          aria-labelledby="netraflow-license-title"
-
-        >
-
-          <h3 id="netraflow-license-title">开源许可</h3>
-
-          <div className="about-netraflow__font-license">
-
-            <p className="about-netraflow__license-label">字体</p>
-
-            <p>
-
-              NetraFlow 内置使用 Noto Sans CJK SC 与 Noto Sans Symbols 2
-
-              <br />
-
-              Noto Fonts 由 The Noto Project Authors 提供，并依据 SIL Open Font License 1.1
-
-              授权使用
-
-            </p>
-
-          </div>
-
-        </section>
-
-
-
-        <section className="about-netraflow__contact" aria-labelledby="netraflow-contact-title">
-
-          <h3 id="netraflow-contact-title">获取信息</h3>
-
-          <div className="about-netraflow__info-links">
-
-            <button
-              type="button"
-              className="about-netraflow__info-button about-netraflow__info-button--bilibili"
-              onClick={openBilibiliProfile}
-            >
-
-              <img src={bilibiliIcon} alt="" aria-hidden="true" />
-
-              <span>Bilibili</span>
-
-            </button>
-
-            <button
-              type="button"
-              className="about-netraflow__info-button about-netraflow__info-button--github"
-              onClick={openGithubReleases}
-            >
-
-              <NfSvgIcon svg={NfGithubIcon} className="about-netraflow__info-icon" decorative />
-
-              <span>GitHub</span>
-
-            </button>
-
-          </div>
-
-        </section>
-
-
-
-        <button
-
-          type="button"
-
-          className="about-netraflow__cat"
-
-          onClick={petNyaaCat}
-
-          onTouchEnd={(event) => {
-
-            event.preventDefault();
-
-            petNyaaCat();
-
-          }}
-
-          aria-label="净流小猫"
-
-        >
-
-          <span className="cat-easter-frame" aria-hidden="true">
-
-            <NfSvgIcon
-
-              className="cat-easter-image"
-
-              svg={isCatPetted ? CatPettedNyaaIcon : CatIdleIcon}
-
-              decorative
-
-            />
-
-          </span>
-
-        </button>
-
-      </section>
+      <AboutNetraFlowPanel
+        appVersion={window.appInfo?.version ?? APP_VERSION}
+        productIconPath={PRODUCT_ICON_PATH}
+        productNameZh={PRODUCT_NAME_ZH}
+        productNameEn={PRODUCT_NAME_EN}
+        isCatPetted={isCatPetted}
+        onOpenBilibili={openBilibiliProfile}
+        onOpenGithubReleases={openGithubReleases}
+        onTriggerEasterEgg={petNyaaCat}
+        onStartVersionLongPress={startAboutVersionLongPress}
+        onClearVersionLongPress={clearSecretConsoleLongPress}
+      />
 
     );
 
@@ -32359,7 +23764,9 @@ function App() {
 
     return (
 
-      <div className="global-settings-page">
+      <div
+        className="global-settings-page"
+      >
 
         <header className="global-settings-header">
 
@@ -32368,7 +23775,6 @@ function App() {
         </header>
 
         <div className="global-settings-content">{renderGlobalSettingsContent()}</div>
-
       </div>
 
     );
@@ -32379,7 +23785,7 @@ function App() {
 
   const renderGlobalSettingsNavigation = () =>
 
-    renderRightPanelSection(
+    renderRightPanelPage(
 
       '全局设置',
 
@@ -32451,7 +23857,7 @@ function App() {
 
 
 
-    return lowRiskKind === 'strict' ? '低风险 · 完全符合格式' : '低风险 · 低风险修正';
+    return lowRiskKind === 'strict' ? '低风险 · 本地未发现明显问题' : '低风险 · 已本地修正';
 
   };
 
@@ -32555,409 +23961,23 @@ function App() {
 
 
 
-  const renderRollupPromptPanel = () => (
-
-    <div className="rollup-import-prompt-panel">
-
-      <div className="rollup-import-copy">
-
-        <p>
-
-          提示词解释：面向使用者的说明，帮助你了解如何准备材料与使用外部工具
-
-        </p>
-
-        <p>
-
-          提示词：面向外部 AI 的任务说明，用于生成 NetraFlow 可导入的汇总 JSON
-
-        </p>
-
-      </div>
-
-
-
-      <div
-
-        className="segmented-control right-panel-segmented rollup-import-segmented"
-
-        style={getSegmentedControlStyle(2)}
-
-        aria-label="提示词内容切换"
-
-      >
-
-        {[
-
-          { value: 'explanation' as const, label: '提示词解释' },
-
-          { value: 'prompt' as const, label: '提示词' }
-
-        ].map((item) => (
-
-          <button
-
-            key={item.value}
-
-            type="button"
-
-            className={rollupPromptTab === item.value ? 'is-selected' : undefined}
-
-            onClick={() => setRollupPromptTab(item.value)}
-
-          >
-
-            {item.label}
-
-          </button>
-
-        ))}
-
-      </div>
-
-
-
-      <pre className="rollup-import-display rollup-prompt-display" tabIndex={0}>
-
-        {rollupPromptTab === 'explanation'
-
-          ? ROLLUP_IMPORT_EXPLANATION
-
-          : ROLLUP_IMPORT_PROMPT}
-
-      </pre>
-
-    </div>
-
-  );
-
-
-
-  const renderRollupAccountSelector = (keyword: string) => {
-
-    const matches = getRollupAccountMatches(keyword);
-
-    const assignment = rollupAccountAssignments[keyword];
-
-    const selectedAccountId = assignment?.accountId ?? '';
-
-    const uniqueMatch = matches.length === 1 && matches[0].score >= 86 ? matches[0] : null;
-
-
-
-    return (
-
-      <div className="rollup-account-selector">
-
-        <div className="rollup-account-suggestion">
-
-          {!keyword ? (
-
-            <p>账户关键词为空，请在本地选择导入账户</p>
-
-          ) : uniqueMatch ? (
-
-            <p>
-
-              账户关键词：{keyword}
-
-              <br />
-
-              看起来可能是账户「{uniqueMatch.account.name}」
-
-            </p>
-
-          ) : matches.length > 1 ? (
-
-            <>
-
-              <p>账户关键词：{keyword}</p>
-
-              <p>看起来可能是以下账户</p>
-
-            </>
-
-          ) : (
-
-            <p>
-
-              账户关键词：{keyword || '空'}
-
-              <br />
-
-              未找到相似账户
-
-            </p>
-
-          )}
-
-        </div>
-
-
-
-        <div className="rollup-account-chip-groups">
-
-          {groupTotals.some((group) => group.activeAccounts.length > 0) ? (
-
-            groupTotals.map((group) => {
-
-              const accounts = group.activeAccounts;
-
-
-
-              if (accounts.length === 0) {
-
-                return null;
-
-              }
-
-
-
-              return (
-
-                <div key={group.name} className="rollup-account-chip-group">
-
-                  <span>{group.name}</span>
-
-                  <div>
-
-                    {accounts.map((account) => {
-
-                      const selected = selectedAccountId === account.id;
-
-                      const suggested = matches.some((match) => match.account.id === account.id);
-
-
-
-                      return (
-
-                        <button
-
-                          key={account.id}
-
-                          type="button"
-
-                          className={`rollup-account-chip${selected ? ' is-selected' : ''}${
-
-                            suggested ? ' is-suggested' : ''
-
-                          }`}
-
-                          onClick={() => selectRollupAccount(keyword, account.id)}
-
-                        >
-
-                          <AccountMark account={account} className="account-mark--flash" />
-
-                          <span>{account.name}</span>
-
-                        </button>
-
-                      );
-
-                    })}
-
-                  </div>
-
-                </div>
-
-              );
-
-            })
-
-          ) : (
-
-            <p>暂无可选择账户</p>
-
-          )}
-
-        </div>
-
-
-
-        <div className="rollup-account-actions">
-
-          <button
-
-            type="button"
-
-            className="rollup-small-button rollup-new-account-button"
-
-            onClick={() => openRollupNewAccount(keyword)}
-
-          >
-
-            新建账户
-
-          </button>
-
-        </div>
-
-      </div>
-
-    );
-
-  };
-
-
-
-  const renderRollupConfirmPanel = () => {
-
-    if (!rollupImportReview) {
-
-      return null;
-
-    }
-
-
-
-    return (
-
-      <div className="rollup-import-confirm-panel">
-
-        <section className={`rollup-risk-card rollup-risk-card--${rollupImportReview.riskLevel}`}>
-
-          <span>风险等级</span>
-
-          <strong>
-
-            {getRollupRiskLabel(
-
-              rollupImportReview.riskLevel,
-
-              rollupImportReview.lowRiskKind
-
-            )}
-
-          </strong>
-
-          <p>
-
-            风险等级只表示 NetraFlow 是否发现明显格式或结构问题，不代表外部整理结果已经被证明正确
-
-          </p>
-
-        </section>
-
-
-
-        {rollupImportReview.issues.length > 0 ? (
-
-          <section className="rollup-issue-list" aria-label="导入风险原因">
-
-            {rollupImportReview.issues.slice(0, 8).map((issue, index) => (
-
-              <p key={`${issue.level}-${index}`}>
-
-                <strong>{getRollupRiskLabel(issue.level).split(' ')[0]}</strong>
-
-                {issue.blocking ? ' · 阻断' : ''}：{issue.message}
-
-              </p>
-
-            ))}
-
-            {rollupImportReview.issues.length > 8 ? (
-
-              <p>还有 {rollupImportReview.issues.length - 8} 条提示未展开</p>
-
-            ) : null}
-
-          </section>
-
-        ) : null}
-
-
-
-        <div className="rollup-record-groups">
-
-          {rollupRecordGroups.map((group) => (
-
-            <section key={group.keyword || '__empty__'} className="rollup-record-group">
-
-              <header>
-
-                <div>
-
-                  <p>账户关键词</p>
-
-                  <h2>{group.keyword || '空'}</h2>
-
-                </div>
-
-                <span>{group.records.length} 条记录</span>
-
-              </header>
-
-
-
-              <div className="rollup-account-row">
-
-                <span>导入账户</span>
-
-                {renderRollupAccountSelector(group.keyword)}
-
-              </div>
-
-
-
-              <div className="rollup-record-list" aria-label={`${group.keyword || '空'} 记录`}>
-
-                <div className="rollup-record-list__header">
-
-                  <span>日期</span>
-
-                  <span>模式</span>
-
-                  <span>金额</span>
-
-                </div>
-
-                {group.records.map((record) => (
-
-                  <div key={record.id} className="rollup-record-row">
-
-                    <span>{record.date}</span>
-
-                    <span>{record.mode}</span>
-
-                    <strong>{formatRollupSignedAmount(record)}</strong>
-
-                  </div>
-
-                ))}
-
-              </div>
-
-            </section>
-
-          ))}
-
-        </div>
-
-      </div>
-
-    );
-
-  };
-
-
-
   const renderRollupImportPage = () => (
-
-    <div className="rollup-import-page">
-
-      <header className="rollup-import-header">
-
-        <h1>汇总记录导入</h1>
-
-        <p>导入外部整理后的按日汇总结果</p>
-
-      </header>
-
-      {rollupImportReview ? renderRollupConfirmPanel() : renderRollupPromptPanel()}
-
-    </div>
+    <RollupImportPage
+      mode={rollupImportReview ? 'review' : 'prompt'}
+      promptTab={rollupPromptTab}
+      promptExplanation={ROLLUP_IMPORT_EXPLANATION}
+      promptContent={ROLLUP_IMPORT_PROMPT}
+      onPromptTabChange={setRollupPromptTab}
+      review={rollupImportReview}
+      recordGroups={rollupRecordGroups}
+      accountGroups={groupTotals}
+      accountAssignments={rollupAccountAssignments}
+      getAccountMatches={getRollupAccountMatches}
+      getRiskLabel={getRollupRiskLabel}
+      formatRecordAmount={formatRollupSignedAmount}
+      onSelectAccount={selectRollupAccount}
+      onCreateAccount={openRollupNewAccount}
+    />
 
   );
 
@@ -32967,73 +23987,28 @@ function App() {
 
     if (rollupImportReview) {
 
-      return renderRightPanelSection(
+      return renderRightPanelPage(
 
         '本次导入',
 
         <>
 
-          <article className="right-panel-preview">
-
-            <span>账户确认进度</span>
-
-            <strong>
-
-              {rollupConfirmedAccountCount} / {rollupAccountGroupKeys.length}
-
-            </strong>
-
-            <p>{rollupImportReview.records.length} 条汇总记录等待整批导入</p>
-
-          </article>
-
-          {rollupImportReview.hasBlockingIssues ? (
-
-            <p className="right-panel-note">
-
-              本地校验存在必须阻断的问题，建议舍弃并重新生成汇总 JSON
-
-            </p>
-
-          ) : null}
-
-          {renderRightPanelActionButton({
-
-            label: '舍弃本次导入',
-
-            tone: 'danger',
-
-            onClick: discardRollupImportReview
-
-          })}
-
-          {renderRightPanelActionButton({
-
-            label: '全部导入',
-
-            tone: 'primary',
-
-            disabled: !isRollupImportReady,
-
-            onClick: confirmRollupImportWrite
-
-          })}
-
-          {renderRightPanelActionButton({
-
-            label: '返回资产总览',
-
-            onClick: closeRollupImport,
-
-            className: 'rollup-import-return-action'
-
-          })}
+          <RollupReviewActionsPanel
+            confirmedAccountCount={rollupConfirmedAccountCount}
+            accountGroupCount={rollupAccountGroupKeys.length}
+            recordCount={rollupImportReview.records.length}
+            hasBlockingIssues={rollupImportReview.hasBlockingIssues}
+            canConfirm={isRollupImportReady}
+            onDiscardImport={discardRollupImportReview}
+            onConfirmImport={confirmRollupImportWrite}
+            onClose={closeRollupImport}
+          />
 
         </>,
 
         null,
 
-        'right-panel-section--rollup-import-actions'
+        'right-panel-page--rollup-import-actions'
 
       );
 
@@ -33041,7 +24016,7 @@ function App() {
 
 
 
-    return renderRightPanelSection(
+    return renderRightPanelPage(
 
       '汇总导入',
 
@@ -33056,76 +24031,16 @@ function App() {
           onClick: copyRollupPrompt
 
         })}
-
-        <section className="right-panel-subsection rollup-import-side-section">
-
-          <h2>导入功能区</h2>
-
-          {renderRightPanelActionButton({
-
-            label: '选择汇总文件',
-
-            onClick: () => rollupFileInputRef.current?.click()
-
-          })}
-
-          <label className="right-panel-label">
-
-            粘贴汇总 JSON
-
-            <textarea
-
-              className="rollup-import-textarea"
-
-              value={rollupPasteText}
-
-              onChange={(event) => {
-
-                setRollupPasteText(event.target.value);
-
-                setRollupImportError('');
-
-              }}
-
-              placeholder="在这里粘贴 netraflow_rollup JSON"
-
-            />
-
-          </label>
-
-          <button
-
-            type="button"
-
-            className="right-panel-primary-button"
-
-            disabled={!rollupPasteText.trim()}
-
-            onClick={importRollupPastedJson}
-
-          >
-
-            导入粘贴内容
-
-          </button>
-
-          {rollupImportError ? (
-
-            <p className="rollup-import-error">{rollupImportError}</p>
-
-          ) : null}
-
-        </section>
-
-        <article className="right-panel-preview rollup-import-risk-note">
-
-          <p>NetraFlow 不内置 AI 或识别模型，也不会连接外部平台</p>
-
-          <p>导入时仅检查汇总文件的格式、字段和本地规则问题，无法验证外部整理结果是否准确</p>
-
-          <p>请确认后再导入</p>
-
-        </article>
+        <RollupImportDropzone
+          inputValue={rollupPasteText}
+          error={rollupImportError}
+          onInputChange={(value) => {
+            setRollupPasteText(value);
+            setRollupImportError('');
+          }}
+          onImportText={importRollupPastedJson}
+          onSelectFile={() => rollupFileInputRef.current?.click()}
+        />
 
         {renderRightPanelActionButton({
 
@@ -33141,7 +24056,7 @@ function App() {
 
       null,
 
-      'right-panel-section--rollup-import-actions'
+      'right-panel-page--rollup-import-actions'
 
     );
 
@@ -33151,7 +24066,7 @@ function App() {
 
   const renderHomeActions = () =>
 
-    renderRightPanelSection(
+    renderRightPanelPage(
 
       '下一步',
 
@@ -33380,120 +24295,17 @@ function App() {
   const renderSnapshotEncryptionDisableConfirm = () =>
 
     isSnapshotEncryptionDisableConfirmOpen ? (
-
-      <OverlayBackdrop onBack={closeSnapshotEncryptionDisableConfirm} className="modal-backdrop">
-
-        <form
-
-          role="dialog"
-
-          aria-modal="true"
-
-          aria-labelledby="disable-snapshot-encryption-title"
-
-          onClick={(event) => event.stopPropagation()}
-
-          onSubmit={confirmDisableSnapshotEncryption}
-
-          className="modal-card"
-
-        >
-
-          <p className="eyebrow" style={{ marginBottom: 8 }}>
-
-            快照密码确认
-
-          </p>
-
-          <h2
-
-            id="disable-snapshot-encryption-title"
-
-            style={{ margin: '0 0 10px', fontSize: '1.26rem' }}
-
-          >
-
-            关闭快照加密
-
-          </h2>
-
-          <p style={{ margin: '0 0 14px', color: 'var(--text-muted)', fontSize: '0.94rem' }}>
-
-            关闭后，之后导出的快照将不再加密，已经加密的快照仍需要对应快照密码才能恢复
-
-          </p>
-
-          <label className="right-panel-label">
-
-            快照密码
-
-            <input
-
-              autoFocus
-
-              type="password"
-
-              autoComplete="current-password"
-
-              value={snapshotEncryptionDisableInput}
-
-              onChange={(event) => {
-
-                setSnapshotEncryptionDisableInput(event.target.value);
-
-                setSnapshotEncryptionDisableError('');
-
-              }}
-
-            />
-
-          </label>
-
-          {snapshotEncryptionDisableError ? (
-
-            <p style={{ margin: '12px 0 0', color: '#b91c1c', fontSize: '0.92rem' }}>
-
-              {snapshotEncryptionDisableError}
-
-            </p>
-
-          ) : null}
-
-          <div className="modal-actions">
-
-            <button
-
-              type="button"
-
-              onClick={closeSnapshotEncryptionDisableConfirm}
-
-              className="modal-button modal-button--secondary"
-
-            >
-
-              取消
-
-            </button>
-
-            <button
-
-              type="submit"
-
-              disabled={isDisablingSnapshotEncryption}
-
-              className="modal-button modal-button--primary"
-
-            >
-
-              {isDisablingSnapshotEncryption ? '验证中' : '确认关闭'}
-
-            </button>
-
-          </div>
-
-        </form>
-
-      </OverlayBackdrop>
+      <SnapshotEncryptionDisableDialog
+        password={snapshotEncryptionDisableInput}
+        error={snapshotEncryptionDisableError}
+        isLoading={isDisablingSnapshotEncryption}
+        onPasswordChange={(value) => {
+          setSnapshotEncryptionDisableInput(value);
+          setSnapshotEncryptionDisableError('');
+        }}
+        onSubmit={confirmDisableSnapshotEncryption}
+        onCancel={closeSnapshotEncryptionDisableConfirm}
+      />
 
     ) : null;
 
@@ -33767,14 +24579,6 @@ function App() {
 
 
 
-    if (isHistoryOpen && historyPanelView === 'backup-settings') {
-
-      return renderBackupSettingsActions();
-
-    }
-
-
-
     if (isHistoryOpen && historyPanelView === 'backup') {
 
       return renderSnapshotActions();
@@ -33826,6 +24630,20 @@ function App() {
     return renderHomeActions();
 
   };
+
+
+
+  const isSecuritySettingsPageDisabled =
+    isGlobalSettingsOpen && globalSettingsSection === 'security' && isExampleMode;
+
+  const mainPanelClassName = [
+    isFlashNoteOpen ? 'flash-note-container left-browse-panel' : 'card left-browse-panel',
+    isSecuritySettingsPageDisabled
+      ? 'example-mode-disabled-panel example-mode-disabled-panel--left-page'
+      : ''
+  ]
+    .filter(Boolean)
+    .join(' ');
 
 
 
@@ -34016,7 +24834,9 @@ function App() {
 
           ref={mainContentRef}
 
-          className={isFlashNoteOpen ? 'flash-note-container left-browse-panel' : 'card left-browse-panel'}
+          className={mainPanelClassName}
+
+          aria-disabled={isSecuritySettingsPageDisabled ? 'true' : undefined}
 
           onClick={handleMainContentBlankClick}
 
@@ -34042,37 +24862,45 @@ function App() {
 
         ) : isTotalChartsOpen ? (
 
-          <div className="asset-chart-page">
+          <AssetChartsPanel
 
-            <header className="asset-chart-page__header chart-visual-text">
+            title="总资产图表"
 
-              <div>
+            totalLabel="净资产"
 
-                <h1>总资产图表</h1>
+            totalValue={formatChartNumber(totalAssets)}
 
-              </div>
+            allocationContent={(
 
-              <div className="asset-chart-page__totals">
+              <AssetAllocationPanel
 
-                <span>净资产</span>
+                data={assetStructureData}
 
-                <strong>{formatChartNumber(totalAssets)}</strong>
+                settings={assetChartSettings.structure}
 
-              </div>
+                formatMoney={formatChartNumber}
 
-            </header>
+                formatPercent={formatChartPercent}
 
-            <AssetStructurePanel
+              />
 
-              data={assetStructureData}
+            )}
 
-              settings={assetChartSettings.structure}
+            trendContent={(
 
-            />
+              <AssetTrendPanel
 
-            <AssetTrendPanel points={assetTrendPoints} settings={assetChartSettings.trend} />
+                points={assetTrendPoints}
 
-          </div>
+                settings={assetChartSettings.trend}
+
+                formatMoney={formatChartNumber}
+
+              />
+
+            )}
+
+          />
 
         ) : isAccountChartsOpen && selectedAccount && selectedAccountEntry ? (
 
@@ -34166,493 +24994,35 @@ function App() {
 
         ) : selectedAccount && selectedAccountEntry ? (
 
-          <>
-
-            <header className="account-detail-header">
-
-              <div className="account-detail-header__main">
-
-                <h1 className="account-detail-title">{selectedAccountTitle}</h1>
-
-                <div className="account-detail-meta">
-
-                  <p className="description account-detail-balance">
-
-                    当前余额 {formatMoney(selectedAccountEntry.amount)}
-
-                  </p>
-
-                  {selectedAccountIsArchived ? (
-
-                    <span className="account-detail-archived-badge">已归档</span>
-
-                  ) : null}
-
-                </div>
-
-              </div>
-
-              <button
-
-                type="button"
-
-                aria-label="打开账户趋势图"
-
-                className="l0-chart-button l0-chart-button--trend account-detail-chart-thumbnail"
-
-                onClick={openAccountChartsPage}
-
-              >
-
-                <AssetTrendChart
-
-                  points={selectedAccountTrendPoints}
-
-                  settings={{
-
-                    assetDisplay: 'net',
-
-                    adaptiveYAxis: selectedAccountChartSettings.adaptiveYAxis,
-
-                    xAxisRange: selectedAccountChartSettings.xAxisRange,
-
-                    pointValueMode: selectedAccountChartSettings.pointValueMode
-
-                  }}
-
-                  compact
-
-                />
-
-              </button>
-
-              <div style={{ display: 'none', gap: 2, alignItems: 'flex-start' }}>
-
-                <button
-
-                  type="button"
-
-                  aria-label="编辑账户缩写"
-
-                  onClick={() => openAccountInfoEditor(selectedAccount.groupName, selectedAccountEntry)}
-
-                  style={{
-
-                    display: 'grid',
-
-                    placeItems: 'center',
-
-                    width: 48,
-
-                    height: 48,
-
-                    border: 0,
-
-                    borderRadius: 14,
-
-                    background: 'var(--surface-muted)',
-
-                    color: 'var(--text-main)',
-
-                    fontSize: '1.25rem',
-
-                    fontWeight: 700,
-
-                    cursor: 'pointer'
-
-                  }}
-
-                >
-
-                  <AccountMark account={selectedAccountEntry} className="account-mark--detail" />
-
-                </button>
-
-                <div style={{ position: 'relative' }}>
-
-                  <button
-
-                    type="button"
-
-                    aria-label="账户更多操作"
-
-                    onClick={(event) => {
-
-                      event.stopPropagation();
-
-                      setIsAccountActionMenuOpen((isOpen) => !isOpen);
-
-                    }}
-
-                    style={{
-
-                      display: 'grid',
-
-                      placeItems: 'center',
-
-                      width: 36,
-
-                      height: 36,
-
-                      border: 0,
-
-                      borderRadius: 10,
-
-                      background: 'transparent',
-
-                      color: 'var(--text-muted)',
-
-                      cursor: 'pointer'
-
-                    }}
-
-                  >
-
-                    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none">
-
-                      <circle cx="12" cy="5" r="1.8" fill="currentColor" />
-
-                      <circle cx="12" cy="12" r="1.8" fill="currentColor" />
-
-                      <circle cx="12" cy="19" r="1.8" fill="currentColor" />
-
-                    </svg>
-
-                  </button>
-
-
-
-                  {isAccountActionMenuOpen ? (
-
-                    <>
-
-                      <button
-
-                        type="button"
-
-                        aria-label="关闭账户操作菜单"
-
-                        {...accountActionMenuBackdropProps}
-
-                        style={{
-
-                          position: 'fixed',
-
-                          inset: 0,
-
-                          zIndex: 10,
-
-                          border: 0,
-
-                          background: 'transparent',
-
-                          cursor: 'default'
-
-                        }}
-
-                      />
-
-                      <div
-
-                        style={{
-
-                          position: 'absolute',
-
-                          top: 42,
-
-                          right: 0,
-
-                          zIndex: 11,
-
-                          minWidth: 112,
-
-                          display: 'grid',
-
-                          gap: 4,
-
-                          border: '1px solid var(--border-medium)',
-
-                          borderRadius: 10,
-
-                          padding: 6,
-
-                          background: 'var(--surface-strong)',
-
-                          boxShadow: 'var(--shadow-popover)'
-
-                        }}
-
-                      >
-
-                        <button
-
-                          type="button"
-
-                          onClick={() => {
-
-                            setIsAccountActionMenuOpen(false);
-
-
-
-                            if (selectedAccountIsArchived) {
-
-                              restoreAccount(selectedAccount.groupName, selectedAccountEntry);
-
-                              return;
-
-                            }
-
-
-
-                            archiveAccount(selectedAccount.groupName, selectedAccountEntry);
-
-                          }}
-
-                          style={{
-
-                            border: 0,
-
-                            borderRadius: 8,
-
-                            padding: '8px 10px',
-
-                            background: 'transparent',
-
-                            color: '#2563eb',
-
-                            cursor: 'pointer',
-
-                            font: 'inherit',
-
-                            textAlign: 'left'
-
-                          }}
-
-                        >
-
-                          {selectedAccountIsArchived ? '重新启用' : '归档'}
-
-                        </button>
-
-                        <button
-
-                          type="button"
-
-                          onClick={() => {
-
-                            setIsAccountActionMenuOpen(false);
-
-                            deleteAccount(selectedAccount.groupName, selectedAccountEntry);
-
-                          }}
-
-                          style={{
-
-                            border: 0,
-
-                            borderRadius: 8,
-
-                            padding: '8px 10px',
-
-                            background: 'transparent',
-
-                            color: '#b91c1c',
-
-                            cursor: 'pointer',
-
-                            font: 'inherit',
-
-                            textAlign: 'left'
-
-                          }}
-
-                        >
-
-                          删除
-
-                        </button>
-
-                      </div>
-
-                    </>
-
-                  ) : null}
-
-                </div>
-
-              </div>
-
-            </header>
-
-
-
-            <div
-
-              style={{
-
-                display: 'none',
-
-                flexWrap: 'wrap',
-
-                gap: 10,
-
-                width: 'fit-content',
-
-                maxWidth: '100%',
-
-                marginBottom: 24,
-
-                ...(selectedAccountIsArchived
-
-                  ? {
-
-                      border: '1px solid rgba(37, 99, 235, 0.26)',
-
-                      borderRadius: 14,
-
-                      padding: 10,
-
-                      background: 'rgba(37, 99, 235, 0.07)',
-
-                      boxShadow: 'inset 0 0 0 1px var(--border-soft)'
-
-                    }
-
-                  : {})
-
-              }}
-
-            >
-
-              <button
-
-                type="button"
-
-                onClick={() =>
-
-                  openEditor(selectedAccount.groupName, selectedAccountEntry, 'set')
-
-                }
-
-                style={{
-
-                  border: 0,
-
-                  borderRadius: 10,
-
-                  padding: '10px 14px',
-
-                  background: 'var(--button-primary-bg)',
-
-                  color: 'var(--button-primary-text)',
-
-                  cursor: 'pointer',
-
-                  font: 'inherit'
-
+          <AccountDetailPanel
+            groupName={selectedAccount.groupName}
+            account={selectedAccountEntry}
+            currentAmount={selectedAccountEntry.amount}
+            historyRecords={selectedAccountHistory}
+            formatMoney={formatMoney}
+            chartPreview={(
+              <AssetTrendChart
+                points={selectedAccountTrendPoints}
+                settings={{
+                  assetDisplay: 'net',
+                  adaptiveYAxis: selectedAccountChartSettings.adaptiveYAxis,
+                  xAxisRange: selectedAccountChartSettings.xAxisRange,
+                  pointValueMode: selectedAccountChartSettings.pointValueMode
                 }}
-
-              >
-
-                修改余额
-
-              </button>
-
-              <button
-
-                type="button"
-
-                onClick={() =>
-
-                  openEditor(selectedAccount.groupName, selectedAccountEntry, 'adjust')
-
-                }
-
-                style={{
-
-                  border: '1px solid var(--border-medium)',
-
-                  borderRadius: 10,
-
-                  padding: '10px 14px',
-
-                  background: 'var(--surface-strong)',
-
-                  color: 'var(--text-main)',
-
-                  cursor: 'pointer',
-
-                  font: 'inherit'
-
-                }}
-
-              >
-
-                增减金额
-
-              </button>
-
-            </div>
-
-
-
-            <section
-
-              style={{
-
-                borderTop: '1px solid var(--border-medium)',
-
-                paddingTop: 18
-
-              }}
-
-            >
-
-              <header
-
-                style={{
-
-                  display: 'flex',
-
-                  justifyContent: 'space-between',
-
-                  gap: 16,
-
-                  alignItems: 'baseline',
-
-                  marginBottom: 12
-
-                }}
-
-              >
-
-                <h2 style={{ margin: 0, fontSize: '1.2rem' }}>账户变动记录</h2>
-
-                <span style={{ color: 'var(--text-muted)', fontSize: '0.92rem' }}>
-
-                  共 {selectedAccountHistory.length} 条
-
-                </span>
-
-              </header>
-
-              {selectedAccountHistory.length === 0 ? (
-
-                <p style={{ margin: 0, color: 'var(--text-muted)' }}>暂无记录</p>
-
-              ) : (
-
-                <div style={{ display: 'grid', gap: 10 }}>
-
-                  {selectedAccountHistoryByDate.map(renderDetailHistoryGroup)}
-
-                </div>
-
-              )}
-
-            </section>
-
-          </>
+                formatMoney={formatChartNumber}
+                compact
+              />
+            )}
+            onOpenChart={openAccountChartsPage}
+            historyList={(
+              <AccountHistoryList
+                groups={selectedAccountHistoryByDate}
+                expandedDates={expandedDetailDates}
+                onToggleDate={toggleDetailDate}
+                {...historyRecordListProps}
+              />
+            )}
+          />
 
         ) : (
 
@@ -34772,6 +25142,8 @@ function App() {
 
                         showDebtMultiple={assetChartSettings.structure.showDebtMultiple}
 
+                        formatMoney={formatChartNumber}
+
                       />
 
                     </button>
@@ -34805,6 +25177,8 @@ function App() {
                           xAxisRange: assetChartSettings.l0.xAxisRange
 
                         }}
+
+                        formatMoney={formatChartNumber}
 
                         compact
 
@@ -34911,36 +25285,6 @@ function App() {
                     />
 
                   </svg>
-
-                  {shouldShowBackupReminderDot ? (
-
-                    <span
-
-                      aria-hidden="true"
-
-                      style={{
-
-                        position: 'absolute',
-
-                        top: 4,
-
-                        right: 4,
-
-                        width: 8,
-
-                        height: 8,
-
-                        borderRadius: 999,
-
-                        background: '#dc2626',
-
-                        boxShadow: '0 0 0 2px var(--surface-strong)'
-
-                      }}
-
-                    />
-
-                  ) : null}
 
                 </button>
 
@@ -35158,7 +25502,7 @@ function App() {
 
                               background: 'var(--surface-bg)',
 
-                              boxShadow: 'var(--shadow-panel)'
+                              boxShadow: 'var(--shadow-popover)'
 
                             }}
 
@@ -35394,6 +25738,10 @@ function App() {
           </>
 
         )}
+
+        {isSecuritySettingsPageDisabled ? (
+          <div className="example-mode-disabled-panel__banner">示例模式下不可用</div>
+        ) : null}
 
       </section>
 
@@ -35766,249 +26114,63 @@ function App() {
 
         >
 
-            <section
+          <HistoryPanel
 
-              ref={leftLayerPanelRef}
+            ref={leftLayerPanelRef}
 
-              onClick={(event) => event.stopPropagation()}
+            view={historyPanelView}
 
-              onScroll={(event) => {
+            onPanelClick={(event) => event.stopPropagation()}
 
-                sessionLeftLayerScrollPositionsRef.current[leftLayerKey] =
+            onPanelScroll={(event) => {
 
-                  event.currentTarget.scrollTop;
+              sessionLeftLayerScrollPositionsRef.current[leftLayerKey] =
 
-              }}
-
-              className="history-browse-panel two-column-page-panel"
-
-              style={{
-
-                width: 'min(760px, 100%)',
-
-                maxHeight: '84vh',
-
-                overflowY: 'auto',
-
-                borderRadius: 16,
-
-                padding: 'var(--two-column-panel-padding)',
-
-                border: '1px solid var(--border-soft)',
-
-                background: 'var(--panel-bg-strong)',
-
-                boxShadow: 'var(--shadow-popover)'
+                event.currentTarget.scrollTop;
 
             }}
 
-          >
-
-            {historyPanelView === 'backup' ? null : (
-
-              <header
-
-                style={{
-
-                  display: 'flex',
-
-                  justifyContent: 'space-between',
-
-                  gap: 16,
-
-                  alignItems: 'flex-start',
-
-                  marginBottom: 16
-
-                }}
-
-              >
-
-                {historyPanelView === 'backup-settings' ? (
-
-                  <h2 className="history-panel-title">快照</h2>
-
-                ) : (
-
-                  <h2 className="history-panel-title">浏览记录</h2>
-
-                )}
-
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }} />
-
-              </header>
-
-            )}
-
-
-
-            {historyPanelView === 'history' ? (
+            historyContent={(
 
               <>
 
-            <div
+                <HistoryFilterToolbar
 
-              className="history-filter-panel"
+                  rangeInput={historyRangeInput}
 
-              style={{
+                  isCalendarVisible={isCalendarVisible}
 
-                display: 'grid',
+                  onRangeInputFocus={clearHistoryRange}
 
-                gap: 12,
+                  onRangeInputClick={clearHistoryRange}
 
-                border: '1px solid var(--border-soft)',
+                  onRangeInputConfirm={confirmSingleHistoryDate}
 
-                borderRadius: 12,
+                  onRangeInputChange={handleHistoryRangeInput}
 
-                padding: 12,
+                  onToggleCalendar={() => setIsCalendarVisible((visible) => !visible)}
 
-                background: 'var(--surface-strong)',
+                  onSelectPreviousWeek={setLastWeekHistoryRange}
 
-                marginBottom: 16
+                  onSelectRecentSevenDays={setRecent7HistoryRange}
 
-              }}
+                  onClearRange={clearHistoryRange}
 
-            >
+                  calendarContent={(
 
-              <label style={{ display: 'grid', gap: 6, color: 'var(--text-secondary)' }}>
+                    <HistoryCalendarPanel
 
-                时间范围
+                      calendarMonth={calendarMonth}
 
-                <input
+                      isNextDisabled={isHistoryCalendarNextDisabled}
 
-                  type="text"
+                      getCalendarDays={getCalendarDays}
 
-                  inputMode="numeric"
+                      getDateValue={toDateInputValue}
 
-                  placeholder="0325  0421    250325  260421"
+                      getDateState={getHistoryCalendarDateState}
 
-                  value={historyRangeInput}
-
-                  onFocus={clearHistoryRange}
-
-                  onClick={clearHistoryRange}
-
-                  onKeyDown={(event) => {
-
-                    if (event.key === 'Enter') {
-
-                      event.preventDefault();
-
-                      confirmSingleHistoryDate();
-
-                    }
-
-                  }}
-
-                  onChange={(event) => handleHistoryRangeInput(event.target.value)}
-
-                  style={{
-
-                    border: '1px solid var(--border-medium)',
-
-                    borderRadius: 8,
-
-                    padding: '9px 10px',
-
-                    background: 'var(--panel-bg-strong)',
-
-                    color: 'var(--text-main)',
-
-                    font: 'inherit'
-
-                  }}
-
-                />
-
-              </label>
-
-
-
-              <div className="history-calendar-toolbar">
-
-                <button
-
-                  type="button"
-
-                  className="history-calendar-tool-button"
-
-                  onClick={() => setIsCalendarVisible((visible) => !visible)}
-
-                >
-
-                  {isCalendarVisible ? '隐藏日历' : '显示日历'}
-
-                </button>
-
-                {isCalendarVisible ? (
-
-                  <div className="history-calendar-quick-actions">
-
-                    <button
-
-                      type="button"
-
-                      className="history-calendar-tool-button"
-
-                      onClick={setLastWeekHistoryRange}
-
-                    >
-
-                      上周
-
-                    </button>
-
-                    <button
-
-                      type="button"
-
-                      className="history-calendar-tool-button"
-
-                      onClick={setRecent7HistoryRange}
-
-                    >
-
-                      最近7日
-
-                    </button>
-
-                    <button
-
-                      type="button"
-
-                      className="history-calendar-tool-button history-calendar-tool-button--muted"
-
-                      onClick={clearHistoryRange}
-
-                    >
-
-                      清除筛选
-
-                    </button>
-
-                  </div>
-
-                ) : null}
-
-              </div>
-
-
-
-              {isCalendarVisible ? (
-
-                <div className="history-calendar-panel">
-
-                  <div className="history-calendar-header">
-
-                    <button
-
-                      type="button"
-
-                      aria-label="上个月"
-
-                      className="history-calendar-nav-button"
-
-                      onClick={() =>
+                      onPreviousMonth={() =>
 
                         setCalendarMonth(
 
@@ -36020,33 +26182,7 @@ function App() {
 
                       }
 
-                    >
-
-                      <NfSvgIcon svg={NfNavBackIcon} className="history-calendar-nav-icon" decorative />
-
-                    </button>
-
-                    <strong className="history-calendar-range-label">
-
-                      {calendarMonth.getFullYear()}年{calendarMonth.getMonth() + 1}月 -{' '}
-
-                      {new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1).getFullYear()}年
-
-                      {new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1).getMonth() + 1}月
-
-                    </strong>
-
-                    <button
-
-                      type="button"
-
-                      aria-label="下个月"
-
-                      className="history-calendar-nav-button"
-
-                      disabled={isHistoryCalendarNextDisabled}
-
-                      onClick={() =>
+                      onNextMonth={() =>
 
                         setCalendarMonth(
 
@@ -36058,87 +26194,31 @@ function App() {
 
                       }
 
-                    >
+                      onDateClick={selectCalendarDate}
 
-                      <NfSvgIcon
+                    />
 
-                        svg={NfNavChevronRightIcon}
+                  )}
 
-                        className="history-calendar-nav-icon"
+                />
 
-                        decorative
+                <HistoryRecordList
 
-                      />
+                  records={filteredHistory}
 
-                    </button>
+                  highlightedRecordId={highlightedHistoryRecordId}
 
-                  </div>
+                  emptyText="暂无匹配记录"
 
-                  <div className="history-calendar-months">
+                  {...historyRecordListProps}
 
-                    {renderCalendarMonth(calendarMonth, 'left')}
-
-                    {renderCalendarMonth(
-
-                      new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1),
-
-                      'right'
-
-                    )}
-
-                  </div>
-
-                </div>
-
-              ) : null}
-
-
-
-            </div>
-
-
-
-            {filteredHistory.length === 0 ? (
-
-              <p className="history-empty-panel" style={{ margin: 0, color: 'var(--text-muted)' }}>
-
-                暂无匹配记录
-
-              </p>
-
-            ) : (
-
-              <div
-
-                className="history-result-list-panel"
-
-                style={{
-
-                  display: 'grid',
-
-                  gap: 10,
-
-                  border: '1px solid var(--border-soft)',
-
-                  borderRadius: 12,
-
-                  padding: '12px 4px 12px 12px',
-
-                  background: 'var(--surface-strong)'
-
-                }}
-
-              >
-
-                {filteredHistory.map((record) => renderHistoryCard(record))}
-
-              </div>
-
-            )}
+                />
 
               </>
 
-            ) : historyPanelView === 'backup' ? (
+            )}
+
+            backupContent={(
 
               <div style={{ display: 'grid', gap: 16 }}>
 
@@ -36156,445 +26236,21 @@ function App() {
 
                 />
 
-                {renderBackupRecordList()}
+                <BackupRecordList
 
-              </div>
+                  records={backupRecords}
 
-            ) : (
+                  formatPreciseBackupTime={formatPreciseBackupTime}
 
-              <div style={{ display: 'grid', gap: 16 }}>
+                  getBackupMethodLabel={getBackupMethodLabel}
 
-                <section
-
-                  style={{
-
-                    display: 'grid',
-
-                    gap: 14,
-
-                    border: '1px solid var(--border-soft)',
-
-                    borderRadius: 12,
-
-                    padding: 14,
-
-                    background: 'transparent'
-
-                  }}
-
-                >
-
-                  <strong>设置提醒周期</strong>
-
-                  <label style={{ display: 'grid', gap: 8, color: 'var(--text-secondary)' }}>
-
-                    提醒周期
-
-                    <input
-
-                      type="number"
-
-                      min={1}
-
-                      step={1}
-
-                      inputMode="numeric"
-
-                      value={backupReminderValueInput}
-
-                      onChange={(event) => updateBackupReminderValue(event.target.value)}
-
-                      onBlur={() => {
-
-                        if (!backupReminderValueInput) {
-
-                          setBackupReminderValueInput(String(backupReminderCycle.value));
-
-                        }
-
-                      }}
-
-                      onWheel={(event) => {
-
-                        event.preventDefault();
-
-                        event.stopPropagation();
-
-                        if (event.deltaY === 0) {
-
-                          return;
-
-                        }
-
-
-
-                        adjustBackupReminderValue(event.deltaY > 0 ? -1 : 1);
-
-                      }}
-
-                      style={{
-
-                        width: '100%',
-
-                        border: '1px solid var(--border-medium)',
-
-                        borderRadius: 8,
-
-                        padding: '10px 12px',
-
-                        background: 'transparent',
-
-                        color: 'var(--text-main)',
-
-                        font: 'inherit'
-
-                      }}
-
-                    />
-
-                  </label>
-
-                  <div style={{ display: 'grid', gap: 8, color: 'var(--text-secondary)' }}>
-
-                    <span>单位</span>
-
-                    <div
-
-                      style={{
-
-                        display: 'grid',
-
-                        gridTemplateColumns: 'repeat(3, 1fr)',
-
-                        gap: 4,
-
-                        border: '1px solid var(--border-soft)',
-
-                        borderRadius: 10,
-
-                        padding: 4,
-
-                        background: 'transparent'
-
-                      }}
-
-                    >
-
-                      {[
-
-                        { value: 'day', label: '日' },
-
-                        { value: 'week', label: '周' },
-
-                        { value: 'month', label: '月' }
-
-                      ].map((option) => (
-
-                        <button
-
-                          key={option.value}
-
-                          type="button"
-
-                          onClick={() =>
-
-                            updateBackupReminderCycle({
-
-                              ...backupReminderCycle,
-
-                              unit: option.value as BackupReminderUnit
-
-                            })
-
-                          }
-
-                          style={{
-
-                            border: 0,
-
-                            borderRadius: 8,
-
-                            padding: '8px 0',
-
-                            background:
-
-                              backupReminderCycle.unit === option.value
-
-                                ? 'var(--button-primary-bg)'
-
-                                : 'transparent',
-
-                            color:
-
-                              backupReminderCycle.unit === option.value
-
-                                ? 'var(--button-primary-text)'
-
-                                : 'var(--text-secondary)',
-
-                            cursor: 'pointer',
-
-                            font: 'inherit',
-
-                            fontWeight: 700
-
-                          }}
-
-                        >
-
-                          {option.label}
-
-                        </button>
-
-                      ))}
-
-                    </div>
-
-                  </div>
-
-                  <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.92rem' }}>
-
-                    当前间隔 {backupReminderStatus.intervalDays} 天，提醒周期{' '}
-
-                    {backupReminderStatus.reminderCycleDays} 天。
-
-                  </p>
-
-                </section>
-
-
-
-                <section
-
-                  style={{
-
-                    display: 'grid',
-
-                    gap: 12,
-
-                    border: '1px solid var(--border-soft)',
-
-                    borderRadius: 12,
-
-                    padding: 14,
-
-                    background: 'transparent'
-
-                  }}
-
-                >
-
-                  <strong>快照记录列表</strong>
-
-                  {backupRecords.length === 0 ? (
-
-                    <p style={{ margin: 0, color: 'var(--text-muted)' }}>暂无快照记录</p>
-
-                  ) : (
-
-                    <div style={{ display: 'grid', gap: 10 }}>
-
-                      {backupRecords.map((record) => (
-
-                        <article
-
-                          key={record.id}
-
-                          id={`backup-record-${record.id}`}
-
-                          style={{
-
-                            display: 'grid',
-
-                            gap: 12,
-
-                            border: `1px solid ${
-                              record.method === 'auto'
-                                ? 'rgba(37, 99, 235, 0.16)'
-                                : 'var(--border-soft)'
-                            }`,
-
-                            borderRadius: 10,
-
-                            padding: 14,
-
-                            background:
-                              record.method === 'auto' ? 'rgba(37, 99, 235, 0.08)' : 'transparent',
-
-                            boxShadow: 'none'
-
-                          }}
-
-                        >
-
-                          <div
-
-                            style={{
-
-                              display: 'flex',
-
-                              justifyContent: 'space-between',
-
-                              alignItems: 'flex-start',
-
-                              flexWrap: 'wrap',
-
-                              gap: 12
-
-                            }}
-
-                          >
-
-                            <div style={{ minWidth: 0 }}>
-
-                              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-
-                                精确时间
-
-                              </p>
-
-                              <strong
-
-                                style={{
-
-                                  display: 'block',
-
-                                  marginTop: 3,
-
-                                  color: 'var(--text-main)',
-
-                                  overflowWrap: 'anywhere'
-
-                                }}
-
-                              >
-
-                                {formatPreciseBackupTime(record.backedUpAt)}
-
-                              </strong>
-
-                            </div>
-
-                            <span
-
-                              style={{
-
-                                flex: '0 0 auto',
-
-                                borderRadius: 999,
-
-                                padding: '4px 8px',
-
-                                background:
-
-                                  record.method === 'auto'
-
-                                    ? 'rgba(37, 99, 235, 0.12)'
-
-                                    : 'var(--surface-muted)',
-
-                                color: record.method === 'auto' ? '#2563eb' : 'var(--text-secondary)',
-
-                                fontSize: '0.78rem',
-
-                                fontWeight: 700
-
-                              }}
-
-                            >
-
-                              {getBackupMethodLabel(record.method)}
-
-                            </span>
-
-                          </div>
-
-                          <div
-
-                            style={{
-
-                              display: 'grid',
-
-                              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-
-                              gap: 10
-
-                            }}
-
-                          >
-
-                            {[
-
-                              { label: '快照总条数', value: `${record.historyCount} 条` },
-
-                              { label: '增量记录', value: `${record.incrementCount} 条` }
-
-                            ].map((item) => (
-
-                              <div
-
-                                key={item.label}
-
-                                style={{
-
-                                  minWidth: 0,
-
-                                  borderRadius: 8,
-
-                                  padding: '9px 10px',
-
-                                  background: 'var(--surface-bg)'
-
-                                }}
-
-                              >
-
-                                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-
-                                  {item.label}
-
-                                </p>
-
-                                <strong
-
-                                  style={{
-
-                                    display: 'block',
-
-                                    marginTop: 3,
-
-                                    color: 'var(--text-main)',
-
-                                    fontSize: '0.95rem'
-
-                                  }}
-
-                                >
-
-                                  {item.value}
-
-                                </strong>
-
-                              </div>
-
-                            ))}
-
-                          </div>
-
-                        </article>
-                      ))}
-
-                    </div>
-
-                  )}
-
-                </section>
+                />
 
               </div>
 
             )}
 
-          </section>
+          />
 
         </OverlayBackdrop>
 
@@ -36818,254 +26474,41 @@ function App() {
 
 
 
-      {backupReminderPrompt ? (
-
-        <OverlayBackdrop
-
-          onBack={() => setBackupReminderPrompt(null)}
-
-          className="layout-layer layout-layer--right"
-
-          style={{
-
-            position: 'fixed',
-
-            inset: 0,
-
-            zIndex: 70,
-
-            display: 'grid',
-
-            placeItems: 'center',
-
-            padding: 24,
-
-            background: 'var(--modal-backdrop)'
-
-          }}
-
-        >
-
-          <section
-
-            role="dialog"
-
-            aria-modal="true"
-
-            aria-labelledby="backup-reminder-title"
-
-            onClick={(event) => event.stopPropagation()}
-
-            className="modal-card backup-reminder-modal"
-
-            style={{
-
-              width: 'min(380px, 100%)',
-
-              borderRadius: 16,
-
-              padding: 22,
-
-              background: 'var(--surface-strong)',
-
-              boxShadow: 'var(--shadow-popover)'
-
-            }}
-
-          >
-
-            <p className="eyebrow" style={{ marginBottom: 8 }}>
-
-              快照提醒
-
-            </p>
-
-            <h2 id="backup-reminder-title" style={{ margin: '0 0 10px', fontSize: '1.26rem' }}>
-
-              距离上次快照已 {backupReminderPrompt.intervalDays} 天
-
-            </h2>
-
-            <div
-
-              style={{
-
-                display: 'flex',
-
-                justifyContent: 'flex-end',
-
-                flexWrap: 'wrap',
-
-                gap: 10,
-
-                marginTop: 22
-
-              }}
-
-            >
-
-              <button
-
-                type="button"
-
-                onClick={openBackupReminderSettings}
-
-                style={{
-
-                  border: '1px solid var(--border-medium)',
-
-                  borderRadius: 8,
-
-                  padding: '9px 14px',
-
-                  background: 'var(--surface-strong)',
-
-                  color: 'var(--text-secondary)',
-
-                  cursor: 'pointer',
-
-                  font: 'inherit'
-
-                }}
-
-              >
-
-                更改提醒周期
-
-              </button>
-
-              <button
-
-                type="button"
-
-                onClick={confirmBackupReminder}
-
-                style={{
-
-                  border: 0,
-
-                  borderRadius: 8,
-
-                  padding: '9px 14px',
-
-                  background: 'var(--button-primary-bg)',
-
-                  color: 'var(--button-primary-text)',
-
-                  cursor: 'pointer',
-
-                  font: 'inherit'
-
-                }}
-
-              >
-
-                确认
-
-              </button>
-
-            </div>
-
-          </section>
-
-        </OverlayBackdrop>
-
+      {noticeDialog ? (
+        <NoticeDialog
+          title={noticeDialog.title}
+          message={noticeDialog.message}
+          closeLabel={noticeDialog.confirmLabel}
+          onClose={closeNoticeDialog}
+        />
       ) : null}
 
-
+      {inputDialog ? (
+        <InputDialog
+          title={inputDialog.title}
+          message={inputDialog.message}
+          label={inputDialog.label}
+          value={inputDialogValue}
+          confirmLabel={inputDialog.confirmLabel}
+          inputType={inputDialog.inputType}
+          autoComplete={inputDialog.autoComplete}
+          onValueChange={setInputDialogValue}
+          onConfirm={confirmInputDialog}
+          onCancel={closeInputDialog}
+        />
+      ) : null}
 
       {confirmationDialog ? (
-
-        <OverlayBackdrop
-
-          onBack={closeConfirmationDialog}
-
-          className="modal-backdrop"
-
-        >
-
-          <section
-
-            role="dialog"
-
-            aria-modal="true"
-
-            aria-labelledby="confirmation-dialog-title"
-
-            onClick={(event) => event.stopPropagation()}
-
-            className="modal-card"
-
-          >
-
-            {confirmationDialog.eyebrow ? (
-
-              <p className="eyebrow" style={{ marginBottom: 8 }}>
-
-                {confirmationDialog.eyebrow}
-
-              </p>
-
-            ) : null}
-
-            <h2
-
-              id="confirmation-dialog-title"
-
-              style={{ margin: '0 0 10px', fontSize: '1.26rem' }}
-
-            >
-
-              {confirmationDialog.title}
-
-            </h2>
-
-            <div className="modal-message">
-
-              {confirmationDialog.message}
-
-            </div>
-
-            <div className="modal-actions">
-
-              <button
-
-                type="button"
-
-                onClick={closeConfirmationDialog}
-
-                className="modal-button modal-button--secondary"
-
-              >
-
-                取消
-
-              </button>
-
-              <button
-
-                type="button"
-
-                onClick={confirmAndClose}
-
-                className={`modal-button modal-button--secondary${
-
-                  confirmationDialog.tone === 'danger' ? ' modal-button--danger' : ''
-
-                }`}
-
-              >
-
-                {confirmationDialog.confirmLabel}
-
-              </button>
-
-            </div>
-
-          </section>
-
-        </OverlayBackdrop>
-
+        <ConfirmDialog
+          title={confirmationDialog.title}
+          message={confirmationDialog.message}
+          confirmLabel={confirmationDialog.confirmLabel}
+          cancelLabel={confirmationDialog.cancelLabel}
+          eyebrow={confirmationDialog.eyebrow}
+          tone={confirmationDialog.tone}
+          onConfirm={confirmAndClose}
+          onCancel={closeConfirmationDialog}
+        />
       ) : null}
 
 
@@ -37210,29 +26653,7 @@ function App() {
 
         >
 
-          <section
-
-            className="quick-single-entry-panel"
-
-            role="dialog"
-
-            aria-modal="true"
-
-            aria-labelledby="quick-single-entry-title"
-
-            onClick={(event) => event.stopPropagation()}
-
-          >
-
-            <header>
-
-              <h2 id="quick-single-entry-title">选择账户</h2>
-
-            </header>
-
-            {renderQuickSingleEntryAccountPicker()}
-
-          </section>
+          <QuickEntryPanel accountPickerContent={renderQuickSingleEntryAccountPicker()} />
 
         </OverlayBackdrop>
 
@@ -37241,1346 +26662,157 @@ function App() {
 
 
       {editingAccount && currentAccount ? (
-
-        <OverlayBackdrop
-
-          onBack={requestCloseEditor}
-
-          className="layout-layer layout-layer--right"
-
-          style={{
-
-            position: 'fixed',
-
-            inset: 0,
-
-            display: 'grid',
-
-            placeItems: 'center',
-
-            padding: 24,
-
-            background: 'var(--modal-backdrop)'
-
+        <AccountAmountEditorDialog
+          title={`${currentGroup?.name ?? editingAccount.groupName} - ${currentAccount.name}`}
+          editMode={editMode}
+          draftAmount={draftAmount}
+          setAmountDatePicker={renderAccountOperationDatePicker({
+            value: setAmountDateInput,
+            selectedDate: setAmountSelectedDate,
+            parsedDate: parsedSetAmountDate,
+            visibleMonth: setAmountVisibleMonth,
+            futureHint: setAmountDateFutureHint,
+            onInputChange: updateSetAmountDateInput,
+            onCalendarSelect: selectSetAmountCalendarDate,
+            onVisibleMonthChange: setSetAmountVisibleMonth
+          })}
+          setAmountNote={setAmountNoteInput}
+          adjustAmount={adjustAmountInput}
+          adjustDirection={adjustDirection}
+          isAdjustAmountInvalid={isAdjustAmountInvalid}
+          currentAmountLabel={formatMoney(currentAccount.amount)}
+          nextAdjustedAmountLabel={formatMoney(
+            toStoredGroupAmount(editingAccount.groupName, nextAdjustedEditableAmount)
+          )}
+          signedAdjustAmountLabel={signedAdjustAmountLabel}
+          signedAdjustAmountColor={
+            getSignedAmountTone(
+              signedAdjustAmount,
+              globalSettings.positiveNegativeColorMode
+            ).color
+          }
+          adjustDatePicker={renderAccountOperationDatePicker({
+            value: adjustAmountDateInput,
+            selectedDate: adjustAmountSelectedDate,
+            parsedDate: parsedAdjustAmountDate,
+            visibleMonth: adjustAmountVisibleMonth,
+            futureHint: adjustAmountDateFutureHint,
+            onInputChange: updateAdjustAmountDateInput,
+            onCalendarSelect: selectAdjustAmountCalendarDate,
+            onVisibleMonthChange: setAdjustAmountVisibleMonth
+          })}
+          adjustAmountNote={adjustAmountNoteInput}
+          isEditingArchivedAccount={isEditingArchivedAccount}
+          isSubmitDisabled={isAmountEditorSubmitDisabled}
+          onEditModeChange={(mode) => {
+            setEditMode(mode);
+            setAdjustAmountInput('');
+            setAdjustDirection('increase');
           }}
-
-        >
-
-          <form
-
-            className="account-operation-panel"
-
-            onClick={(event) => event.stopPropagation()}
-
-            onSubmit={(event) => {
-
-              event.preventDefault();
-
-              saveAmount();
-
-            }}
-
-            style={{
-
-              width: 'min(520px, 100%)',
-
-              maxHeight: '84vh',
-
-              overflowY: 'auto',
-
-              borderRadius: 12,
-
-              padding: 24,
-
-              background: 'var(--surface-strong)',
-
-              boxShadow: 'var(--shadow-popover)'
-
-            }}
-
-          >
-
-            <h2 style={{ margin: '0 0 18px', fontSize: '1.45rem' }}>
-
-              {currentGroup?.name ?? editingAccount.groupName} - {currentAccount.name}
-
-            </h2>
-
-
-
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-
-              {[
-
-                { value: 'set', label: '修改余额' },
-
-                { value: 'adjust', label: '增减金额' }
-
-              ].map((mode) => (
-
-                <button
-
-                  key={mode.value}
-
-                  type="button"
-
-                  onClick={() => {
-
-                    setEditMode(mode.value as EditMode);
-
-                    setAdjustAmountInput('');
-
-                    setAdjustDirection('increase');
-
-                  }}
-
-                  style={{
-
-                    flex: 1,
-
-                    boxSizing: 'border-box',
-
-                    height: 'var(--nf-control-height)',
-
-                    minHeight: 'var(--nf-control-height)',
-
-                    border: '1px solid var(--border-medium)',
-
-                    borderRadius: 8,
-
-                    padding: '0 10px',
-
-                    background:
-
-                      editMode === mode.value
-
-                        ? 'var(--button-primary-bg)'
-
-                        : 'var(--surface-strong)',
-
-                    color:
-
-                      editMode === mode.value
-
-                        ? 'var(--button-primary-text)'
-
-                        : 'var(--text-secondary)',
-
-                    cursor: 'pointer',
-
-                    font: 'inherit'
-
-                  }}
-
-                >
-
-                  {mode.label}
-
-                </button>
-
-              ))}
-
-            </div>
-
-
-
-            {editMode === 'set' ? (
-
-              <div className="account-operation-form-grid">
-
-                <label className="account-operation-field">
-
-                  <span>新余额</span>
-
-                  <input
-
-                    className="account-operation-input"
-
-                    autoFocus
-
-                    type="text"
-
-                    inputMode="decimal"
-
-                    value={draftAmount}
-
-                    onChange={(event) => {
-
-                      const nextValue = sanitizeNonNegativeInput(event.target.value);
-
-
-
-                      if (isNonNegativeInput(nextValue)) {
-
-                        setDraftAmount(nextValue);
-
-                      }
-
-                    }}
-
-                  />
-
-                  {isEditingArchivedAccount ? (
-
-                    <span className="account-operation-field-hint">
-
-                      修改余额/增减金额会自动将该账户重新启用
-
-                    </span>
-
-                  ) : null}
-
-                </label>
-
-                {renderAccountOperationDatePicker({
-
-                  value: setAmountDateInput,
-
-                  selectedDate: setAmountSelectedDate,
-
-                  parsedDate: parsedSetAmountDate,
-
-                  visibleMonth: setAmountVisibleMonth,
-
-                  futureHint: setAmountDateFutureHint,
-
-                  onInputChange: updateSetAmountDateInput,
-
-                  onCalendarSelect: selectSetAmountCalendarDate,
-
-                  onVisibleMonthChange: setSetAmountVisibleMonth
-
-                })}
-
-                <label className="account-operation-field">
-
-                  <span>备注</span>
-
-                  <textarea
-
-                    className="account-operation-input account-operation-textarea"
-
-                    placeholder="可选"
-
-                    rows={2}
-
-                    value={setAmountNoteInput}
-
-                    onChange={(event) => setSetAmountNoteInput(event.target.value)}
-
-                  />
-
-                </label>
-
-              </div>
-
-            ) : (
-
-              <div className="account-operation-form-grid">
-
-                {isAdjustAmountInvalid ? (
-
-                  <div
-
-                    style={{
-
-                      borderRadius: 8,
-
-                      padding: '9px 10px',
-
-                      background: 'rgba(185, 28, 28, 0.12)',
-
-                      color: '#b91c1c',
-
-                      fontWeight: 700
-
-                    }}
-
-                  >
-
-                    净值将为负数
-
-                  </div>
-
-                ) : null}
-
-                <label className="account-operation-field">
-
-                  <span>变动金额</span>
-
-                  <input
-
-                    className="account-operation-input"
-
-                    autoFocus
-
-                    type="text"
-
-                    inputMode="decimal"
-
-                    value={adjustAmountInput}
-
-                    onChange={(event) => {
-
-                      const nextValue = sanitizeNonNegativeInput(event.target.value);
-
-
-
-                      if (isNonNegativeInput(nextValue)) {
-
-                        setAdjustAmountInput(nextValue);
-
-                      }
-
-                    }}
-
-                    style={{
-
-                      width: '100%',
-
-                      boxSizing: 'border-box',
-
-                      height: 'var(--input-height)',
-
-                      minHeight: 'var(--input-height)',
-
-                      border: isAdjustAmountInvalid
-
-                        ? '1px solid rgba(185, 28, 28, 0.75)'
-
-                        : '1px solid var(--border-medium)',
-
-                      borderRadius: 8,
-
-                      padding: '0 var(--nf-control-padding-x)',
-
-                      color: isAdjustAmountInvalid ? '#b91c1c' : 'var(--text-main)',
-
-                      font: 'inherit'
-
-                    }}
-
-                  />
-
-                  {isEditingArchivedAccount ? (
-
-                    <span className="account-operation-field-hint">
-
-                      修改余额/增减金额会自动将该账户重新启用
-
-                    </span>
-
-                  ) : null}
-
-                </label>
-
-                <div
-
-                  style={{
-
-                    display: 'grid',
-
-                    gridTemplateColumns: '1fr 1fr',
-
-                    gap: 4,
-
-                    height: 'var(--segmented-control-height)',
-
-                    borderRadius: 10,
-
-                    padding: 4,
-
-                    background: 'var(--surface-muted)'
-
-                  }}
-
-                >
-
-                  {[
-
-                    { value: 'increase', label: '+' },
-
-                    { value: 'decrease', label: '-' }
-
-                  ].map((option) => (
-
-                    <button
-
-                      key={option.value}
-
-                      type="button"
-
-                      onClick={() => setAdjustDirection(option.value as AdjustDirection)}
-
-                      style={{
-
-                        boxSizing: 'border-box',
-
-                        height: 'var(--segmented-control-option-height)',
-
-                        minHeight: 'var(--segmented-control-option-height)',
-
-                        border: 0,
-
-                        borderRadius: 8,
-
-                        padding: 0,
-
-                        background:
-
-                          adjustDirection === option.value
-
-                            ? 'var(--button-primary-bg)'
-
-                            : 'transparent',
-
-                        color:
-
-                          adjustDirection === option.value
-
-                            ? 'var(--button-primary-text)'
-
-                            : 'var(--text-secondary)',
-
-                        cursor: 'pointer',
-
-                        font: 'inherit',
-
-                        fontWeight: 700
-
-                      }}
-
-                    >
-
-                      {option.label}
-
-                    </button>
-
-                  ))}
-
-                </div>
-
-                <div className="account-operation-change-preview">
-
-                  <span>变更：</span>
-
-                  <span className="change-preview-amount-line">
-
-                    {formatMoney(currentAccount.amount)} 至{' '}
-
-                    {formatMoney(toStoredGroupAmount(editingAccount.groupName, nextAdjustedEditableAmount))}
-
-                  </span>
-
-                  <strong
-
-                    style={{
-
-                      color: getSignedAmountTone(
-
-                        signedAdjustAmount,
-
-                        globalSettings.positiveNegativeColorMode
-
-                      ).color
-
-                    }}
-
-                  >
-
-                    {signedAdjustAmountLabel}
-
-                  </strong>
-
-                </div>
-
-                {renderAccountOperationDatePicker({
-
-                  value: adjustAmountDateInput,
-
-                  selectedDate: adjustAmountSelectedDate,
-
-                  parsedDate: parsedAdjustAmountDate,
-
-                  visibleMonth: adjustAmountVisibleMonth,
-
-                  futureHint: adjustAmountDateFutureHint,
-
-                  onInputChange: updateAdjustAmountDateInput,
-
-                  onCalendarSelect: selectAdjustAmountCalendarDate,
-
-                  onVisibleMonthChange: setAdjustAmountVisibleMonth
-
-                })}
-
-                <label className="account-operation-field">
-
-                  <span>备注</span>
-
-                  <textarea
-
-                    className="account-operation-input account-operation-textarea"
-
-                    placeholder="可选"
-
-                    rows={2}
-
-                    value={adjustAmountNoteInput}
-
-                    onChange={(event) => setAdjustAmountNoteInput(event.target.value)}
-
-                  />
-
-                </label>
-
-              </div>
-
-            )}
-
-
-
-            <div className="account-operation-actions">
-
-              <button
-
-                type="button"
-
-                onClick={requestCloseEditor}
-
-                className="account-operation-button"
-
-              >
-
-                取消
-
-              </button>
-
-              <button
-
-                type="submit"
-
-                disabled={isAmountEditorSubmitDisabled}
-
-                className="account-operation-button account-operation-button--confirm"
-
-              >
-
-                确定
-
-              </button>
-
-            </div>
-
-          </form>
-
-        </OverlayBackdrop>
+          onDraftAmountInputChange={(value) => {
+            const nextValue = sanitizeNonNegativeInput(value);
+
+            if (isNonNegativeInput(nextValue)) {
+              setDraftAmount(nextValue);
+            }
+          }}
+          onSetAmountNoteChange={setSetAmountNoteInput}
+          onAdjustAmountInputChange={(value) => {
+            const nextValue = sanitizeNonNegativeInput(value);
+
+            if (isNonNegativeInput(nextValue)) {
+              setAdjustAmountInput(nextValue);
+            }
+          }}
+          onAdjustDirectionChange={setAdjustDirection}
+          onAdjustAmountNoteChange={setAdjustAmountNoteInput}
+          onSubmit={saveAmount}
+          onCancel={requestCloseEditor}
+        />
 
       ) : null}
 
 
 
       {editingAccountInfo && accountInfoEntry ? (
-
-        <OverlayBackdrop
-
-          onBack={requestCloseAccountInfoEditor}
-
-          className="layout-layer layout-layer--right"
-
-          style={{
-
-            position: 'fixed',
-
-            inset: 0,
-
-            display: 'grid',
-
-            placeItems: 'center',
-
-            padding: 24,
-
-            background: 'var(--modal-backdrop)'
-
+        <AccountInfoEditorDialog
+          title={accountInfoEntry.name}
+          accountName={accountNameDraft}
+          accountAlias={accountAliasDraft}
+          accountAliasMaxLength={ACCOUNT_MARK_MAX_CHARS}
+          aliasPreview={(
+            <AccountMark
+              account={{
+                name: accountNameDraft.trim() || accountInfoEntry.name,
+                alias: accountAliasDraft
+              }}
+              className="account-mark--list"
+            />
+          )}
+          error={accountInfoError}
+          onAccountNameChange={(value) => {
+            setAccountNameDraft(value);
+            setAccountInfoError('');
           }}
-
-        >
-
-          <form
-
-            className="account-operation-panel"
-
-            onClick={(event) => event.stopPropagation()}
-
-            onSubmit={(event) => {
-
-              event.preventDefault();
-
-              saveAccountInfo();
-
-            }}
-
-            style={{
-
-              width: 'min(380px, 100%)',
-
-              borderRadius: 12,
-
-              padding: 24,
-
-              background: 'var(--surface-strong)',
-
-              boxShadow: 'var(--shadow-popover)'
-
-            }}
-
-          >
-
-            <h2 style={{ margin: '0 0 18px', fontSize: '1.45rem' }}>
-
-              {accountInfoEntry.name}
-
-            </h2>
-
-
-
-            <label className="account-operation-field">
-
-              <span>账户名称</span>
-
-              <input
-
-                className="account-operation-input"
-
-                autoFocus
-
-                type="text"
-
-                value={accountNameDraft}
-
-                onChange={(event) => {
-
-                  setAccountNameDraft(event.target.value);
-
-                  setAccountInfoError('');
-
-                }}
-
-              />
-
-            </label>
-
-
-
-            <label className="account-operation-field" style={{ marginTop: 14 }}>
-
-              <span>自定义缩写</span>
-
-              <input
-
-                className="account-operation-input"
-
-                type="text"
-
-                maxLength={ACCOUNT_MARK_MAX_CHARS}
-
-                placeholder="留空时自动生成"
-
-                value={accountAliasDraft}
-
-                onChange={(event) => setAccountAliasDraft(limitAccountAliasInput(event.target.value))}
-
-              />
-
-            </label>
-
-
-
-            <div className="account-alias-preview">
-
-              <AccountMark
-
-                account={{
-
-                  name: accountNameDraft.trim() || accountInfoEntry.name,
-
-                  alias: accountAliasDraft
-
-                }}
-
-                className="account-mark--list"
-
-              />
-
-            </div>
-
-
-
-            {accountInfoError ? (
-
-              <p style={{ margin: '12px 0 0', color: '#b91c1c', fontSize: '0.92rem' }}>
-
-                {accountInfoError}
-
-              </p>
-
-            ) : null}
-
-
-
-            <div className="account-operation-actions">
-
-              <button
-
-                type="button"
-
-                onClick={requestCloseAccountInfoEditor}
-
-                className="account-operation-button"
-
-              >
-
-                取消
-
-              </button>
-
-              <button
-
-                type="submit"
-
-                className="account-operation-button account-operation-button--confirm"
-
-              >
-
-                确定
-
-              </button>
-
-            </div>
-
-          </form>
-
-        </OverlayBackdrop>
+          onAccountAliasChange={(value) => setAccountAliasDraft(limitAccountAliasInput(value))}
+          onSubmit={saveAccountInfo}
+          onCancel={requestCloseAccountInfoEditor}
+        />
 
       ) : null}
 
 
 
       {isAddingAccount ? (
-
-        <OverlayBackdrop
-
-          onBack={requestCloseAddAccount}
-
-          className="layout-layer layout-layer--left"
-
-          style={{
-
-            position: 'fixed',
-
-            inset: 0,
-
-            display: 'grid',
-
-            placeItems: 'center',
-
-            padding: 24,
-
-            background: 'var(--modal-backdrop)'
-
+        <AccountRestoreDialog
+          archivedAccounts={archivedAccounts}
+          filteredAccounts={filteredArchivedAccountsForRestore}
+          searchQuery={archivedAccountSearchQuery}
+          onSearchQueryChange={setArchivedAccountSearchQuery}
+          getRestoreTitle={getArchivedAccountRestoreTitle}
+          getArchivedAtLabel={getArchivedAccountArchivedAtLabel}
+          formatMoney={formatMoney}
+          onRestore={(account) => {
+            if (restoreAccount(account.groupName, account)) {
+              closeAddAccount();
+            }
           }}
-
-        >
-
-          <section
-
-            onClick={(event) => event.stopPropagation()}
-
-            className="account-add-restore-panel"
-
-            style={{
-
-              width: 'min(640px, 100%)',
-
-              maxHeight: '84vh',
-
-              overflowY: 'auto',
-
-              borderRadius: 16,
-
-              padding: 'clamp(18px, 2vw, 24px)',
-
-              border: '1px solid var(--border-soft)',
-
-              background: 'var(--account-add-panel-bg)',
-
-              boxShadow: 'var(--shadow-popover)'
-
-            }}
-
-          >
-
-            <header className="account-add-restore-panel__header">
-
-              <h2 className="account-add-restore-panel__title">恢复已归档账户</h2>
-
-            </header>
-
-
-
-            <section style={{ display: 'grid', gap: 12 }}>
-
-              <h3 style={{ margin: 0, fontSize: '1rem' }}>已归档账户列表</h3>
-
-              {archivedAccounts.length === 0 ? (
-
-                <p style={{ margin: 0, color: 'var(--text-muted)' }}>暂无可恢复账户</p>
-
-              ) : (
-
-                <>
-
-                  <label style={{ display: 'grid', gap: 8, color: 'var(--text-secondary)' }}>
-
-                    <input
-
-                      type="text"
-
-                      aria-label="搜索已归档账户"
-
-                      placeholder="搜索已归档账户名称"
-
-                      value={archivedAccountSearchQuery}
-
-                      onChange={(event) => setArchivedAccountSearchQuery(event.target.value)}
-
-                      style={{
-
-                        width: '100%',
-
-                        border: '1px solid var(--border-medium)',
-
-                        borderRadius: 8,
-
-                        padding: '9px 10px',
-
-                        background: 'transparent',
-
-                        color: 'var(--text-main)',
-
-                        font: 'inherit'
-
-                      }}
-
-                    />
-
-                  </label>
-
-                  {filteredArchivedAccountsForRestore.length === 0 ? (
-
-                    <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.92rem' }}>
-
-                      未找到匹配的已归档账户
-
-                    </p>
-
-                  ) : (
-
-                    <div style={{ display: 'grid', gap: 8 }}>
-
-                      {filteredArchivedAccountsForRestore.map((account) => (
-
-                        <article
-
-                          key={account.id}
-
-                          className="account-restore-card"
-
-                        >
-
-                          <span className="account-restore-card__content">
-
-                            <strong className="account-restore-card__title">
-
-                              {getArchivedAccountRestoreTitle(account)}
-
-                            </strong>
-
-                            <span className="account-restore-card__meta">
-
-                              {getArchivedAccountArchivedAtLabel(account.archivedAt)} ·{' '}
-
-                              {formatMoney(account.amount)}
-
-                            </span>
-
-                          </span>
-
-                          <button
-
-                            type="button"
-
-                            onClick={() => {
-
-                              if (restoreAccount(account.groupName, account)) {
-
-                                closeAddAccount();
-
-                              }
-
-                            }}
-
-                            className="account-operation-button account-restore-card__restore-button"
-
-                          >
-
-                            恢复
-
-                          </button>
-
-                        </article>
-
-                      ))}
-
-                    </div>
-
-                  )}
-
-                </>
-
-              )}
-
-            </section>
-
-          </section>
-
-        </OverlayBackdrop>
+          onCancel={requestCloseAddAccount}
+        />
 
       ) : null}
 
 
 
       {isAddingAccount ? (
-
-        <OverlayBackdrop
-
-          onBack={requestCloseAddAccount}
-
-          className="layout-layer layout-layer--right"
-
-          style={{
-
-            position: 'fixed',
-
-            inset: 0,
-
-            display: 'grid',
-
-            placeItems: 'center',
-
-            padding: 24,
-
-            background: 'var(--modal-backdrop)'
-
+        <AccountCreateDialog
+          accountTypeInputRef={newAccountTypeInputRef}
+          accountTypeInput={newAccountTypeInput}
+          accountTypeGhostText={newAccountTypeGhostText}
+          accountTypeCount={groups.length}
+          newAccountName={newAccountName}
+          newAccountAmount={newAccountAmount}
+          error={newAccountError}
+          onAccountTypeInputChange={updateNewAccountTypeInput}
+          onConfirmAccountTypeInput={confirmNewAccountTypeInput}
+          onAccountTypeWheel={handleNewAccountGroupWheel}
+          onSwitchAccountType={switchNewAccountGroup}
+          onOpenCreateAccountType={() => openCreateAccountType()}
+          onNameChange={(value) => {
+            setNewAccountName(value);
+            setNewAccountError('');
           }}
-
-        >
-
-          <form
-
-            onClick={(event) => event.stopPropagation()}
-
-            onSubmit={(event) => {
-
-              event.preventDefault();
-
-              saveNewAccount();
-
-            }}
-
-            className="account-add-restore-panel account-add-restore-panel--form"
-
-            style={{
-
-              width: 'min(380px, 100%)',
-
-              borderRadius: 12,
-
-              padding: 24,
-
-              border: '1px solid var(--border-soft)',
-
-              background: 'var(--account-add-panel-bg)',
-
-              boxShadow: 'var(--shadow-popover)'
-
-            }}
-
-          >
-
-            <header className="account-add-restore-panel__header">
-
-              <h2 className="account-add-restore-panel__title">账户新增</h2>
-
-            </header>
-
-
-
-            <div className="account-type-select-row">
-
-              <label>
-
-                选择类型
-
-                <div
-
-                  className="stepper-input"
-
-                  onWheel={handleNewAccountGroupWheel}
-
-                  style={{
-
-                    position: 'relative',
-
-                    width: '100%'
-
-                  }}
-
-                >
-
-                  <div className="stepper-input__ghost" aria-hidden="true">
-
-                    <span style={{ color: 'transparent' }}>{newAccountTypeInput}</span>
-
-                    <span>{newAccountTypeGhostText}</span>
-
-                  </div>
-
-                  <input
-
-                    ref={newAccountTypeInputRef}
-
-                    autoFocus
-
-                    type="text"
-
-                    value={newAccountTypeInput}
-
-                    onChange={(event) => updateNewAccountTypeInput(event.target.value)}
-
-                    onKeyDown={(event) => {
-
-                      if (event.key === 'Enter') {
-
-                        event.preventDefault();
-
-                        confirmNewAccountTypeInput();
-
-                      }
-
-                    }}
-
-                    onWheel={(event) => {
-
-                      event.preventDefault();
-
-                      event.stopPropagation();
-
-
-
-                      if (event.deltaY === 0) {
-
-                        return;
-
-                      }
-
-
-
-                      switchNewAccountGroup(event.deltaY > 0 ? 1 : -1);
-
-                    }}
-
-                  />
-
-                  <div
-
-                    className="stepper-input__controls"
-
-                    style={{
-
-                      position: 'absolute',
-
-                      top: 6,
-
-                      right: 6,
-
-                      bottom: 6,
-
-                      display: 'grid',
-
-                      width: 24,
-
-                      overflow: 'hidden',
-
-                      border: 0,
-
-                      borderRadius: 8,
-
-                      background: 'transparent',
-
-                      boxShadow: 'none'
-
-                    }}
-
-                  >
-
-                    {[
-
-                      { label: '上一个账户类型', direction: -1 as const, path: 'M7 14l5-5 5 5' },
-
-                      { label: '下一个账户类型', direction: 1 as const, path: 'M7 10l5 5 5-5' }
-
-                    ].map((control) => (
-
-                      <button
-
-                        key={control.label}
-
-                        type="button"
-
-                        aria-label={control.label}
-
-                        disabled={groups.length < 2}
-
-                        onMouseDown={(event) => event.preventDefault()}
-
-                        onClick={() => switchNewAccountGroup(control.direction)}
-
-                        style={{
-
-                          display: 'grid',
-
-                          placeItems: 'center',
-
-                          border: 0,
-
-                          borderTop:
-
-                            control.direction === 1
-
-                              ? '1px solid var(--border-soft)'
-
-                              : 0,
-
-                          padding: 0,
-
-                          background: 'transparent',
-
-                          color: 'var(--text-muted)',
-
-                          cursor: groups.length < 2 ? 'default' : 'pointer'
-
-                        }}
-
-                      >
-
-                        <svg
-
-                          aria-hidden="true"
-
-                          viewBox="0 0 24 24"
-
-                          fill="none"
-
-                          style={{ width: 12, height: 12 }}
-
-                        >
-
-                          <path
-
-                            d={control.path}
-
-                            stroke="currentColor"
-
-                            strokeWidth="2"
-
-                            strokeLinecap="round"
-
-                            strokeLinejoin="round"
-
-                          />
-
-                        </svg>
-
-                      </button>
-
-                    ))}
-
-                  </div>
-
-                </div>
-
-              </label>
-
-              <button
-
-                type="button"
-
-                aria-label="新建账户类型"
-
-                onClick={() => openCreateAccountType()}
-
-                className="account-type-add-button"
-
-              >
-
-                <NfSvgIcon svg={NfActionAddIcon} className="account-type-add-icon" decorative />
-
-              </button>
-
-            </div>
-
-
-
-            <label style={{ display: 'grid', gap: 8, color: 'var(--text-secondary)', marginTop: 14 }}>
-
-              账户名称
-
-              <input
-
-                type="text"
-
-                value={newAccountName}
-
-                onChange={(event) => {
-
-                  setNewAccountName(event.target.value);
-
-                  setNewAccountError('');
-
-                }}
-
-                style={{
-
-                  width: '100%',
-
-                  border: '1px solid var(--border-medium)',
-
-                  borderRadius: 8,
-
-                  padding: '10px 12px',
-
-                  background: 'transparent',
-
-                  color: 'var(--text-main)',
-
-                  font: 'inherit'
-
-                }}
-
-              />
-
-            </label>
-
-
-
-            <label style={{ display: 'grid', gap: 8, color: 'var(--text-secondary)', marginTop: 14 }}>
-
-              初始金额
-
-              <input
-
-                type="text"
-
-                inputMode="decimal"
-
-                value={newAccountAmount}
-
-                onChange={(event) => {
-
-                  const nextValue = sanitizeNonNegativeInput(event.target.value);
-
-
-
-                  if (isNonNegativeInput(nextValue)) {
-
-                    setNewAccountAmount(nextValue);
-
-                    setNewAccountError('');
-
-                  }
-
-                }}
-
-                style={{
-
-                  width: '100%',
-
-                  border: '1px solid var(--border-medium)',
-
-                  borderRadius: 8,
-
-                  padding: '10px 12px',
-
-                  background: 'transparent',
-
-                  color: 'var(--text-main)',
-
-                  font: 'inherit'
-
-                }}
-
-              />
-
-            </label>
-
-
-
-            {newAccountError ? (
-
-              <p style={{ margin: '12px 0 0', color: '#b91c1c', fontSize: '0.92rem' }}>
-
-                {newAccountError}
-
-              </p>
-
-            ) : null}
-
-
-
-            <div className="account-add-form-actions">
-
-              <button
-
-                type="button"
-
-                onClick={requestCloseAddAccount}
-
-                className="account-add-form-button account-add-form-button--secondary"
-
-              >
-
-                取消
-
-              </button>
-
-              <button
-
-                type="submit"
-
-                className="account-add-form-button account-add-form-button--primary"
-
-              >
-
-                确定
-
-              </button>
-
-            </div>
-
-          </form>
-
-        </OverlayBackdrop>
+          onAmountInputChange={(value) => {
+            const nextValue = sanitizeNonNegativeInput(value);
+
+            if (isNonNegativeInput(nextValue)) {
+              setNewAccountAmount(nextValue);
+              setNewAccountError('');
+            }
+          }}
+          onSubmit={saveNewAccount}
+          onCancel={requestCloseAddAccount}
+        />
 
       ) : null}
 
@@ -38636,19 +26868,19 @@ function App() {
 
               padding: 24,
 
-              background: 'var(--surface-strong)',
+              background: 'var(--panel-bg)',
 
-              boxShadow: 'var(--shadow-popover)'
+              boxShadow: 'var(--shadow-panel)'
 
             }}
 
           >
 
-            <p className="eyebrow" style={{ marginBottom: 8 }}>
+            <h2 className="account-add-restore-panel__title" style={{ margin: '0 0 18px' }}>
 
               {accountTypeEditor.mode === 'create' ? '新增账户类型' : '编辑账户类型'}
 
-            </p>
+            </h2>
 
 
 
@@ -38681,6 +26913,8 @@ function App() {
                   borderRadius: 8,
 
                   padding: '10px 12px',
+
+                  background: 'transparent',
 
                   color: 'var(--text-main)',
 
