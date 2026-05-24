@@ -136,10 +136,6 @@ const createRecordId = (record: Pick<RollupImportRecord, 'date' | 'mode' | 'acco
 const createGroupingKey = (record: Pick<RollupImportRecord, 'date' | 'mode' | 'accountKeyword'>) =>
   `${record.accountKeyword}\u0000${record.date}\u0000${record.mode}`;
 
-const createDateAccountKey = (
-  record: Pick<RollupImportRecord, 'date' | 'accountKeyword'>
-) => `${record.accountKeyword}\u0000${record.date}`;
-
 const normalizeUnresolvedItems = (
   value: unknown,
   issues: RollupImportIssue[]
@@ -285,7 +281,6 @@ const normalizeRecords = (
     }
 
     const rawCurrency = normalizeStringField(recordValue.currency);
-    const currency = rawCurrency || CURRENCY_CNY;
 
     if (!rawCurrency) {
       issues.push({
@@ -321,24 +316,15 @@ const normalizeRecords = (
     ];
   });
 
-  const byDateAndAccount = new Map<string, Set<RollupImportMode>>();
+  const hasChangeRecord = normalizedRecords.some((record) => record.mode === 'change');
+  const hasBalanceRecord = normalizedRecords.some((record) => record.mode === 'balance');
 
-  normalizedRecords.forEach((record) => {
-    const key = createDateAccountKey(record);
-    const modes = byDateAndAccount.get(key) ?? new Set<RollupImportMode>();
-    modes.add(record.mode);
-    byDateAndAccount.set(key, modes);
-  });
-
-  byDateAndAccount.forEach((modes, key) => {
-    if (modes.has('change') && modes.has('balance')) {
-      const [accountKeyword, date] = key.split('\u0000');
-      issues.push({
-        level: 'high',
-        message: `同一日期 ${date}、账户关键词「${accountKeyword || '空'}」同时存在 change 和 balance`
-      });
-    }
-  });
+  if (hasChangeRecord && hasBalanceRecord) {
+    issues.push({
+      level: 'high',
+      message: '本次导入同时包含净变动和余额记录，可能导致重复理解或重复计算，请确认后再导入'
+    });
+  }
 
   const mergedRecords = new Map<string, RollupImportRecord>();
 
@@ -444,7 +430,7 @@ export const parseRollupImportJson = (
   ) {
     issues.push({
       level: 'high',
-      message: '这个汇总文件内容已经导入过'
+      message: '高度疑似完全重复：此前已导入过相同汇总文件内容'
     });
   }
 

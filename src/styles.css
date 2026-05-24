@@ -93,7 +93,7 @@
   --workspace-panel-height: calc(
     100vh - var(--titlebar-height) - var(--workspace-padding) - var(--workspace-padding)
   );
-  --account-add-panel-bg: var(--panel-bg-strong);
+  --account-add-panel-bg: var(--panel-bg);
   --nf-window-icon-color: rgba(255, 255, 255, 0.72);
   --nf-window-icon-hover-color: rgba(255, 255, 255, 0.96);
   --nf-window-close-hover-color: #f08f9a;
@@ -143,9 +143,9 @@
   --text-secondary: #4b5563;
   --text-muted: #6b7280;
   --text-subtle: #9ca3af;
-  --panel-bg: rgba(255, 255, 255, 0.78);
+  --panel-bg: #ffffff;
   --panel-bg-strong: #ffffff;
-  --surface-bg: rgba(255, 255, 255, 0.72);
+  --surface-bg: #ffffff;
   --surface-strong: #ffffff;
   --surface-muted: rgba(31, 41, 55, 0.06);
   --surface-soft: rgba(255, 255, 255, 0.52);
@@ -228,9 +228,9 @@
   --text-secondary: #c9c2b6;
   --text-muted: #9aa3af;
   --text-subtle: #737c88;
-  --panel-bg: rgba(34, 37, 43, 0.84);
+  --panel-bg: #262a31;
   --panel-bg-strong: #262a31;
-  --surface-bg: rgba(47, 50, 57, 0.72);
+  --surface-bg: #30343b;
   --surface-strong: #30343b;
   --surface-muted: rgba(232, 226, 215, 0.07);
   --surface-soft: rgba(232, 226, 215, 0.05);
@@ -312,9 +312,9 @@
   --text-secondary: #7e6876;
   --text-muted: #8f7786;
   --text-subtle: #a58d9c;
-  --panel-bg: rgba(255, 251, 253, 0.94);
+  --panel-bg: #fffbfd;
   --panel-bg-strong: #fffbfd;
-  --surface-bg: rgba(255, 255, 255, 0.72);
+  --surface-bg: #fff9fc;
   --surface-strong: #fff9fc;
   --surface-muted: rgba(126, 68, 95, 0.07);
   --surface-soft: rgba(255, 255, 255, 0.58);
@@ -360,9 +360,9 @@
   --text-secondary: #cbb7c3;
   --text-muted: #b79ead;
   --text-subtle: #a98f9f;
-  --panel-bg: rgba(35, 29, 39, 0.94);
+  --panel-bg: #231d27;
   --panel-bg-strong: #231d27;
-  --surface-bg: rgba(45, 37, 49, 0.82);
+  --surface-bg: #2b2430;
   --surface-strong: #2b2430;
   --surface-muted: rgba(245, 186, 215, 0.08);
   --surface-soft: rgba(245, 186, 215, 0.06);
@@ -691,9 +691,8 @@ textarea::placeholder {
   border: 1px solid var(--border-soft);
   border-radius: 28px;
   background: var(--panel-bg);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-panel);
   text-align: center;
-  backdrop-filter: blur(10px);
 }
 
 .left-browse-panel,
@@ -742,9 +741,9 @@ textarea::placeholder {
   padding: var(--right-panel-padding);
   background: var(--panel-bg);
   box-shadow: var(--shadow-panel);
-  backdrop-filter: blur(10px);
 }
 
+.right-panel-page,
 .right-panel-section,
 .right-panel-stack,
 .right-panel-form-grid {
@@ -752,8 +751,28 @@ textarea::placeholder {
   display: grid;
 }
 
+.right-panel-page,
 .right-panel-section {
   gap: var(--right-panel-section-gap);
+}
+
+.right-panel-page {
+  flex: 0 0 auto;
+  align-content: start;
+}
+
+.right-panel-section__content {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  gap: var(--right-panel-section-gap);
+  align-content: start;
+}
+
+.right-panel-section__footer {
+  min-height: 0;
+  display: grid;
+  gap: var(--right-panel-action-gap);
 }
 
 .right-panel-stack,
@@ -767,7 +786,13 @@ textarea::placeholder {
 
 .right-panel-section {
   flex: 0 0 auto;
+  position: relative;
   align-content: start;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: var(--right-panel-subsection-padding, 14px);
+  background: var(--surface-soft);
 }
 
 .right-panel-stack {
@@ -779,11 +804,11 @@ textarea::placeholder {
 }
 
 .right-panel-stack--snapshot {
-  min-height: 100%;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  align-content: start;
 }
 
 .right-panel-subsection {
+  position: relative;
   display: grid;
   gap: var(--right-panel-stack-gap);
   border: 1px solid var(--border-soft);
@@ -797,10 +822,6 @@ textarea::placeholder {
   color: var(--text-main);
   font-size: 1.12rem;
   line-height: 1.2;
-}
-
-.right-panel-spacer {
-  min-height: 1px;
 }
 
 .right-panel-eyebrow {
@@ -904,6 +925,11 @@ textarea::placeholder {
 
 .right-panel-action--save {
   margin-top: 4px;
+}
+
+.right-panel-page-action {
+  justify-self: stretch;
+  width: 100%;
 }
 
 .right-panel-action--danger {
@@ -1140,11 +1166,6 @@ textarea::placeholder {
 
 .right-panel-form-grid.is-chart-control-locked .right-panel-label-text {
   color: var(--text-subtle);
-}
-
-.chart-settings-lock-note {
-  border-left: 2px solid var(--border-medium);
-  padding-left: 9px;
 }
 
 .right-panel-primary-button:disabled {
@@ -2124,6 +2145,30 @@ textarea::placeholder {
   border-radius: 8px;
 }
 
+.left-browse-panel.example-mode-disabled-panel {
+  border-radius: 28px;
+}
+
+.global-settings-page.example-mode-disabled-panel {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  border-radius: 18px;
+}
+
+.chart-settings-locked-panel,
+.right-panel-subsection.example-mode-disabled-panel {
+  border-radius: 12px;
+}
+
+.example-mode-disabled-panel--settings-page {
+  min-height: 100%;
+}
+
+.example-mode-disabled-panel--left-page {
+  height: 100%;
+}
+
 .example-mode-disabled-panel > :not(.example-mode-disabled-panel__banner) {
   pointer-events: none;
   user-select: none;
@@ -2371,7 +2416,6 @@ textarea::placeholder {
   text-align: center;
 }
 
-.backup-reminder-modal button,
 .account-type-editor-panel > div:last-of-type button {
   box-sizing: border-box !important;
   height: var(--nf-control-height) !important;
@@ -2385,6 +2429,20 @@ textarea::placeholder {
   height: var(--input-height) !important;
   min-height: var(--input-height) !important;
   padding-block: 0 !important;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background-color 140ms ease;
+}
+
+.account-type-editor-panel input:hover {
+  border-color: var(--border-strong) !important;
+}
+
+.account-type-editor-panel input:focus {
+  border-color: var(--accent-border) !important;
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-bg);
 }
 
 .account-add-restore-panel input {
@@ -2470,7 +2528,10 @@ textarea::placeholder {
   min-height: 0 !important;
   max-height: none !important;
   overflow-y: auto !important;
+  border: 1px solid var(--border-soft) !important;
   border-radius: 24px !important;
+  background: var(--panel-bg) !important;
+  box-shadow: var(--shadow-panel) !important;
 }
 
 .layout-layer--left .search-panel {
@@ -2484,7 +2545,10 @@ textarea::placeholder {
   min-height: 0 !important;
   max-height: none !important;
   overflow-y: auto !important;
+  border: 1px solid var(--border-soft) !important;
   border-radius: 24px !important;
+  background: var(--panel-bg) !important;
+  box-shadow: var(--shadow-panel) !important;
 }
 
 .layout-layer--search .search-panel {
@@ -3810,13 +3874,13 @@ h1 {
   opacity: 0.86;
 }
 
-.right-panel-section--rollup-import-actions {
+.right-panel-page--rollup-import-actions {
   flex: 0 0 auto;
   display: grid;
   align-content: start;
 }
 
-.right-panel-section--rollup-import-actions .right-panel-stack {
+.right-panel-page--rollup-import-actions .right-panel-stack {
   display: grid;
   grid-auto-rows: max-content;
   align-content: start;
@@ -4286,6 +4350,8 @@ h1 {
 
 .rollup-import-risk-note p {
   margin: 0;
+  font-size: 0.93rem;
+  line-height: 1.55;
 }
 
 .flash-note-container {
@@ -4295,7 +4361,6 @@ h1 {
   border-radius: 18px;
   background: var(--panel-bg);
   box-shadow: var(--shadow-panel);
-  backdrop-filter: blur(10px);
 }
 
 .flash-note-page {
@@ -4500,12 +4565,12 @@ h1 {
   grid-template-columns: minmax(0, 1fr);
   gap: 0;
   align-items: center;
-  height: var(--nf-control-height);
-  min-height: var(--nf-control-height);
+  height: 32px;
+  min-height: 32px;
   max-width: 210px;
   border: 1px solid var(--border-soft);
   border-radius: 8px;
-  padding: 0 8px;
+  padding: 0 9px;
   background: var(--surface-soft);
   color: var(--text-main);
   cursor: pointer;
@@ -4539,7 +4604,7 @@ h1 {
 }
 
 .flash-note-setup-panel .flash-note-account-chip span {
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 500;
 }
 
@@ -4593,8 +4658,8 @@ h1 {
   grid-template-columns: minmax(74px, 0.16fr) minmax(0, 1fr);
   align-items: center;
   gap: 10px;
-  min-height: 54px;
-  padding-block: 10px;
+  min-height: 46px;
+  padding-block: 7px;
 }
 
 .quick-single-entry-account-group + .quick-single-entry-account-group {
@@ -4626,8 +4691,8 @@ h1 {
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  height: 34px;
-  min-height: 34px;
+  height: 32px;
+  min-height: 32px;
   padding-inline: 9px;
   justify-items: start;
   background: var(--surface-soft);
@@ -4637,7 +4702,7 @@ h1 {
   min-width: 0;
   width: 100%;
   color: var(--text-secondary);
-  font-size: 0.84rem;
+  font-size: 0.78rem;
   font-weight: 500;
   text-align: left;
 }
