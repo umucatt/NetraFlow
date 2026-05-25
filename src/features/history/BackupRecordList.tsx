@@ -41,7 +41,7 @@ export default function BackupRecordList<TRecord extends BackupRecordListRecord>
                 border: `1px solid ${
                   record.method === 'auto' ? 'rgba(37, 99, 235, 0.16)' : 'var(--border-soft)'
                 }`,
-                borderRadius: 10,
+                borderRadius: 'var(--radius-card)',
                 padding: 14,
                 background:
                   record.method === 'auto' ? 'rgba(37, 99, 235, 0.08)' : manualRecordBackground,
@@ -75,7 +75,7 @@ export default function BackupRecordList<TRecord extends BackupRecordListRecord>
                 <span
                   style={{
                     flex: '0 0 auto',
-                    borderRadius: 999,
+                    borderRadius: 'var(--radius-chip)',
                     padding: '4px 8px',
                     background:
                       record.method === 'auto' ? 'rgba(37, 99, 235, 0.12)' : 'var(--surface-muted)',
@@ -103,7 +103,7 @@ export default function BackupRecordList<TRecord extends BackupRecordListRecord>
                     key={item.label}
                     style={{
                       minWidth: 0,
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-card)',
                       padding: '9px 10px',
                       background: 'var(--surface-bg)'
                     }}

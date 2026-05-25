@@ -47,7 +47,7 @@ export default function HistoryFilterToolbar({
         display: 'grid',
         gap: 12,
         border: '1px solid var(--border-soft)',
-        borderRadius: 12,
+        borderRadius: 'var(--radius-section)',
         padding: 12,
         background: 'var(--surface-strong)',
         marginBottom: 16
@@ -66,7 +66,7 @@ export default function HistoryFilterToolbar({
           onChange={handleInputChange}
           style={{
             border: '1px solid var(--border-medium)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-input)',
             padding: '9px 10px',
             background: 'var(--panel-bg-strong)',
             color: 'var(--text-main)',
