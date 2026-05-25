@@ -102,7 +102,7 @@ test('page surfaces and right panel page frames stay scoped', () => {
       mainPanelSource.indexOf('example-mode-disabled-panel__banner'),
     true
   );
-  assert.match(disabledLeftPageBlock, /border-radius: 28px;/);
+  assert.match(disabledLeftPageBlock, /border-radius: var\(--radius-page\);/);
 
   assert.equal(homeActionsSource.includes('renderRightPanelPage('), true);
   assert.equal(historyActionsSource.includes('renderRightPanelPage('), true);
@@ -520,6 +520,7 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
         allowToChangeInstallationDirectory?: boolean;
         createDesktopShortcut?: boolean;
         createStartMenuShortcut?: boolean;
+        runAfterFinish?: boolean;
         shortcutName?: string;
         uninstallDisplayName?: string;
         installerIcon?: string;
@@ -557,10 +558,11 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
   assert.equal(JSON.stringify(packageJson.build?.win?.target).includes('"target":"nsis"'), true);
   assert.equal(JSON.stringify(packageJson.build?.win?.target).includes('"x64"'), true);
   assert.equal(packageJson.build?.nsis?.oneClick, false);
-  assert.equal(packageJson.build?.nsis?.perMachine, false);
+  assert.equal(packageJson.build?.nsis?.perMachine, true);
   assert.equal(packageJson.build?.nsis?.allowToChangeInstallationDirectory, true);
-  assert.equal(packageJson.build?.nsis?.createDesktopShortcut, true);
+  assert.equal(packageJson.build?.nsis?.createDesktopShortcut, false);
   assert.equal(packageJson.build?.nsis?.createStartMenuShortcut, true);
+  assert.equal(packageJson.build?.nsis?.runAfterFinish, false);
   assert.equal(packageJson.build?.nsis?.shortcutName, 'NetraFlow');
   assert.equal(packageJson.build?.nsis?.uninstallDisplayName, 'NetraFlow');
   assert.equal(packageJson.build?.nsis?.installerIcon, 'public/icons/netraflow.ico');
@@ -594,67 +596,120 @@ test('Windows installer install directory and uninstall cleanup rules are wired'
   const installerSource = readProjectFile('build/installer/installer.nsh');
   const packageSource = readProjectFile('package.json');
 
-  assert.equal(installerSource.includes('!define NETRAFLOW_INSTALL_DIR_NAME "NertaFlow"'), true);
+  assert.equal(installerSource.includes('!include LogicLib.nsh'), true);
+  assert.equal(installerSource.includes('!define NETRAFLOW_INSTALL_DIR_NAME "NetraFlow"'), true);
   assert.equal(installerSource.includes('Function NetraFlowFindDefaultInstallDir'), true);
   assert.equal(installerSource.includes('ReadEnvStr $NetraFlowWindowsDir "WINDIR"'), true);
-  assert.equal(installerSource.includes('GetLogicalDrives'), true);
+  assert.equal(installerSource.includes('StrCpy $NetraFlowDriveLetters "DEFGHIJKLMNOPQRSTUVWXYZ"'), true);
+  assert.equal(installerSource.includes('GetLogicalDrives'), false);
   assert.equal(installerSource.includes('GetDriveType'), true);
   assert.equal(installerSource.includes('$0 == 3'), true);
   assert.equal(installerSource.includes('$NetraFlowDriveLetter != $NetraFlowSystemDrive'), true);
+  assert.equal(installerSource.includes('${Break}'), true);
   assert.equal(installerSource.includes('StrCpy $INSTDIR "$NetraFlowPreferredDrive:\\${NETRAFLOW_INSTALL_DIR_NAME}"'), true);
   assert.equal(installerSource.includes('!undef APP_FILENAME'), true);
   assert.equal(installerSource.includes('!define APP_FILENAME "${NETRAFLOW_INSTALL_DIR_NAME}"'), true);
+  assert.equal(installerSource.includes('Var NetraFlowDefaultInstallDirApplied'), false);
   assert.equal(installerSource.includes('Function NetraFlowNormalizeInstallDir'), true);
   assert.equal(installerSource.includes('Function .onVerifyInstDir'), true);
-  assert.equal(installerSource.includes('!define MUI_PAGE_CUSTOMFUNCTION_LEAVE NetraFlowInstallModeLeave'), true);
+  assert.equal(installerSource.includes('MUI_PAGE_CUSTOMFUNCTION_LEAVE'), false);
   assert.equal(installerSource.includes('Function NetraFlowApplyDefaultInstallDir'), true);
-  assert.equal(installerSource.includes('Function NetraFlowInstallModeLeave'), true);
+  assert.equal(installerSource.includes('Function NetraFlowInstallModeLeave'), false);
   assert.equal(installerSource.includes('Function NetraFlowInstFilesPre'), false);
   assert.equal(installerSource.includes('!macro customPageAfterChangeDir'), false);
   assert.equal(installerSource.includes('MUI_PAGE_CUSTOMFUNCTION_PRE'), false);
+  assert.equal(installerSource.includes('!macro customFinishPage'), true);
+  assert.equal(installerSource.includes('!define MUI_FINISHPAGE_RUN_TEXT "运行 ${NETRAFLOW_PRODUCT_NAME}"'), true);
+  assert.equal(installerSource.includes('!define MUI_FINISHPAGE_RUN_NOTCHECKED'), true);
+  assert.equal(installerSource.includes('!define MUI_FINISHPAGE_SHOWREADME_TEXT "创建桌面快捷方式"'), true);
+  assert.equal(installerSource.includes('!define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED'), true);
+  assert.equal(installerSource.includes('Function NetraFlowCreateDesktopShortcutAfterFinish'), true);
+  assert.equal(installerSource.includes('CreateShortCut "$DESKTOP\\${NETRAFLOW_PRODUCT_NAME}.lnk" "$appExe"'), true);
   assert.equal(installerSource.includes('StrCpy $0 "$CMDLINE"'), true);
   assert.equal(installerSource.includes('$4 == "/D="'), true);
   assert.equal(installerSource.includes('Call NetraFlowFindDefaultInstallDir'), true);
   assert.equal(installerSource.includes('StrCpy $INSTDIR "$NetraFlowSelectedDir\\${NETRAFLOW_INSTALL_DIR_NAME}"'), true);
-  assert.equal(installerSource.includes('StrCpy $INSTDIR "$NetraFlowSelectedDir${NETRAFLOW_INSTALL_DIR_NAME}"'), true);
-  assert.equal(installerSource.includes('StrCpy $NetraFlowSelectedDir "$NetraFlowSelectedDir" -10'), true);
-  assert.equal(installerSource.includes('StrCpy $INSTDIR "$NetraFlowSelectedDir" -9'), true);
-  assert.equal(installerSource.includes('StrCpy $INSTDIR "$INSTDIR${NETRAFLOW_INSTALL_DIR_NAME}"'), true);
-  assert.equal(installerSource.includes('"\\NertaFlow\\NetraFlow"'), true);
-  assert.equal(installerSource.includes('"\\NertaFlow\\NertaFlow"'), true);
+  assert.equal(installerSource.includes('StrCpy $NetraFlowSelectedTail $NetraFlowSelectedDir "" -1'), true);
+  assert.equal(installerSource.includes('StrCpy $NetraFlowSelectedDir $NetraFlowSelectedDir -1'), true);
+  assert.equal(installerSource.includes('StrCpy $NetraFlowSelectedTail $NetraFlowSelectedDir 10 -10'), true);
+  assert.equal(installerSource.includes('StrCpy $INSTDIR "$NetraFlowSelectedDir${NETRAFLOW_INSTALL_DIR_NAME}"'), false);
+  assert.equal(installerSource.includes('!macro preInit'), false);
+  assert.equal(installerSource.includes('!macro customInit'), true);
+  assert.equal(installerSource.includes('"\\NertaFlow\\NetraFlow"'), false);
+  assert.equal(installerSource.includes('"\\NertaFlow\\NertaFlow"'), false);
   assert.equal(installerSource.includes('"\\Software\\NertaFlow\\NetraFlow"'), false);
   assert.equal(packageSource.includes('"afterPack": "scripts/after-pack-installer.mjs"'), true);
   assert.equal(packageSource.includes('"APP_PACKAGE_URL"'), false);
   assert.equal(installerSource.includes('RMDir /r "$APPDATA\\${NETRAFLOW_PRODUCT_NAME}"'), true);
+  assert.equal(installerSource.includes('RMDir /r "$APPDATA\\netraflow"'), true);
   assert.equal(installerSource.includes('RMDir /r "$LOCALAPPDATA\\${NETRAFLOW_PRODUCT_NAME}"'), true);
+  assert.equal(installerSource.includes('RMDir /r "$LOCALAPPDATA\\netraflow"'), true);
   assert.equal(installerSource.includes('RMDir /r "$INSTDIR\\userData"'), true);
-  assert.equal(installerSource.includes('Delete "$LOCALAPPDATA\\netraflow-updater\\installer.exe"'), true);
   assert.equal(installerSource.includes('RMDir /r "$LOCALAPPDATA\\netraflow-updater"'), true);
-  assert.equal(installerSource.includes('Delete "$INSTDIR\\uninstallerIcon.ico"'), true);
-  assert.equal(installerSource.includes('Delete "$INSTDIR\\installerIcon.ico"'), true);
-  assert.equal(installerSource.includes('Delete "$INSTDIR\\netraflow.ico"'), true);
-  assert.equal(installerSource.includes('Delete "$INSTDIR\\NetraFlow.ico"'), true);
-  assert.equal(installerSource.includes('Delete "${TARGET_DIR}\\uninstallerIcon.ico"'), true);
-  assert.equal(installerSource.includes('Delete "${TARGET_DIR}\\installerIcon.ico"'), true);
-  assert.equal(installerSource.includes('Delete "${TARGET_DIR}\\netraflow.ico"'), true);
-  assert.equal(installerSource.includes('Delete "${TARGET_DIR}\\NetraFlow.ico"'), true);
-  assert.equal(installerSource.includes('!macro NetraFlowRemoveKnownInstallContents TARGET_DIR'), true);
-  assert.equal(installerSource.includes('!insertmacro NetraFlowRemoveKnownInstallContents "$R0"'), true);
-  assert.equal(installerSource.includes('!insertmacro NetraFlowRemoveKnownInstallContents "$R0\\NetraFlow"'), true);
-  assert.equal(installerSource.includes('!insertmacro NetraFlowRemoveKnownInstallContents "$R0\\NertaFlow"'), true);
-  assert.equal(installerSource.includes('RMDir "$INSTDIR\\${NETRAFLOW_PRODUCT_NAME}"'), true);
-  assert.equal(installerSource.includes('RMDir "$INSTDIR\\${NETRAFLOW_INSTALL_DIR_NAME}"'), true);
+  assert.equal(installerSource.includes('RMDir /r "$LOCALAPPDATA\\Programs\\${NETRAFLOW_PRODUCT_NAME}"'), true);
+  assert.equal(installerSource.includes('Function un.NetraFlowRemoveKnownUserDataDirs'), true);
+  assert.equal(installerSource.includes('StrCpy $NetraFlowUsersRoot "$NetraFlowUsersRoot\\Users"'), true);
+  assert.equal(installerSource.includes('!insertmacro NetraFlowRemoveUserRuntimeData "$NetraFlowUserPath"'), true);
+  assert.equal(installerSource.includes('!macro NetraFlowRemoveKnownInstallContents TARGET_DIR'), false);
   assert.equal(installerSource.includes('DeleteRegKey HKCU "Software\\${NETRAFLOW_PRODUCT_NAME}"'), true);
+  assert.equal(installerSource.includes('DeleteRegKey HKLM "Software\\${NETRAFLOW_PRODUCT_NAME}"'), true);
+  assert.equal(installerSource.includes('DeleteRegKey HKCU "Software\\netraflow"'), true);
+  assert.equal(installerSource.includes('DeleteRegKey HKLM "Software\\netraflow"'), true);
   assert.equal(installerSource.includes('DeleteRegKey HKCU "Software\\${NETRAFLOW_APP_ID}"'), true);
+  assert.equal(installerSource.includes('DeleteRegKey HKLM "Software\\${NETRAFLOW_APP_ID}"'), true);
+  assert.equal(installerSource.includes('DeleteRegKey HKCU "Software\\${APP_GUID}"'), true);
+  assert.equal(installerSource.includes('DeleteRegKey HKLM "Software\\${APP_GUID}"'), true);
+  assert.equal(
+    installerSource.includes('DeleteRegKey HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${NETRAFLOW_APP_ID}"'),
+    true
+  );
+  assert.equal(
+    installerSource.includes('DeleteRegKey HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${UNINSTALL_APP_KEY}"'),
+    true
+  );
+  assert.equal(
+    installerSource.includes('DeleteRegKey HKLM "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${NETRAFLOW_APP_ID}"'),
+    true
+  );
+  assert.equal(
+    installerSource.includes('DeleteRegKey HKLM "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${UNINSTALL_APP_KEY}"'),
+    true
+  );
+  assert.equal(
+    installerSource.includes('DeleteRegKey HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\${NETRAFLOW_PRODUCT_NAME}.exe"'),
+    true
+  );
+  assert.equal(
+    installerSource.includes('DeleteRegKey HKLM "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\${NETRAFLOW_PRODUCT_NAME}.exe"'),
+    true
+  );
+  assert.equal(
+    installerSource.includes('DeleteRegValue HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Run" "${NETRAFLOW_PRODUCT_NAME}"'),
+    true
+  );
+  assert.equal(
+    installerSource.includes('DeleteRegValue HKLM "Software\\Microsoft\\Windows\\CurrentVersion\\Run" "${NETRAFLOW_APP_ID}"'),
+    true
+  );
+  assert.equal(
+    installerSource.includes('DeleteRegValue HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run" "${NETRAFLOW_PRODUCT_NAME}"'),
+    true
+  );
+  assert.equal(
+    installerSource.includes('DeleteRegValue HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FeatureUsage\\AppSwitched" "$INSTDIR\\${NETRAFLOW_PRODUCT_NAME}.exe"'),
+    true
+  );
+  assert.equal(installerSource.includes('SetRegView 64'), true);
+  assert.equal(installerSource.includes('SetRegView 32'), true);
   assert.equal(installerSource.includes('Delete "$DESKTOP\\${NETRAFLOW_PRODUCT_NAME}.lnk"'), true);
   assert.equal(installerSource.includes('Delete "$SMPROGRAMS\\${NETRAFLOW_PRODUCT_NAME}.lnk"'), true);
   assert.equal(installerSource.includes('Delete "$APPDATA\\Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar\\${NETRAFLOW_PRODUCT_NAME}.lnk"'), true);
-  assert.equal(installerSource.includes('${If} $R3 == "\\NetraFlow"'), true);
-  assert.equal(installerSource.includes('${OrIf} $R3 == "\\NertaFlow"'), true);
+  assert.equal(installerSource.includes('${If} $R3 == "\\NetraFlow"'), false);
+  assert.equal(installerSource.includes('${OrIf} $R3 == "\\NertaFlow"'), false);
   assert.equal(installerSource.includes('RMDir /r "$R0"'), false);
-  assert.equal(installerSource.includes('RMDir "$R0"'), true);
+  assert.equal(installerSource.includes('RMDir "$R0"'), false);
   assert.equal(installerSource.includes('RMDir /r "$NetraFlowPreferredDrive:\\"'), false);
-  assert.equal(installerSource.includes('RMDir /r "$INSTDIR"'), false);
+  assert.equal(installerSource.includes('RMDir /r "$INSTDIR"'), true);
 });
 
 test('packaged first launch starts with empty real data and excludes runtime storage', () => {
@@ -1324,10 +1379,14 @@ test('changelog includes the 0.9.2 local release notes', () => {
   const changelogSource = readProjectFile('CHANGELOG.md');
 
   assert.equal(changelogSource.includes('## 0.9.2'), true);
-  assert.equal(changelogSource.includes('### 闪记精简'), true);
-  assert.equal(changelogSource.includes('### 全局搜索重构'), true);
-  assert.equal(changelogSource.includes('新增 GitHub Releases 链接'), true);
+  assert.equal(changelogSource.includes('### 闪记'), true);
+  assert.equal(changelogSource.includes('### 全局搜索'), true);
+  assert.equal(changelogSource.includes('### 汇总导入'), true);
+  assert.equal(changelogSource.includes('新增 GitHub Releases 链接入口'), true);
   assert.equal(changelogSource.includes('当前版本更新为 0.9.2'), true);
+  assert.equal(changelogSource.includes('App.tsx'), false);
+  assert.equal(changelogSource.includes('RightPanelSection'), false);
+  assert.equal(changelogSource.includes('npm test'), false);
 });
 
 test('flash note visual copy removes extra eyebrows and keeps mode labels explicit', () => {

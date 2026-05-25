@@ -12,7 +12,7 @@ const backdropStyle: CSSProperties = {
 
 const cardStyle: CSSProperties = {
   width: 'min(380px, 100%)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-page)',
   padding: 24,
   background: 'var(--surface-strong)',
   boxShadow: 'var(--shadow-popover)'

@@ -2257,8 +2257,6 @@ const isTextEditingElement = (element: Element | null): element is HTMLElement =
 
 
 
-let hasLoggedStorageStartup = false;
-
 let hasCheckedStartupAutoBackup = false;
 
 
@@ -4675,46 +4673,11 @@ const hasPossiblyStoredHistoryRecords = () =>
 
 
 
-const logStorageStartup = (groups: AssetGroup[], history: HistoryRecord[]) => {
-
-  if (hasLoggedStorageStartup) {
-
-    return;
-
-  }
-
-
-
-  hasLoggedStorageStartup = true;
-
-
-
-  console.log(
-
-    '[NetraFlow startup] accounts count:',
-
-    groups.reduce((count, group) => count + group.accounts.length, 0)
-
-  );
-
-  console.log('[NetraFlow startup] historyRecords count:', history.length);
-
-  console.log('[NetraFlow startup] localStorage keys:', getLocalStorageKeyList());
-
-};
-
-
-
 const loadAppData = (): AppData => {
 
   const groups = loadGroupsFromStorage();
 
   const history = loadHistoryFromStorage(groups);
-
-
-
-  logStorageStartup(groups, history);
-
 
 
   return { groups, history };
@@ -8868,12 +8831,6 @@ function App() {
 
 
   useEffect(() => {
-
-    console.log('electronAPI', window.electronAPI);
-
-    console.log('electronWindow', window.electronWindow);
-
-
 
     const electronAPI = window.electronAPI ?? window.electronWindow;
 
@@ -25358,7 +25315,7 @@ function App() {
 
                       border: '1px solid var(--border-soft)',
 
-                      borderRadius: 14,
+                      borderRadius: 'var(--radius-section)',
 
                       background: 'var(--surface-soft)',
 
@@ -25498,7 +25455,7 @@ function App() {
 
                               height: 28,
 
-                              borderRadius: 9,
+                              borderRadius: 'var(--radius-control)',
 
                               background: 'var(--surface-bg)',
 
@@ -25594,7 +25551,7 @@ function App() {
 
                                 border: '1px solid transparent',
 
-                                borderRadius: 10,
+                                borderRadius: 'var(--radius-card)',
 
                                 background: 'var(--surface-muted)',
 
@@ -25833,7 +25790,7 @@ function App() {
 
               overflowY: 'auto',
 
-              borderRadius: 16,
+              borderRadius: 'var(--radius-page)',
 
               padding: 24,
 
@@ -25889,7 +25846,7 @@ function App() {
 
                   border: '1px solid var(--border-medium)',
 
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-control)',
 
                   padding: '8px 12px',
 
@@ -25939,7 +25896,7 @@ function App() {
 
                       alignItems: 'center',
 
-                      borderRadius: 14,
+                      borderRadius: 'var(--radius-card)',
 
                       padding: '12px 14px',
 
@@ -26053,7 +26010,7 @@ function App() {
 
                         border: '1px solid rgba(37, 99, 235, 0.22)',
 
-                        borderRadius: 8,
+                        borderRadius: 'var(--radius-control)',
 
                         padding: '8px 10px',
 
@@ -26422,7 +26379,7 @@ function App() {
 
                 }`,
 
-                borderRadius: 10,
+                borderRadius: 'var(--radius-card)',
 
                 padding: '11px 13px',
 
@@ -26864,7 +26821,7 @@ function App() {
 
               width: 'min(400px, 100%)',
 
-              borderRadius: 14,
+              borderRadius: 'var(--radius-section)',
 
               padding: 24,
 
@@ -26910,7 +26867,7 @@ function App() {
 
                   border: '1px solid var(--border-medium)',
 
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-input)',
 
                   padding: '10px 12px',
 
@@ -26944,7 +26901,7 @@ function App() {
 
                   height: 'var(--segmented-control-height)',
 
-                  borderRadius: 10,
+                  borderRadius: 'var(--radius-card)',
 
                   padding: 4,
 
@@ -26974,7 +26931,7 @@ function App() {
 
                       border: 0,
 
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-control)',
 
                       padding: '8px 0',
 
@@ -27032,7 +26989,7 @@ function App() {
 
                   height: 'var(--segmented-control-height)',
 
-                  borderRadius: 10,
+                  borderRadius: 'var(--radius-card)',
 
                   padding: 4,
 
@@ -27068,7 +27025,7 @@ function App() {
 
                       border: 0,
 
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-control)',
 
                       padding: '8px 0',
 
@@ -27148,7 +27105,7 @@ function App() {
 
                   border: '1px solid var(--border-medium)',
 
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-control)',
 
                   padding: '9px 14px',
 
@@ -27176,7 +27133,7 @@ function App() {
 
                   border: 0,
 
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-control)',
 
                   padding: '9px 14px',
 
