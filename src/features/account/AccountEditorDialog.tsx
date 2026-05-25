@@ -38,7 +38,7 @@ const amountEditorCardStyle: CSSProperties = {
   width: 'min(520px, 100%)',
   maxHeight: '84vh',
   overflowY: 'auto',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-page)',
   padding: 24,
   background: 'var(--surface-strong)',
   boxShadow: 'var(--shadow-popover)'
@@ -48,7 +48,7 @@ const addRestoreCardStyle: CSSProperties = {
   width: 'min(640px, 100%)',
   maxHeight: '84vh',
   overflowY: 'auto',
-  borderRadius: 16,
+  borderRadius: 'var(--radius-page)',
   padding: 'clamp(18px, 2vw, 24px)',
   border: '1px solid var(--border-soft)',
   background: 'var(--account-add-panel-bg)',
@@ -57,7 +57,7 @@ const addRestoreCardStyle: CSSProperties = {
 
 const addAccountCardStyle: CSSProperties = {
   width: 'min(380px, 100%)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-page)',
   padding: 24,
   border: '1px solid var(--border-soft)',
   background: 'var(--account-add-panel-bg)',
@@ -215,7 +215,7 @@ function AccountRestoreDialog({
                 style={{
                   width: '100%',
                   border: '1px solid var(--border-medium)',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-input)',
                   padding: '9px 10px',
                   background: 'transparent',
                   color: 'var(--text-main)',
@@ -379,7 +379,7 @@ function AccountCreateDialog({
                 width: 24,
                 overflow: 'hidden',
                 border: 0,
-                borderRadius: 8,
+                borderRadius: 'var(--radius-control)',
                 background: 'transparent',
                 boxShadow: 'none'
               }}
@@ -445,7 +445,7 @@ function AccountCreateDialog({
           style={{
             width: '100%',
             border: '1px solid var(--border-medium)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-input)',
             padding: '10px 12px',
             background: 'transparent',
             color: 'var(--text-main)',
@@ -464,7 +464,7 @@ function AccountCreateDialog({
           style={{
             width: '100%',
             border: '1px solid var(--border-medium)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-input)',
             padding: '10px 12px',
             background: 'transparent',
             color: 'var(--text-main)',

@@ -32,14 +32,6 @@ export const measureSearchExecution = <T>(
   performance.mark(endMark);
   performance.measure(measureName, startMark, endMark);
 
-  const measures = performance.getEntriesByName(measureName);
-  const measure = measures[measures.length - 1];
-  const duration = measure?.duration ?? 0;
-
-  console.debug(
-    `[NetraFlow search] "${detail.query}" ${duration.toFixed(2)}ms / ${detail.totalCandidates} candidates`
-  );
-
   performance.clearMarks(startMark);
   performance.clearMarks(endMark);
   performance.clearMeasures(measureName);

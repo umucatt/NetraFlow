@@ -17,7 +17,7 @@ const cardStyle: CSSProperties = {
   width: 'min(420px, 100%)',
   maxHeight: '84vh',
   overflowY: 'auto',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-page)',
   padding: 24,
   background: 'var(--panel-bg-strong)',
   color: 'var(--text-main)',

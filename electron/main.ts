@@ -241,8 +241,6 @@ ipcMain.handle('backup:write-file', async (_event, request: unknown) => {
 function createWindow() {
   const preloadPath = path.join(__dirname, 'preload.js');
 
-  console.log('preload path:', preloadPath);
-
   const createdWindow = new BrowserWindow({
     title: APP_NAME,
     icon: getAppIconPath(),

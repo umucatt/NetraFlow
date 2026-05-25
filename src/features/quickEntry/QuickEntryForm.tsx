@@ -65,7 +65,7 @@ function QuickEntryForm({
               height: 'var(--nf-control-height)',
               minHeight: 'var(--nf-control-height)',
               border: '1px solid var(--border-medium)',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-control)',
               padding: '0 10px',
               background:
                 editMode === mode.value ? 'var(--button-primary-bg)' : 'var(--surface-strong)',
@@ -115,7 +115,7 @@ function QuickEntryForm({
           {isAdjustAmountInvalid ? (
             <div
               style={{
-                borderRadius: 8,
+                borderRadius: 'var(--radius-card)',
                 padding: '9px 10px',
                 background: 'rgba(185, 28, 28, 0.12)',
                 color: '#b91c1c',
@@ -142,7 +142,7 @@ function QuickEntryForm({
                 border: isAdjustAmountInvalid
                   ? '1px solid rgba(185, 28, 28, 0.75)'
                   : '1px solid var(--border-medium)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-input)',
                 padding: '0 var(--nf-control-padding-x)',
                 color: isAdjustAmountInvalid ? '#b91c1c' : 'var(--text-main)',
                 font: 'inherit'
@@ -160,7 +160,7 @@ function QuickEntryForm({
               gridTemplateColumns: '1fr 1fr',
               gap: 4,
               height: 'var(--segmented-control-height)',
-              borderRadius: 10,
+              borderRadius: 'var(--radius-card)',
               padding: 4,
               background: 'var(--surface-muted)'
             }}
@@ -180,7 +180,7 @@ function QuickEntryForm({
                   height: 'var(--segmented-control-option-height)',
                   minHeight: 'var(--segmented-control-option-height)',
                   border: 0,
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-control)',
                   padding: 0,
                   background:
                     adjustDirection === option.value ? 'var(--button-primary-bg)' : 'transparent',

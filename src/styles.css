@@ -45,7 +45,14 @@
   --setting-inner-max: 760px;
   --two-column-panel-padding: 22px;
   --nf-control-height: 40px;
-  --nf-control-radius: 8px;
+  --radius-page: 24px;
+  --radius-section: 12px;
+  --radius-card: 10px;
+  --radius-control: 8px;
+  --radius-input: var(--radius-control);
+  --radius-chip: 999px;
+  --radius-overlay: inherit;
+  --nf-control-radius: var(--radius-control);
   --nf-control-padding-x: 12px;
   --nf-control-gap: 10px;
   --input-height: var(--nf-control-height);
@@ -689,7 +696,7 @@ textarea::placeholder {
   width: min(560px, 100%);
   padding: 40px 32px;
   border: 1px solid var(--border-soft);
-  border-radius: 28px;
+  border-radius: var(--radius-page);
   background: var(--panel-bg);
   box-shadow: var(--shadow-panel);
   text-align: center;
@@ -737,7 +744,7 @@ textarea::placeholder {
   overflow-y: auto;
   min-height: 0;
   border: 1px solid var(--border-soft);
-  border-radius: 24px;
+  border-radius: var(--radius-page);
   padding: var(--right-panel-padding);
   background: var(--panel-bg);
   box-shadow: var(--shadow-panel);
@@ -790,7 +797,7 @@ textarea::placeholder {
   align-content: start;
   overflow: hidden;
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: var(--radius-section);
   padding: var(--right-panel-subsection-padding, 14px);
   background: var(--surface-soft);
 }
@@ -812,7 +819,7 @@ textarea::placeholder {
   display: grid;
   gap: var(--right-panel-stack-gap);
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: var(--radius-section);
   padding: var(--right-panel-subsection-padding, 14px);
   background: var(--surface-soft);
 }
@@ -852,7 +859,7 @@ textarea::placeholder {
   width: 100%;
   min-height: var(--right-panel-action-height);
   border: 1px solid var(--border-medium);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   padding: 0 13px;
   background: var(--surface-bg);
   color: var(--text-main);
@@ -897,7 +904,7 @@ textarea::placeholder {
 
 .home-example-mode-badge {
   justify-self: end;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 3px 9px;
   background: var(--surface-muted);
   color: var(--text-muted);
@@ -945,7 +952,7 @@ textarea::placeholder {
 .right-panel-preview,
 .right-panel-facts {
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: var(--radius-section);
   background: var(--surface-muted);
 }
 
@@ -1069,7 +1076,7 @@ textarea::placeholder {
   height: var(--input-height);
   min-height: var(--input-height);
   border: 1px solid var(--border-medium);
-  border-radius: var(--nf-control-radius);
+  border-radius: var(--radius-input);
   padding: 0 var(--nf-control-padding-x);
   background: var(--surface-strong);
   color: var(--text-main);
@@ -1092,7 +1099,7 @@ textarea::placeholder {
 }
 
 .right-panel-segmented {
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: var(--segmented-control-padding);
   background: var(--surface-muted);
 }
@@ -1103,7 +1110,7 @@ textarea::placeholder {
 
 .right-panel-segmented button {
   border: 0;
-  border-radius: var(--nf-control-radius);
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -1118,7 +1125,7 @@ textarea::placeholder {
   min-height: var(--nf-control-height);
   max-height: var(--nf-control-height);
   border: 0;
-  border-radius: var(--nf-control-radius);
+  border-radius: var(--radius-control);
   padding: 0 10px;
   background: transparent;
   color: var(--text-secondary);
@@ -1230,7 +1237,7 @@ textarea::placeholder {
   box-sizing: border-box;
   width: 100%;
   border: 1px solid var(--border-medium);
-  border-radius: var(--nf-control-radius);
+  border-radius: var(--radius-input);
   padding: 0 var(--nf-control-padding-x);
   background: transparent;
   color: var(--text-main);
@@ -1276,7 +1283,7 @@ textarea::placeholder {
   display: grid;
   gap: 7px;
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: var(--radius-section);
   padding: 10px;
   background: transparent;
 }
@@ -1300,7 +1307,7 @@ textarea::placeholder {
   min-width: 0;
   min-height: 28px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   padding: 0;
   background: transparent;
   color: var(--text-muted);
@@ -1345,7 +1352,7 @@ textarea::placeholder {
   min-width: 0;
   min-height: 30px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   padding: 0;
   background: transparent;
   color: var(--text-secondary);
@@ -1415,7 +1422,7 @@ textarea::placeholder {
   gap: 6px;
   overflow-x: auto;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   padding: 9px 10px;
   background: transparent;
   color: var(--text-secondary);
@@ -1443,7 +1450,7 @@ textarea::placeholder {
   min-height: var(--nf-control-height);
   max-height: var(--nf-control-height);
   border: 1px solid var(--border-medium);
-  border-radius: var(--nf-control-radius);
+  border-radius: var(--radius-control);
   padding: 0 14px;
   background: transparent;
   color: var(--text-secondary);
@@ -1511,7 +1518,7 @@ textarea::placeholder {
   gap: 10px;
   align-items: center;
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: 10px 12px;
   background: transparent;
 }
@@ -1576,7 +1583,7 @@ textarea::placeholder {
 .history-calendar-nav-button {
   box-sizing: border-box;
   border: 1px solid var(--border-medium);
-  border-radius: var(--nf-control-radius);
+  border-radius: var(--radius-control);
   background: var(--surface-strong);
   color: var(--text-secondary);
   cursor: pointer;
@@ -1611,7 +1618,7 @@ textarea::placeholder {
 .history-calendar-panel {
   display: grid;
   gap: 10px;
-  border-radius: 10px;
+  border-radius: var(--radius-section);
   padding: 10px;
   background: var(--panel-bg-strong);
 }
@@ -1655,7 +1662,7 @@ textarea::placeholder {
 .history-calendar-month {
   min-width: 0;
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   padding: 10px;
   background: var(--surface-strong);
 }
@@ -1691,7 +1698,7 @@ textarea::placeholder {
   display: grid;
   place-items: center;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 0;
   background: transparent;
   color: var(--text-secondary);
@@ -1752,7 +1759,7 @@ textarea::placeholder {
 .history-calendar-day__dots span {
   width: 4px;
   height: 4px;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   background: var(--accent-text);
 }
 
@@ -1811,7 +1818,7 @@ textarea::placeholder {
 .about-netraflow__license,
 .about-netraflow__contact {
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-section);
   padding: 16px;
   background: var(--surface-soft);
 }
@@ -1891,7 +1898,7 @@ textarea::placeholder {
 
 .global-settings-field__header span {
   flex: 0 0 auto;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 2px 8px;
   background: var(--surface-muted);
   color: var(--text-muted);
@@ -1900,7 +1907,7 @@ textarea::placeholder {
 }
 
 .global-settings-segmented {
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   padding: var(--segmented-control-padding);
   background: var(--surface-muted);
   height: var(--segmented-control-height);
@@ -1918,7 +1925,7 @@ textarea::placeholder {
 .global-settings-inline-input input {
   min-width: 0;
   border: 1px solid var(--border-medium);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: var(--surface-bg);
   color: var(--text-secondary);
   font: inherit;
@@ -2076,7 +2083,7 @@ textarea::placeholder {
   gap: 8px;
   min-height: 156px;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   padding: 14px;
   background: var(--surface-bg);
   color: var(--text-main);
@@ -2102,7 +2109,7 @@ textarea::placeholder {
   width: 13px;
   height: 13px;
   border: 1px solid var(--border-medium);
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   background: var(--surface-strong);
 }
 
@@ -2137,28 +2144,27 @@ textarea::placeholder {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  border-radius: inherit;
+  border-radius: var(--radius-overlay);
 }
 
-.global-settings-field.example-mode-disabled-panel,
-.example-mode-disabled-panel:not(.global-settings-field) {
-  border-radius: 8px;
+.global-settings-field.example-mode-disabled-panel {
+  border-radius: var(--radius-section);
 }
 
 .left-browse-panel.example-mode-disabled-panel {
-  border-radius: 28px;
+  border-radius: var(--radius-page);
 }
 
 .global-settings-page.example-mode-disabled-panel {
   width: 100%;
   height: 100%;
   min-height: 100%;
-  border-radius: 18px;
+  border-radius: var(--radius-page);
 }
 
 .chart-settings-locked-panel,
 .right-panel-subsection.example-mode-disabled-panel {
-  border-radius: 12px;
+  border-radius: var(--radius-section);
 }
 
 .example-mode-disabled-panel--settings-page {
@@ -2189,7 +2195,7 @@ textarea::placeholder {
   place-items: center;
   overflow: hidden;
   padding: 16px;
-  border-radius: inherit;
+  border-radius: var(--radius-overlay);
   background:
     repeating-linear-gradient(
       -28deg,
@@ -2265,7 +2271,7 @@ textarea::placeholder {
   align-items: center;
   gap: 8px;
   min-height: var(--nf-control-height);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 0 12px;
   cursor: pointer;
   font: inherit;
@@ -2370,7 +2376,7 @@ textarea::placeholder {
 
 .asset-overview-eyebrow span {
   border: 1px solid var(--border-soft);
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 2px 8px;
   background: var(--surface-muted);
   color: var(--text-muted);
@@ -2406,7 +2412,7 @@ textarea::placeholder {
 .reset-confirmation-code {
   margin-top: 16px;
   border: 1px solid var(--danger-border-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   padding: 12px;
   background: var(--danger-bg);
   color: var(--danger-text);
@@ -2529,7 +2535,7 @@ textarea::placeholder {
   max-height: none !important;
   overflow-y: auto !important;
   border: 1px solid var(--border-soft) !important;
-  border-radius: 24px !important;
+  border-radius: var(--radius-page) !important;
   background: var(--panel-bg) !important;
   box-shadow: var(--shadow-panel) !important;
 }
@@ -2546,7 +2552,7 @@ textarea::placeholder {
   max-height: none !important;
   overflow-y: auto !important;
   border: 1px solid var(--border-soft) !important;
-  border-radius: 24px !important;
+  border-radius: var(--radius-page) !important;
   background: var(--panel-bg) !important;
   box-shadow: var(--shadow-panel) !important;
 }
@@ -2588,7 +2594,7 @@ textarea::placeholder {
   min-height: var(--input-height);
   transform: translateX(-50%);
   border: 1px solid var(--border-medium);
-  border-radius: var(--nf-control-radius);
+  border-radius: var(--radius-input);
   padding: 0 var(--nf-control-padding-x);
   background: var(--surface-strong);
   color: var(--text-main);
@@ -2658,7 +2664,7 @@ textarea::placeholder {
   min-height: var(--modal-button-height);
   max-height: var(--modal-button-height);
   border: 1px solid var(--border-medium);
-  border-radius: var(--nf-control-radius);
+  border-radius: var(--radius-control);
   padding: 0 14px;
   background: var(--surface-strong);
   color: var(--text-secondary);
@@ -2772,7 +2778,7 @@ textarea::placeholder {
   gap: 10px;
   min-height: 138px;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   padding: 15px;
   background: var(--surface-bg);
   color: var(--text-main);
@@ -2831,7 +2837,7 @@ textarea::placeholder {
   display: grid;
   gap: 16px;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-section);
   padding: 24px;
   background: var(--panel-bg-strong);
   box-shadow: var(--shadow-card);
@@ -2876,7 +2882,7 @@ textarea::placeholder {
   height: var(--input-height);
   min-height: var(--input-height);
   border: 1px solid var(--border-medium);
-  border-radius: var(--nf-control-radius);
+  border-radius: var(--radius-input);
   padding: 0 var(--nf-control-padding-x);
   background: var(--surface-strong);
   color: var(--text-main);
@@ -2895,7 +2901,7 @@ textarea::placeholder {
   min-height: var(--nf-control-height);
   max-height: var(--nf-control-height);
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 0 14px;
   background: var(--button-primary-bg);
   color: var(--button-primary-text);
@@ -2938,7 +2944,7 @@ h1 {
   width: var(--nf-control-height);
   height: var(--nf-control-height);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   padding: 0;
   background: var(--surface-soft);
   color: var(--text-muted);
@@ -2981,7 +2987,7 @@ h1 {
   gap: 14px;
   overflow: hidden;
   border: 1px solid var(--border-soft);
-  border-radius: 16px;
+  border-radius: var(--radius-page);
   padding: 14px;
   background: var(--panel-bg-strong);
   box-shadow: var(--shadow-popover);
@@ -2997,7 +3003,7 @@ h1 {
   min-height: var(--global-search-input-height);
   max-height: var(--global-search-input-height);
   border: 1px solid var(--border-medium);
-  border-radius: 12px;
+  border-radius: var(--radius-section);
   padding: 0 13px;
   background: var(--surface-muted);
   color: var(--text-muted);
@@ -3030,7 +3036,7 @@ h1 {
   width: 28px;
   height: 28px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 0;
   background: transparent;
   color: var(--text-muted);
@@ -3066,7 +3072,7 @@ h1 {
   align-items: center;
   gap: var(--segmented-control-gap);
   overflow: visible;
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   padding-block: var(--segmented-control-padding);
   padding-inline: var(--segmented-control-padding);
   background: var(--surface-muted);
@@ -3087,7 +3093,7 @@ h1 {
   justify-content: space-between;
   gap: 6px;
   border: 1px solid var(--border-medium);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 0 8px;
   background: var(--surface-bg);
   color: var(--text-secondary);
@@ -3154,7 +3160,7 @@ h1 {
   justify-content: center;
   box-sizing: border-box;
   min-height: 18px;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 2px 7px;
   background: var(--surface-bg);
   color: var(--text-secondary);
@@ -3222,7 +3228,7 @@ h1 {
 
 .search-section__header span {
   min-width: 24px;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 2px 8px;
   background: var(--surface-muted);
   color: var(--text-muted);
@@ -3248,7 +3254,7 @@ h1 {
   width: 100%;
   min-height: 60px;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   padding: 9px 10px;
   background: var(--surface-muted);
   color: var(--text-main);
@@ -3291,7 +3297,7 @@ h1 {
   place-items: center;
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: var(--surface-strong);
   color: var(--text-main);
   font-weight: 800;
@@ -3407,7 +3413,7 @@ h1 {
 
 .search-empty {
   margin: 0;
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: 16px;
   background: var(--surface-muted);
   color: var(--text-muted);
@@ -3424,7 +3430,7 @@ h1 {
   gap: 6px;
   max-width: calc(100vw - 32px);
   border: 1px solid var(--border-medium);
-  border-radius: 12px;
+  border-radius: var(--radius-section);
   padding: 7px;
   background: var(--panel-bg-strong);
   box-shadow: var(--shadow-popover);
@@ -3449,7 +3455,7 @@ h1 {
   min-height: var(--nf-control-height);
   max-height: var(--nf-control-height);
   border: 1px solid var(--border-medium);
-  border-radius: var(--nf-control-radius);
+  border-radius: var(--radius-control);
   padding: 0 10px;
   background: var(--surface-strong);
   color: var(--text-main);
@@ -3514,7 +3520,7 @@ h1 {
   width: 100%;
   overflow: hidden;
   border: 1px solid var(--border-medium);
-  border-radius: 12px;
+  border-radius: var(--radius-input);
   background: var(--surface-bg);
   box-shadow: none;
 }
@@ -3566,7 +3572,7 @@ h1 {
   width: 24px;
   overflow: hidden;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: var(--surface-bg);
   box-shadow: none;
   opacity: 0;
@@ -3624,7 +3630,7 @@ h1 {
   height: var(--account-input-height);
   min-height: var(--account-input-height);
   border: 1px solid var(--border-medium);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   padding: 0;
   background: transparent;
   color: var(--nf-action-add-icon-color);
@@ -3666,7 +3672,7 @@ h1 {
   min-height: var(--nf-control-height);
   max-height: var(--nf-control-height);
   border: 1px solid var(--border-medium);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 0 14px;
   background: var(--surface-strong);
   color: var(--text-secondary);
@@ -3999,7 +4005,7 @@ h1 {
   max-width: 100%;
   margin: 0;
   border: 1px solid var(--border-soft);
-  border-radius: 14px;
+  border-radius: var(--radius-section);
   padding: 16px;
   overflow-x: hidden;
   overflow-y: auto;
@@ -4036,7 +4042,7 @@ h1 {
 .rollup-issue-list,
 .rollup-record-group {
   border: 1px solid var(--border-soft);
-  border-radius: 14px;
+  border-radius: var(--radius-section);
   background: var(--surface-soft);
 }
 
@@ -4118,7 +4124,7 @@ h1 {
 }
 
 .rollup-record-group header > span {
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 4px 9px;
   background: var(--surface-muted);
   color: var(--text-muted);
@@ -4179,7 +4185,7 @@ h1 {
   align-items: center;
   gap: 7px;
   border: 1px solid var(--border-medium);
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 5px 10px 5px 6px;
   background: var(--surface-strong);
   color: var(--text-main);
@@ -4233,7 +4239,7 @@ h1 {
 
 .rollup-small-button {
   border: 1px solid var(--border-medium);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: var(--surface-strong);
   color: var(--text-main);
   font: inherit;
@@ -4262,7 +4268,7 @@ h1 {
   display: grid;
   overflow: hidden;
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
 }
 
 .rollup-record-list__header,
@@ -4319,7 +4325,7 @@ h1 {
   width: 100%;
   min-height: 118px;
   border: 1px solid var(--border-medium);
-  border-radius: 8px;
+  border-radius: var(--radius-input);
   padding: 10px 12px;
   overflow-x: hidden;
   overflow-y: auto;
@@ -4358,7 +4364,7 @@ h1 {
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--border-soft);
-  border-radius: 18px;
+  border-radius: var(--radius-page);
   background: var(--panel-bg);
   box-shadow: var(--shadow-panel);
 }
@@ -4397,7 +4403,7 @@ h1 {
 
 .flash-note-header__meta span {
   border: 1px solid var(--border-soft);
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 4px 9px;
   background: var(--surface-soft);
 }
@@ -4415,7 +4421,7 @@ h1 {
 .flash-note-stage-pill {
   flex: 1 0 96px;
   border: 1px solid var(--border-soft);
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 6px 9px;
   background: var(--surface-soft);
   color: var(--text-muted);
@@ -4512,7 +4518,7 @@ h1 {
 .flash-note-top-strip div {
   min-width: 0;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   padding: 9px 11px;
   background: var(--surface-soft);
 }
@@ -4569,7 +4575,7 @@ h1 {
   min-height: 32px;
   max-width: 210px;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 0 9px;
   background: var(--surface-soft);
   color: var(--text-main);
@@ -4586,7 +4592,7 @@ h1 {
   place-items: center;
   width: 28px;
   height: 28px;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background: var(--surface-strong);
 }
 
@@ -4620,7 +4626,7 @@ h1 {
   overflow-x: hidden;
   overflow-y: auto;
   border: 1px solid var(--border-soft);
-  border-radius: 16px;
+  border-radius: var(--radius-page);
   padding: 18px;
   background: var(--panel-bg-strong);
   box-shadow: var(--shadow-popover);
@@ -4748,7 +4754,7 @@ h1 {
   display: grid;
   gap: 12px;
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: var(--radius-section);
   padding: 12px;
   background: var(--surface-strong);
 }
@@ -4783,7 +4789,7 @@ h1 {
   width: var(--nf-control-height);
   height: var(--nf-control-height);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: var(--surface-soft);
   color: var(--text-main);
   cursor: pointer;
@@ -4811,7 +4817,7 @@ h1 {
   width: var(--nf-control-height);
   height: var(--nf-control-height);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 0;
   background: var(--surface-soft);
   color: var(--nf-selection-tool-color);
@@ -4851,7 +4857,7 @@ h1 {
   min-height: var(--nf-control-height);
   max-height: var(--nf-control-height);
   border: 1px solid var(--border-medium);
-  border-radius: var(--nf-control-radius);
+  border-radius: var(--radius-control);
   padding: 0 11px;
   background: var(--surface-strong);
   color: var(--text-main);
@@ -4906,7 +4912,7 @@ h1 {
 .flash-note-month {
   min-width: 0;
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: 10px;
   background: var(--surface-strong);
 }
@@ -4951,7 +4957,7 @@ h1 {
   grid-template-rows: 18px minmax(0, 1fr);
   gap: 2px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 5px;
   overflow: hidden;
   background: transparent;
@@ -5053,7 +5059,7 @@ h1 {
   position: absolute;
   top: 4px;
   right: 5px;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 1px 5px;
   background: var(--button-primary-bg);
   color: var(--button-primary-text);
@@ -5124,7 +5130,7 @@ h1 {
   display: grid;
   gap: 3px;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   padding: 9px 11px;
   background: var(--surface-soft);
   color: var(--text-main);
@@ -5174,7 +5180,7 @@ h1 {
 
 .flash-note-week-row {
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: 8px;
   background: var(--surface-soft);
   transition:
@@ -5386,7 +5392,7 @@ h1 {
   height: var(--input-height);
   min-height: var(--input-height);
   border: 1px solid var(--border-medium);
-  border-radius: var(--nf-control-radius);
+  border-radius: var(--radius-input);
   padding: 0 var(--nf-control-padding-x);
   background: var(--surface-strong);
   color: var(--text-main);
@@ -5420,7 +5426,7 @@ h1 {
   display: grid;
   gap: 3px;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   padding: 8px 10px;
   background: var(--surface-soft);
 }
@@ -5440,7 +5446,7 @@ h1 {
   display: grid;
   gap: 4px;
   border: 1px solid var(--border-medium);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: 6px;
   background: var(--surface-strong);
   box-shadow: var(--shadow-popover);
@@ -5448,7 +5454,7 @@ h1 {
 
 .flash-note-context-menu button {
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   padding: 8px 10px;
   background: transparent;
   color: var(--text-main);
@@ -5570,7 +5576,7 @@ h1 {
   max-width: 100%;
   padding: 7px 9px 7px 11px;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   background: var(--surface-soft);
   color: var(--text-muted);
   font-size: 0.78rem;
@@ -5650,7 +5656,7 @@ h1 {
   min-width: 0;
   min-height: 118px;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   padding: 8px;
   background: var(--surface-soft);
   color: var(--text-main);
@@ -5706,7 +5712,7 @@ h1 {
 }
 
 .account-detail-archived-badge {
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 4px 10px;
   background: rgba(37, 99, 235, 0.12);
   color: #2563eb;
@@ -5772,7 +5778,7 @@ h1 {
   display: grid;
   gap: var(--chart-panel-gap);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-section);
   padding: var(--chart-panel-padding);
   background: var(--surface-soft);
 }
@@ -5821,7 +5827,7 @@ h1 {
   position: absolute;
   top: 12%;
   right: 4%;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 2px 5px;
   background: var(--surface-bg);
   color: #7f3f3a;
@@ -5843,7 +5849,7 @@ h1 {
   align-items: center;
   min-width: 0;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   padding: 8px;
   background: var(--surface-bg);
   color: var(--text-secondary);
@@ -5893,13 +5899,13 @@ h1 {
 
 .chart-legend-item__swatch--line {
   height: 3px;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
 }
 
 .chart-legend-item__archived {
   flex: 0 0 auto;
   border: 1px solid var(--border-soft);
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   padding: 2px 5px;
   background: var(--surface-muted);
   color: var(--text-subtle);

@@ -22,7 +22,7 @@ const HistoryPanel = forwardRef<HTMLElement, HistoryPanelProps>(
         width: 'min(760px, 100%)',
         maxHeight: '84vh',
         overflowY: 'auto',
-        borderRadius: 16,
+        borderRadius: 'var(--radius-page)',
         padding: 'var(--two-column-panel-padding)',
         border: '1px solid var(--border-soft)',
         background: 'var(--panel-bg-strong)',

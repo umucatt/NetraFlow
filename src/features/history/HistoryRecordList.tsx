@@ -113,7 +113,7 @@ export default function HistoryRecordList<TRecord extends HistoryRecordListRecor
           <span
             style={{
               flex: '0 0 auto',
-              borderRadius: 999,
+              borderRadius: 'var(--radius-chip)',
               padding: nested ? '3px 8px' : '4px 9px',
               background: tone.labelBackground,
               color: tone.text,
@@ -148,7 +148,7 @@ export default function HistoryRecordList<TRecord extends HistoryRecordListRecor
           <strong
             style={{
               justifySelf: 'end',
-              borderRadius: 999,
+              borderRadius: 'var(--radius-chip)',
               padding: nested ? '4px 9px' : '5px 10px',
               background: change.background,
               color: change.color,
@@ -234,7 +234,7 @@ export default function HistoryRecordList<TRecord extends HistoryRecordListRecor
     const tone = getTone(record);
     const change = getAmountChange(record);
     const contentGap = nested ? 10 : 12;
-    const cardRadius = nested ? 14 : 16;
+    const cardRadius = 'var(--radius-card)';
     const cardPadding = nested ? '12px 14px' : '14px 16px';
     const cardStyle = {
       borderRadius: cardRadius,
@@ -384,7 +384,7 @@ export default function HistoryRecordList<TRecord extends HistoryRecordListRecor
         display: 'grid',
         gap: 10,
         border: '1px solid var(--border-soft)',
-        borderRadius: 12,
+        borderRadius: 'var(--radius-section)',
         padding: '12px 4px 12px 12px',
         background: 'var(--surface-strong)'
       }}
