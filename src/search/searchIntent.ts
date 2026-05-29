@@ -144,6 +144,7 @@ const parseSearchDateTargets = (value: string): SearchDateTarget[] => {
   const shortDateMatch = normalizedDateValue.match(/^(\d{2})-(\d{1,2})-(\d{1,2})$/);
   const yearMonthMatch = normalizedDateValue.match(/^(\d{4})-(\d{1,2})$/);
   const monthDayMatch = normalizedDateValue.match(/^(\d{1,2})-(\d{1,2})$/);
+  const currentYear = new Date(Date.now()).getFullYear();
 
   if (fullDateMatch) {
     addDayTarget(Number(fullDateMatch[1]), Number(fullDateMatch[2]), Number(fullDateMatch[3]));
@@ -171,16 +172,16 @@ const parseSearchDateTargets = (value: string): SearchDateTarget[] => {
 
   if (monthDayMatch) {
     const date = getValidSearchDate(
-      new Date().getFullYear(),
+      currentYear,
       Number(monthDayMatch[1]),
       Number(monthDayMatch[2])
     );
 
     if (date) {
       addDateTarget(targets, {
-        kind: 'month-day',
+        kind: 'day',
         score: SEARCH_DATE_INPUT_WEIGHTS.monthDay,
-        monthDay: date.monthDay
+        ...date
       });
     }
 
@@ -231,7 +232,7 @@ const parseSearchDateTargets = (value: string): SearchDateTarget[] => {
 
   if (digits.length === 4) {
     const monthDay = getValidSearchDate(
-      new Date().getFullYear(),
+      currentYear,
       Number(digits.slice(0, 2)),
       Number(digits.slice(2, 4))
     );
@@ -239,9 +240,9 @@ const parseSearchDateTargets = (value: string): SearchDateTarget[] => {
 
     if (monthDay) {
       addDateTarget(targets, {
-        kind: 'month-day',
+        kind: 'day',
         score: SEARCH_DATE_INPUT_WEIGHTS.monthDay,
-        monthDay: monthDay.monthDay
+        ...monthDay
       });
     }
 

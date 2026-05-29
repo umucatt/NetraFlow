@@ -2,7 +2,6 @@ import type { PointerEvent } from 'react';
 import {
   NfNavBackIcon,
   NfNavChevronRightIcon,
-  NfSelectionIntersectIcon,
   NfSelectionSingleIcon,
   NfSelectionSubtractIcon,
   NfSelectionUnionIcon
@@ -64,13 +63,12 @@ const modeOptions: Array<{ mode: FlashInputMode; title: string; description: str
 const selectionTools: Array<{
   mode: FlashSelectionMode;
   icon: string;
+  label: string;
   title: string;
-  ariaLabel: string;
 }> = [
-  { mode: 'replace', icon: NfSelectionSingleIcon, title: '单选/拖选', ariaLabel: '单选' },
-  { mode: 'intersect', icon: NfSelectionIntersectIcon, title: '交集', ariaLabel: '交集选区' },
-  { mode: 'union', icon: NfSelectionUnionIcon, title: '合集/合并', ariaLabel: '合并选区' },
-  { mode: 'subtract', icon: NfSelectionSubtractIcon, title: '删除/相减', ariaLabel: '相减选区' }
+  { mode: 'replace', icon: NfSelectionSingleIcon, label: '单选', title: '单选：点击或拖选日期' },
+  { mode: 'union', icon: NfSelectionUnionIcon, label: '合集', title: '合集：合并日期选区' },
+  { mode: 'subtract', icon: NfSelectionSubtractIcon, label: '删除', title: '删除：从选区中移除日期' }
 ];
 
 const dateRuleTools: Array<{ rule: FlashDateRule; label: string; title: string; ariaLabel: string }> = [
@@ -165,7 +163,7 @@ export function FlashSelectStep({
   );
 
   return (
-    <div className="flash-note-stage-body flash-note-stage-body--date-select">
+    <div className="flash-note-stage-body flash-note-stage-body--select">
       <section className="flash-note-setup-panel" aria-label="本轮闪记输入条件设置区">
         <div className="flash-note-setup-panel__section">
           <span className="flash-note-setup-panel__label">账户选择</span>
@@ -230,7 +228,7 @@ export function FlashSelectStep({
                   key={tool.mode}
                   type="button"
                   title={tool.title}
-                  aria-label={tool.ariaLabel}
+                  aria-label={tool.label}
                   className={`flash-note-icon-tool${selectionMode === tool.mode ? ' is-active' : ''}`}
                   onClick={() => onSelectionModeChange(tool.mode)}
                 >

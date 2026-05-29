@@ -6,25 +6,9 @@ import {
 } from '../../chartLogic';
 import ChartLegendList, { getInteractiveChartClassName, type ChartLegendItemData } from './ChartLegendList';
 import { CHART_COLORS } from './chartColors';
+import type { AssetStructureChartData, ChartSegment } from './assetStructureData';
 
 export type StructureAssetDisplay = 'positive' | 'negative' | 'both';
-
-export type ChartSegment = {
-  id: string;
-  label: string;
-  amount: number;
-  color: string;
-  sourceIds?: string[];
-  archived?: boolean;
-};
-
-export type AssetStructureChartData = {
-  positiveSegments: ChartSegment[];
-  negativeSegments: ChartSegment[];
-  positiveTotal: number;
-  negativeTotal: number;
-  debtRatio: number;
-};
 
 export type AssetAllocationPanelSettings = {
   assetDisplay: StructureAssetDisplay;
