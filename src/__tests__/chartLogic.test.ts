@@ -17,7 +17,9 @@ import {
   buildSteppedStackLayers,
   buildDisplayChartItems,
   createSteppedAreaPath,
+  createSteppedHorizontalLinePath,
   createSteppedLinePath,
+  createSteppedVerticalLinePath,
   getNiceYAxisScale,
   getChartRangeDateKeys,
   getZeroAnchoredStackedYAxisDomain,
@@ -131,6 +133,22 @@ test('creates stepped line and area paths without diagonal interpolation', () =>
 
   assert.equal(linePath, 'M 0 90 H 10 V 80 H 20 V 85');
   assert.equal(areaPath, 'M 0 90 H 10 V 80 L 10 95 V 100 H 0 Z');
+});
+
+test('creates stepped helper paths with separate horizontal and vertical segments', () => {
+  const horizontalPath = createSteppedHorizontalLinePath(
+    [10, 20, 20, 15],
+    (index) => index * 10,
+    (value) => 100 - value
+  );
+  const verticalPath = createSteppedVerticalLinePath(
+    [10, 20, 20, 15],
+    (index) => index * 10,
+    (value) => 100 - value
+  );
+
+  assert.equal(horizontalPath, 'M 0 90 H 10 M 10 80 H 20 M 20 80 H 30');
+  assert.equal(verticalPath, 'M 10 90 V 80 M 30 80 V 85');
 });
 
 test('builds stepped stack layers with cumulative lower and upper bounds', () => {

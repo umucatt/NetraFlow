@@ -150,6 +150,17 @@ const historyRecords: HistoryRecord[] = [
     note: '信用卡账单'
   },
   {
+    id: 'h-credit-negative-balance',
+    accountId: 'credit-card',
+    type: '修改',
+    groupName: '信用',
+    accountName: '信用卡',
+    beforeAmount: -1000,
+    afterAmount: -1200,
+    time: '2026-05-16T10:00:00.000Z',
+    note: '负债余额保留负号'
+  },
+  {
     id: 'h-ccb-near',
     accountId: 'ccb-card',
     type: '修改',
@@ -295,9 +306,30 @@ const settingsItems: SettingsSearchItem[] = [
     group: '全局设置',
     description: '图表配色、资产结构显示、资产趋势显示。',
     section: 'charts',
-    keywords: ['图表', '图表配色', '资产结构显示', '资产趋势显示'],
+    keywords: ['图表', '图表显示', '图表配色', '资产结构显示', '资产趋势显示'],
     pinyinKeywords: ['tu biao', 'tu biao she zhi'],
     pinyinInitials: ['tb', 'tbsz']
+  },
+  {
+    id: 'appearance',
+    title: '显示与界面',
+    group: '全局设置',
+    description: '数字正负值显示、资产统计数值类型、页面主题与页面位置记忆。',
+    section: 'appearance',
+    keywords: ['显示与界面', '显示', '界面', '页面位置记忆', '页面位置'],
+    pinyinKeywords: ['xian shi yu jie mian', 'ye mian wei zhi ji yi'],
+    pinyinInitials: ['xsyjm', 'ymwzjy']
+  },
+  {
+    id: 'appearance-page-position-memory',
+    title: '页面位置记忆',
+    group: '显示与界面',
+    description: '切换页面保留滚动位置和堆叠组状态。',
+    section: 'appearance',
+    blockId: 'global-settings-page-position-memory',
+    keywords: ['页面位置', '滚动位置', '堆叠组状态'],
+    pinyinKeywords: ['ye mian wei zhi ji yi'],
+    pinyinInitials: ['ymwzjy']
   },
   {
     id: 'backup',
@@ -305,14 +337,49 @@ const settingsItems: SettingsSearchItem[] = [
     group: '全局设置',
     description: '用户配置文件、历史记录备份、快照。',
     section: 'backup',
-    keywords: ['数据', '备份', '快照'],
+    keywords: ['数据', '备份', '快照', '快照设置'],
     pinyinKeywords: ['shu ju', 'bei fen', 'kuai zhao'],
     pinyinInitials: ['sj', 'bf', 'kz']
+  },
+  {
+    id: 'backup-history-snapshot',
+    title: '历史记录备份',
+    group: '数据与备份',
+    description: '快照、手动快照与自动快照设置。',
+    section: 'backup',
+    keywords: ['快照设置', '历史记录备份', '手动快照', '自动快照'],
+    pinyinKeywords: ['kuai zhao she zhi'],
+    pinyinInitials: ['kzsz']
+  },
+  {
+    id: 'security',
+    title: '安全',
+    group: '全局设置',
+    description: '登录密码保护、自动锁定和快照加密。',
+    section: 'security',
+    keywords: ['安全', '安全设置', '登录密码保护', '快照加密'],
+    pinyinKeywords: ['an quan', 'an quan she zhi'],
+    pinyinInitials: ['aq', 'aqsz']
+  },
+  {
+    id: 'security-password-protection',
+    title: '登录密码保护',
+    group: '安全',
+    description: '设置登录密码与自动锁定时间。',
+    section: 'security',
+    keywords: ['安全设置', '登录密码', '自动锁定'],
+    pinyinKeywords: ['deng lu mi ma', 'an quan she zhi'],
+    pinyinInitials: ['dlmm', 'aqsz']
   }
 ];
 
-const createIndex = () =>
-  createGlobalSearchIndex(groups, historyRecords, snapshots, {
+const createSearchIndexFor = (
+  sourceGroups: AssetGroup[] = groups,
+  sourceHistoryRecords: HistoryRecord[] = historyRecords,
+  sourceSnapshots: BackupRecord[] = snapshots,
+  sourceSettingsItems: SettingsSearchItem[] = settingsItems
+) =>
+  createGlobalSearchIndex(sourceGroups, sourceHistoryRecords, sourceSnapshots, {
     getAccountNatureLabel: (nature) => natureLabels[nature],
     getHistoryTypeLabel: (type) => historyTypeLabels[type],
     getBackupMethodLabel: (method) => backupMethodLabels[method],
@@ -326,12 +393,29 @@ const createIndex = () =>
     formatMoney: formatSignedMoney,
     formatShortTime: formatDate,
     formatPreciseBackupTime: (time) => formatDate(time),
-    settingsItems
+    settingsItems: sourceSettingsItems
   });
+
+const createIndex = () => createSearchIndexFor();
 
 const index = createIndex();
 const search = (query: string) => runGlobalSearch(index, query);
 const getResultIds = (query: string) => search(query).allResults.map((result) => result.id);
+const getSettingsResultIds = (query: string) =>
+  search(query).settingsResults.map((result) => result.id);
+const assertSettingsResultBefore = (query: string, expectedFirst: string, expectedLater: string) => {
+  const resultIds = getSettingsResultIds(query);
+  const firstIndex = resultIds.indexOf(expectedFirst);
+  const laterIndex = resultIds.indexOf(expectedLater);
+
+  assert.notEqual(firstIndex, -1, `${query} should include ${expectedFirst}`);
+  assert.notEqual(laterIndex, -1, `${query} should include ${expectedLater}`);
+  assert.equal(
+    firstIndex < laterIndex,
+    true,
+    `${query} should rank ${expectedFirst} before ${expectedLater}`
+  );
+};
 const getHighlightedText = (value: string, ranges: Array<{ start: number; end: number }>) =>
   ranges.map((range) => value.slice(range.start, range.end)).join('');
 
@@ -349,6 +433,132 @@ test('default categories and unified all-result stream include settings', () => 
     getSearchResultsForCategory(output, 'all').map((result) => result.id),
     output.allResults.map((result) => result.id)
   );
+});
+
+test('plain settings words keep stronger real-domain results near the top boundary', () => {
+  const plainGroups: AssetGroup[] = [
+    {
+      name: '普通词账户组',
+      nature: 'asset',
+      includeInStats: true,
+      sortOrder: 0,
+      accounts: [
+        {
+          id: 'plain-account',
+          name: '账户现金',
+          amount: 800,
+          createdAt: '2026-05-10T09:00:00.000Z'
+        }
+      ]
+    }
+  ];
+  const plainHistory: HistoryRecord[] = [
+    {
+      id: 'plain-amount-history',
+      accountId: 'plain-account',
+      type: MODIFY_HISTORY_TYPE,
+      groupName: '普通词账户组',
+      accountName: '金额记录',
+      beforeAmount: 0,
+      afterAmount: 100,
+      time: '2026-05-10T10:00:00.000Z'
+    },
+    {
+      id: 'plain-date-history',
+      accountId: 'plain-account',
+      type: MODIFY_HISTORY_TYPE,
+      groupName: '普通词账户组',
+      accountName: '日期记录',
+      beforeAmount: 100,
+      afterAmount: 120,
+      time: '2026-05-11T10:00:00.000Z'
+    }
+  ];
+  const plainSnapshots: BackupRecord[] = [
+    {
+      id: 'plain-snapshot',
+      backedUpAt: '2026-05-12T08:00:00.000Z',
+      historyCount: 2,
+      incrementCount: 1,
+      method: 'manual'
+    }
+  ];
+  const plainSettings: SettingsSearchItem[] = [
+    {
+      id: 'search-accounts',
+      title: '搜索账户',
+      group: '全局搜索',
+      description: '账户名称可参与搜索。',
+      section: 'search',
+      keywords: ['账户']
+    },
+    {
+      id: 'search-history',
+      title: '搜索历史记录',
+      group: '全局搜索',
+      description: '历史记录日期和金额可参与搜索。',
+      section: 'search',
+      keywords: ['日期', '金额']
+    },
+    {
+      id: 'backup',
+      title: '数据与备份',
+      group: '全局设置',
+      description: '快照。',
+      section: 'backup',
+      keywords: ['快照']
+    }
+  ];
+  const plainIndex = createSearchIndexFor(
+    plainGroups,
+    plainHistory,
+    plainSnapshots,
+    plainSettings
+  );
+  const plainSearch = (query: string) => runGlobalSearch(plainIndex, query);
+
+  const snapshotResults = plainSearch('快照').allResults;
+  const snapshotIndex = snapshotResults.findIndex((result) => result.id === 'plain-snapshot');
+
+  assert.equal(plainSearch('账户').allResults[0]?.id, 'plain-account');
+  assert.equal(plainSearch('金额').allResults[0]?.id, 'plain-amount-history');
+  assert.equal(plainSearch('日期').allResults[0]?.id, 'plain-date-history');
+  assert.equal(snapshotIndex >= 0 && snapshotIndex <= 1, true);
+});
+
+test('representative settings queries resolve concrete navigation targets', () => {
+  const cases = [
+    {
+      query: '页面位置',
+      settingsId: 'appearance-page-position-memory',
+      section: 'appearance',
+      blockId: 'global-settings-page-position-memory'
+    },
+    { query: '图表显示', settingsId: 'charts', section: 'charts' },
+    { query: '快照设置', settingsId: 'backup-history-snapshot', section: 'backup' },
+    { query: '安全设置', settingsId: 'security-password-protection', section: 'security' }
+  ];
+
+  cases.forEach(({ query, settingsId, section, blockId }) => {
+    const result = search(query).settingsResults.find(
+      (currentResult) => currentResult.id === settingsId
+    );
+
+    assert.equal(result?.target.category, 'settings');
+    assert.equal(result?.target.settingsId, settingsId);
+    assert.equal(result?.target.settingsSection, section);
+    assert.equal(result?.target.blockId, blockId);
+  });
+});
+
+test('specific settings matches rank ahead of parent category matches', () => {
+  assertSettingsResultBefore('yemianweizhi', 'appearance-page-position-memory', 'appearance');
+  assertSettingsResultBefore('页面位置', 'appearance-page-position-memory', 'appearance');
+
+  assert.equal(getSettingsResultIds('显示与界面')[0], 'appearance');
+  assert.equal(getSettingsResultIds('图表显示').includes('charts'), true);
+  assertSettingsResultBefore('快照设置', 'backup-history-snapshot', 'backup');
+  assertSettingsResultBefore('安全设置', 'security-password-protection', 'security');
 });
 
 test('direct hits and inferred matches use only 命中/推断 semantics', () => {
@@ -455,6 +665,50 @@ test('numeric date input is recognized before amount matching', () => {
   assert.equal(incompleteShortDate.allResults.some((result) => result.matchKind.startsWith('date-')), false);
 });
 
+test('month-day shorthand uses the mocked current system year only', () => {
+  const currentYearRecord: HistoryRecord = {
+    id: 'h-current-year-may12',
+    accountId: 'cash',
+    type: MODIFY_HISTORY_TYPE,
+    groupName: '现金',
+    accountName: '现金',
+    beforeAmount: 0,
+    afterAmount: 100,
+    time: '2031-05-12T10:00:00.000Z'
+  };
+  const otherYearRecord: HistoryRecord = {
+    ...currentYearRecord,
+    id: 'h-other-year-may12',
+    time: '2026-05-12T10:00:00.000Z'
+  };
+  const monthDayIndex = createSearchIndexFor(
+    groups,
+    [currentYearRecord, otherYearRecord],
+    [],
+    []
+  );
+  const previousDateNow = Date.now;
+
+  Date.now = () => new Date('2031-02-01T00:00:00.000Z').getTime();
+
+  try {
+    ['0512', '5/12', '05.12', '5月12日'].forEach((query) => {
+      const resultIds = runGlobalSearch(monthDayIndex, query).historyResults.map(
+        (result) => result.id
+      );
+
+      assert.equal(resultIds.includes('h-current-year-may12'), true, `${query} should use 2031`);
+      assert.equal(
+        resultIds.includes('h-other-year-may12'),
+        false,
+        `${query} should not infer from other record years`
+      );
+    });
+  } finally {
+    Date.now = previousDateNow;
+  }
+});
+
 test('amount matching keeps signs strict and approximation narrow', () => {
   const unsignedIds = getResultIds('5203');
   const positiveIds = getResultIds('+5203');
@@ -520,6 +774,22 @@ test('history balance amount matches explain the displayed value field', () => {
   assert.equal(afterBalance?.value, '39,240 → 25,080');
   assert.equal(delta?.matchedAmount?.field, 'delta');
   assert.equal(delta?.value, '-14,160');
+});
+
+test('liability history balance matches keep negative before and after signs', () => {
+  const liabilityBeforeBalance = search('-1000').historyResults.find(
+    (result) => result.id === 'h-credit-negative-balance'
+  );
+  const liabilityAfterBalance = search('-1200').historyResults.find(
+    (result) => result.id === 'h-credit-negative-balance'
+  );
+
+  assert.equal(liabilityBeforeBalance?.matchedAmount?.field, 'balanceBefore');
+  assert.equal(liabilityBeforeBalance?.primaryMatch.field, 'balanceBefore');
+  assert.equal(liabilityBeforeBalance?.value, '-1,000 → -1,200');
+  assert.equal(liabilityAfterBalance?.matchedAmount?.field, 'balanceAfter');
+  assert.equal(liabilityAfterBalance?.primaryMatch.field, 'balanceAfter');
+  assert.equal(liabilityAfterBalance?.value, '-1,000 → -1,200');
 });
 
 test('pure numeric queries never use text inference fallbacks', () => {
@@ -703,4 +973,108 @@ test('mock-data pressure stays inside the search budget', () => {
   performance.clearMarks(startMark);
   performance.clearMarks(endMark);
   performance.clearMeasures(measureName);
+});
+
+test('large-data pressure covers mixed data and continuous input', () => {
+  const createPressureIndex = (historyCount: number) => {
+    const pressureNatures: AccountTypeNature[] = ['asset', 'receivable', 'liability'];
+    const pressureGroups: AssetGroup[] = Array.from({ length: 40 }, (_, groupIndex) => ({
+      name:
+        groupIndex % 3 === 0
+          ? `现金组${groupIndex}`
+          : groupIndex % 3 === 1
+            ? `信用组${groupIndex}`
+            : `投资组${groupIndex}`,
+      nature: pressureNatures[groupIndex % pressureNatures.length] ?? 'asset',
+      includeInStats: true,
+      sortOrder: groupIndex,
+      accounts: Array.from({ length: 10 }, (_, accountIndex) => ({
+        id: `pressure-account-${groupIndex}-${accountIndex}`,
+        name: `${
+          groupIndex % 3 === 0 ? '现金' : groupIndex % 3 === 1 ? '信用卡' : '基金'
+        }账户${groupIndex}-${accountIndex}`,
+        amount: (groupIndex % 3 === 1 ? -1 : 1) * (1000 + groupIndex * 37 + accountIndex * 11),
+        createdAt: `2026-05-${String((accountIndex % 28) + 1).padStart(2, '0')}T09:00:00.000Z`,
+        alias: `P${groupIndex}${accountIndex}`
+      }))
+    }));
+    const pressureAccounts = pressureGroups.flatMap((group) =>
+      group.accounts.map((account) => ({ group, account }))
+    );
+    const pressureHistory: HistoryRecord[] = Array.from({ length: historyCount }, (_, index) => {
+      const entry = pressureAccounts[index % pressureAccounts.length];
+      const day = String((index % 28) + 1).padStart(2, '0');
+      const beforeAmount = (index % 7 === 0 ? -1 : 1) * (1000 + (index % 9000));
+      const delta = index % 2 === 0 ? 200 : -200;
+
+      return {
+        id: `pressure-history-${index}`,
+        accountId: entry.account.id,
+        type: MODIFY_HISTORY_TYPE,
+        groupName: entry.group.name,
+        accountName: entry.account.name,
+        beforeAmount,
+        afterAmount: beforeAmount + delta,
+        time: `2026-05-${day}T10:${String(index % 60).padStart(2, '0')}:00.000Z`,
+        note: index % 5 === 0 ? '现金备注 快照 回归' : '常规备注'
+      };
+    });
+    const pressureSnapshots: BackupRecord[] = Array.from({ length: 300 }, (_, index) => ({
+      id: `pressure-snapshot-${index}`,
+      backedUpAt: `2026-05-${String((index % 28) + 1).padStart(2, '0')}T08:00:00.000Z`,
+      historyCount: 1000 + index,
+      incrementCount: index % 30,
+      method: index % 2 === 0 ? 'auto' : 'manual'
+    }));
+
+    return createSearchIndexFor(
+      pressureGroups,
+      pressureHistory,
+      pressureSnapshots,
+      settingsItems
+    );
+  };
+  const searchQueries = ['', '现', '现金', '200', '+200', '20260512', '快照'];
+  const continuousQueries = ['现', '现金', '现金 2', '现金 20', '现金 200'];
+
+  [10000, 20000].forEach((historyCount) => {
+    const pressureIndex = createPressureIndex(historyCount);
+    let maxSingleQueryDuration = 0;
+
+    searchQueries.forEach((query) => {
+      const start = performance.now();
+      const output = runGlobalSearch(pressureIndex, query);
+      const duration = performance.now() - start;
+
+      maxSingleQueryDuration = Math.max(maxSingleQueryDuration, duration);
+
+      if (query) {
+        assert.equal(output.counts.all > 0, true, `${query} should return pressure results`);
+      } else {
+        assert.equal(
+          output.counts.all,
+          Object.values(pressureIndex.totals).reduce((total, count) => total + count, 0)
+        );
+      }
+    });
+
+    const sequenceStart = performance.now();
+
+    continuousQueries.forEach((query) => {
+      runGlobalSearch(pressureIndex, query);
+    });
+
+    const sequenceDuration = performance.now() - sequenceStart;
+    const singleQueryBudget = historyCount === 20000 ? 1200 : 800;
+    const sequenceBudget = historyCount === 20000 ? 3500 : 2400;
+
+    assert.ok(
+      maxSingleQueryDuration < singleQueryBudget,
+      `${historyCount} history records single-query max should stay under ${singleQueryBudget}ms, got ${maxSingleQueryDuration.toFixed(2)}ms`
+    );
+    assert.ok(
+      sequenceDuration < sequenceBudget,
+      `${historyCount} history records continuous input should stay under ${sequenceBudget}ms, got ${sequenceDuration.toFixed(2)}ms`
+    );
+  });
 });

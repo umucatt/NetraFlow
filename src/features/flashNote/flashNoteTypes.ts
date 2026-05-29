@@ -14,7 +14,6 @@ export type FlashCell = {
   enabled: boolean;
   original: boolean;
   missing: boolean;
-  pendingDelete: boolean;
 };
 
 export type FlashWriteRow = {

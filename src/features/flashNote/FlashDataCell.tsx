@@ -82,8 +82,7 @@ export function FlashDataCell({
         hasValue ? 'has-value' : '',
         cell.missing ? 'is-missing' : '',
         cell.enabled && !hasValue ? 'is-enabled-blank is-touched-empty' : '',
-        cell.pendingDelete ? 'is-pending-delete' : '',
-        isConfirmSelected ? 'is-correction-selected' : '',
+        isConfirmSelected ? 'is-confirm-selected' : '',
         isDimmed ? 'is-dimmed' : ''
       ]
         .filter(Boolean)
@@ -92,7 +91,7 @@ export function FlashDataCell({
       onPointerEnter={() => onPointerEnter?.(dateValue)}
       onPointerUp={(event) => onPointerUp?.(dateValue, event)}
       onMouseDown={(event) => {
-        if (mode === 'input') {
+        if (mode === 'input' || mode === 'confirm') {
           event.preventDefault();
         }
       }}

@@ -1393,6 +1393,14 @@ test('flash note visual copy removes extra eyebrows and keeps mode labels explic
   const appSource = readProjectFile('src/App.tsx');
   const stylesSource = readProjectFile('src/styles.css');
   const flashSelectSource = readProjectFile('src/features/flashNote/FlashSelectStep.tsx');
+  const selectionToolsSource = flashSelectSource.slice(
+    flashSelectSource.indexOf('const selectionTools'),
+    flashSelectSource.indexOf('const dateRuleTools')
+  );
+  const dateRuleToolsSource = flashSelectSource.slice(
+    flashSelectSource.indexOf('const dateRuleTools'),
+    flashSelectSource.indexOf('export function FlashSelectStep')
+  );
   const flashExitSource = appSource.slice(
     appSource.indexOf('const renderFlashExitConfirm'),
     appSource.indexOf('const renderFlashReturnDateConfirm')
@@ -1401,8 +1409,57 @@ test('flash note visual copy removes extra eyebrows and keeps mode labels explic
   assert.equal(flashSelectSource.includes('<p className="eyebrow">输入模式</p>'), false);
   assert.equal(flashSelectSource.includes('净值变动（change）'), true);
   assert.equal(flashSelectSource.includes('账户余额（balance）'), true);
+  assert.equal(flashSelectSource.includes("label: '单选'"), true);
+  assert.equal(flashSelectSource.includes("label: '交集'"), false);
+  assert.equal(flashSelectSource.includes("label: '合集'"), true);
+  assert.equal(flashSelectSource.includes("label: '删除'"), true);
+  assert.equal(flashSelectSource.includes('单选/拖选'), false);
+  assert.equal(flashSelectSource.includes('合集/合并'), false);
+  assert.equal(flashSelectSource.includes('删除/相减'), false);
+  assert.equal(selectionToolsSource.includes("mode: 'intersect'"), false);
+  assert.equal(selectionToolsSource.match(/mode: '/g)?.length ?? 0, 3);
+  assert.equal(dateRuleToolsSource.match(/rule: '/g)?.length ?? 0, 3);
+  assert.equal(dateRuleToolsSource.includes("rule: 'all'"), true);
+  assert.equal(dateRuleToolsSource.includes("rule: 'weekday'"), true);
+  assert.equal(dateRuleToolsSource.includes("rule: 'weekend'"), true);
+  assert.equal(appSource.includes("'date-select'"), false);
+  assert.equal(appSource.includes("'mode-select'"), false);
+  assert.equal(appSource.includes("'sequence-input'"), false);
+  assert.equal(appSource.includes("'correction'"), false);
   assert.equal(flashExitSource.includes('退出闪记'), false);
   assert.match(stylesSource, /\.flash-note-mode-select\s*\{[^}]*place-items: center;[^}]*\}/s);
+  assert.match(
+    stylesSource,
+    /\.flash-note-calendar-panel\s*\{[^}]*--flash-note-month-gap: 12px;[^}]*\}/s
+  );
+  assert.match(
+    stylesSource,
+    /\.flash-note-calendar-header\s*\{[^}]*display: grid;[^}]*grid-template-columns: minmax\(0, 1fr\) var\(--flash-note-month-gap\) minmax\(0, 1fr\);[^}]*\}/s
+  );
+  assert.match(
+    stylesSource,
+    /\.flash-note-calendar-header > button:first-child\s*\{[^}]*grid-column: 1;[^}]*justify-self: start;[^}]*\}/s
+  );
+  assert.match(
+    stylesSource,
+    /\.flash-note-calendar-header > button:last-child\s*\{[^}]*grid-column: 3;[^}]*justify-self: end;[^}]*\}/s
+  );
+  assert.match(
+    stylesSource,
+    /\.flash-note-tool-row\s*\{[^}]*grid-column: 1 \/ -1;[^}]*grid-row: 1;[^}]*justify-self: center;[^}]*display: inline-flex;[^}]*width: fit-content;[^}]*justify-content: center;[^}]*\}/s
+  );
+  assert.match(
+    stylesSource,
+    /\.flash-note-double-month\s*\{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);[^}]*gap: var\(--flash-note-month-gap\);[^}]*\}/s
+  );
+  assert.match(
+    stylesSource,
+    /\.flash-note-icon-tool\s*\{[^}]*box-sizing: border-box;[^}]*width: var\(--nf-control-height\);[^}]*min-width: var\(--nf-control-height\);[^}]*max-width: var\(--nf-control-height\);[^}]*\}/s
+  );
+  assert.match(
+    stylesSource,
+    /\.flash-note-rule-tools button\s*\{[^}]*width: var\(--nf-control-height\);[^}]*min-width: var\(--nf-control-height\);[^}]*max-width: var\(--nf-control-height\);[^}]*\}/s
+  );
 });
 
 test('local responsive tightening stays scoped to home stat, page titles, and right panel controls', () => {

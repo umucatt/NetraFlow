@@ -19,6 +19,57 @@ import {
 import packageInfo from '../package.json';
 
 import {
+  DAY_MS,
+  clampHistoryDateValue,
+  compareHistoryByTimeDesc,
+  createHistoryTimestampForBusinessDate,
+  formatDateRangeDisplay,
+  formatHistoryRecordDate,
+  getCalendarDays,
+  getDateKeyFromValue,
+  getDateRangeKeys,
+  getDateTimestamp,
+  getDateWeekKey,
+  getHistoryCalendarLeadMonth,
+  getHistoryDateKey,
+  getHistoryRangeTokens,
+  getHistoryTimestamp,
+  getLastWeekRange,
+  getRecent7DayRange,
+  getRelativeDateLabel,
+  getValidTimestamp,
+  isFutureDateKey,
+  isWithinDateRange,
+  parseDateToken,
+  parseHistoryRangeInput,
+  toDateInputValue
+} from './app/dateUtils';
+import {
+  getLegacyNature,
+  isPositiveNature,
+  toStoredAmountByNature
+} from './app/accountNature';
+import {
+  AUTO_BACKUP_SETTINGS_STORAGE_KEY,
+  BACKUP_RECORDS_STORAGE_KEY,
+  CHART_SETTINGS_STORAGE_KEY,
+  FIRST_WELCOME_STORAGE_KEY,
+  GLOBAL_SETTINGS_STORAGE_KEY,
+  GROUPS_STORAGE_KEY,
+  HISTORY_STORAGE_KEY,
+  LAST_BACKUP_HISTORY_COUNT_STORAGE_KEY,
+  LAST_BACKUP_STORAGE_KEY,
+  LEGACY_ACCOUNTS_STORAGE_KEY,
+  LEGACY_ACCOUNT_TYPES_STORAGE_KEY,
+  LEGACY_ARCHIVED_ACCOUNTS_STORAGE_KEY,
+  LEGACY_DELETED_RECORDS_STORAGE_KEY,
+  LEGACY_HISTORY_STORAGE_KEY,
+  MIGRATION_BACKUP_STORAGE_KEY,
+  ROLLUP_IMPORT_HASHES_STORAGE_KEY,
+  USER_SETTINGS_FILE_TYPE,
+  USER_SETTINGS_FILE_VERSION
+} from './app/storageKeys';
+import {
   NfFlashnoteSourceIcon,
   NfRollupSourceWideIcon,
   NfSortIcon,
@@ -48,6 +99,11 @@ import {
   AccountRestoreDialog
 } from './features/account';
 import {
+  findBestAccountTypeMatch,
+  getAccountTypeGhostText,
+  normalizeTypeSearchText
+} from './features/account/accountTypeSearch';
+import {
   AssetAllocationPanel,
   AssetChartsPanel,
   AssetStructureGraphic,
@@ -57,8 +113,18 @@ import {
   ChartLegendList,
   ChartSettingsPanel,
   PieSegments,
+  deriveAssetStructureData,
+  deriveGroupDetailTrendData,
+  deriveGroupDetailStructureData,
+  formatChartNumber,
+  formatChartPercent,
   getInteractiveChartClassName
 } from './features/charts';
+import { deriveAccountTrendPoints } from './features/charts/accountTrendData';
+import {
+  deriveAssetTrendPoints,
+  type TrendChartPoint
+} from './features/charts/assetTrendData';
 import { FlashNotePage } from './features/flashNote/FlashNotePage';
 import {
   BackupRecordList,
@@ -99,13 +165,13 @@ import {
   toAccountOperationIsoTime
 } from './accountOperationDate';
 import {
-  buildDisplayChartItems,
   buildSteppedStackLayers,
   cloneCategoryChartSettings,
   createSteppedAreaPath,
+  createSteppedHorizontalLinePath,
+  createSteppedVerticalLinePath,
   getArchivedChartTooltipLabel,
   getChartAxisLabelIndexes,
-  getChartRangeDateKeys,
   getChartValueLabelIndexes,
   getChartValueLabelLayout,
   getEffectiveAccountChartSettings,
@@ -124,9 +190,17 @@ import {
   backspaceFlashInputValue,
   getContinuousFlashDates,
   getFlashDirectionFromDates,
+  getFlashDefaultVisibleMonth,
   getFlashWeeksAround,
-  getFlashWeeksForDates
+  getFlashWeeksForDates,
+  parseFlashNumberInput,
+  resolveFlashConfirmNavigationDate,
+  resolveFlashCellValueUpdate,
+  resolveFlashSelectionBounds,
+  resolveFlashSelectionDates,
+  sortFlashDatesByDirection
 } from './features/flashNote/flashNoteUtils';
+import type { FlashConfirmNavigationKey } from './features/flashNote/flashNoteUtils';
 import { useFlashKeyboardInput } from './features/flashNote/useFlashKeyboardInput';
 import {
   DEFAULT_HOME_ASSET_STAT_SETTINGS,
@@ -172,8 +246,30 @@ import {
   isEncryptedSnapshotFile
 } from './security/snapshotCrypto';
 
+import type {
+  Account,
+  AccountOperationEntrySource,
+  AccountPointer,
+  AccountTypeNature,
+  AppData,
+  ArchivedAccountEntry,
+  AssetGroup,
+  AutoBackupSettings,
+  BackupCycle,
+  BackupCycleUnit,
+  BackupMethod,
+  BackupRecord,
+  EditMode,
+  HistoryRecord,
+  HistoryType
+} from './app/types';
 import type { RightPanelActionButtonProps } from './components/rightPanel';
-import type { ChartLegendItemData, TotalAssetChartSettings } from './features/charts';
+import type {
+  ChartLegendItemData,
+  GroupDetailTrendData,
+  GroupDetailStructureData,
+  TotalAssetChartSettings
+} from './features/charts';
 import type {
   FlashCell,
   FlashDateRule,
@@ -188,8 +284,6 @@ import type {
   BasicAccountChartSettings,
   BasicCategoryChartSettings,
   ChartColorAssignmentMode as NetraflowChartColorAssignmentMode,
-  ChartColorItem,
-  ChartPointKind,
   ChartPointValueMode,
   ChartXAxisRange,
   GlobalChartControlMode
@@ -210,98 +304,7 @@ import type {
 } from './search/searchTypes';
 import type { PasswordHash } from './security/passwordHash';
 
-type Account = {
 
-  id: string;
-
-  name: string;
-
-  amount: number;
-
-  createdAt: string;
-
-  alias?: string;
-
-  archived?: boolean;
-
-  archivedAt?: string;
-
-};
-
-
-
-type AccountTypeNature = 'asset' | 'receivable' | 'liability';
-
-
-
-type AssetGroup = {
-
-  name: string;
-
-  nature: AccountTypeNature;
-
-  includeInStats: boolean;
-
-  sortOrder: number;
-
-  accounts: Account[];
-
-};
-
-
-
-type HistoryType = '新增' | '删除' | '修改' | '归档' | '重新启用';
-
-type EditMode = 'set' | 'adjust';
-
-type AccountOperationEntrySource = 'account-detail' | 'quick-single-entry';
-
-
-
-type HistoryRecord = {
-
-  id: string;
-
-  accountId: string;
-
-  type: HistoryType;
-
-  groupName: string;
-
-  accountName: string;
-
-  beforeAmount: number | null;
-
-  afterAmount: number | null;
-
-  time: string;
-
-  relatedTime?: string;
-
-  note?: string;
-
-  source?: 'flash-note' | 'rollup';
-
-};
-
-
-
-type AppData = {
-
-  groups: AssetGroup[];
-
-  history: HistoryRecord[];
-
-};
-
-
-
-type FlashNoteStage =
-  | FlashStep
-  | 'date-select'
-  | 'mode-select'
-  | 'sequence-input'
-  | 'correction';
 
 type FlashNoteInputMode = FlashInputMode;
 
@@ -319,73 +322,7 @@ type FlashNoteCell = FlashCell;
 
 
 
-type FlashNoteStashItem = {
-
-  date: string;
-
-  value: string;
-
-};
-
-
-
-type FlashNoteStashSegment = {
-
-  id: string;
-
-  items: FlashNoteStashItem[];
-
-};
-
-
-
-type FlashNoteContextMenu =
-
-  | {
-
-      kind: 'block';
-
-      x: number;
-
-      y: number;
-
-      date: string;
-
-    }
-
-  | {
-
-      kind: 'place';
-
-      x: number;
-
-      y: number;
-
-      date: string;
-
-    }
-
-  | null;
-
-
-
 type FlashNoteWriteRow = FlashWriteRow;
-
-
-
-type FlashCorrectionEntrySnapshot = {
-
-  cells: Record<string, FlashNoteCell>;
-
-  inputCursor: number;
-
-  currentInput: string;
-
-  rangeStart: string;
-
-  rangeEnd: string;
-
-};
 
 
 
@@ -499,16 +436,6 @@ type InputDialogState = {
 
 
 
-type AccountPointer = {
-
-  groupName: string;
-
-  accountId: string;
-
-} | null;
-
-
-
 type GroupPointerInteraction = {
 
   pointerId: number;
@@ -522,60 +449,6 @@ type GroupPointerInteraction = {
   moved: boolean;
 
   longPressTriggered: boolean;
-
-};
-
-
-
-type ArchivedAccountEntry = Account & {
-
-  groupName: string;
-
-};
-
-
-
-type BackupCycleUnit = 'day' | 'week' | 'month';
-
-
-
-type BackupCycle = {
-
-  value: number;
-
-  unit: BackupCycleUnit;
-
-};
-
-
-
-type BackupMethod = 'manual' | 'auto';
-
-
-
-type BackupRecord = {
-
-  id: string;
-
-  backedUpAt: string;
-
-  historyCount: number;
-
-  incrementCount: number;
-
-  method: BackupMethod;
-
-};
-
-
-
-type AutoBackupSettings = {
-
-  enabled: boolean;
-
-  cycle: BackupCycle;
-
-  directory: string;
 
 };
 
@@ -877,56 +750,6 @@ type OverlayBackdropProps = Omit<
 
 
 
-type ChartSegment = {
-
-  id: string;
-
-  label: string;
-
-  amount: number;
-
-  color: string;
-
-  sourceIds?: string[];
-
-  archived?: boolean;
-
-};
-
-
-
-type AssetStructureChartData = {
-
-  positiveSegments: ChartSegment[];
-
-  negativeSegments: ChartSegment[];
-
-  positiveTotal: number;
-
-  negativeTotal: number;
-
-  debtRatio: number;
-
-};
-
-
-
-type TrendChartPoint = {
-
-  date: string;
-
-  kind: ChartPointKind;
-
-  net: number;
-
-  positive: number;
-
-  negative: number;
-
-};
-
-
-
 type TrendChartSeries = {
 
   key: 'net' | 'positive' | 'negative';
@@ -936,52 +759,6 @@ type TrendChartSeries = {
   color: string;
 
   values: number[];
-
-};
-
-
-
-type GroupDetailStructureData = {
-
-  segments: ChartSegment[];
-
-  total: number;
-
-  signedTotal: number;
-
-  nature: AccountTypeNature;
-
-};
-
-
-
-type GroupDetailTrendSeries = {
-
-  id: string;
-
-  label: string;
-
-  color: string;
-
-  values: number[];
-
-  archived?: boolean;
-
-};
-
-
-
-type GroupDetailTrendData = {
-
-  dates: string[];
-
-  pointKinds: ChartPointKind[];
-
-  series: GroupDetailTrendSeries[];
-
-  totals: number[];
-
-  nature: AccountTypeNature;
 
 };
 
@@ -998,54 +775,6 @@ type RecentNetWorthChange = {
 } | null;
 
 
-
-type ChartAccountState = {
-
-  groupName: string;
-
-  nature: AccountTypeNature;
-
-  amount: number;
-
-};
-
-
-
-const GROUPS_STORAGE_KEY = 'asset-overview-groups';
-
-const HISTORY_STORAGE_KEY = 'asset-overview-history';
-
-const LAST_BACKUP_STORAGE_KEY = 'lastBackupAt';
-
-const LAST_BACKUP_HISTORY_COUNT_STORAGE_KEY = 'lastBackupHistoryCount';
-
-const BACKUP_RECORDS_STORAGE_KEY = 'backupRecords';
-
-const AUTO_BACKUP_SETTINGS_STORAGE_KEY = 'autoBackupSettings';
-
-const CHART_SETTINGS_STORAGE_KEY = 'assetChartSettings';
-
-const GLOBAL_SETTINGS_STORAGE_KEY = 'netraflowGlobalSettings';
-
-const FIRST_WELCOME_STORAGE_KEY = 'netraflowFirstWelcomeState';
-
-const ROLLUP_IMPORT_HASHES_STORAGE_KEY = 'netraflowRollupImportHashes';
-
-const USER_SETTINGS_FILE_TYPE = 'netraflow-user-settings';
-
-const USER_SETTINGS_FILE_VERSION = 1;
-
-const MIGRATION_BACKUP_STORAGE_KEY = 'netraflow_backup_before_migration';
-
-const LEGACY_ACCOUNTS_STORAGE_KEY = 'accounts';
-
-const LEGACY_ACCOUNT_TYPES_STORAGE_KEY = 'accountTypes';
-
-const LEGACY_HISTORY_STORAGE_KEY = 'historyRecords';
-
-const LEGACY_ARCHIVED_ACCOUNTS_STORAGE_KEY = 'archivedAccounts';
-
-const LEGACY_DELETED_RECORDS_STORAGE_KEY = 'deletedRecords';
 
 const PRODUCT_NAME_EN = 'NetraFlow';
 
@@ -1082,8 +811,6 @@ const SECRET_CONSOLE_DEFAULT_PLACEHOLDER = '嘘...轻一点';
 const SECRET_CONSOLE_TEST_DATA_SUCCESS = '示例数据已写入真实数据';
 
 const SECRET_CONSOLE_NYAA_SUCCESS = '已解锁nyaa主题';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const GLOBAL_SETTINGS_NAV_ITEMS: Array<{ id: GlobalSettingsSection; label: string }> = [
 
@@ -2717,26 +2444,6 @@ const hasBackupRecordMissingIncrementCount = () => {
 
 
 
-const getValidTimestamp = (value: string | null | undefined) => {
-
-  if (!value) {
-
-    return null;
-
-  }
-
-
-
-  const timestamp = Date.parse(value);
-
-
-
-  return Number.isFinite(timestamp) ? timestamp : null;
-
-};
-
-
-
 const loadLastBackupAt = () => {
 
   const value = window.localStorage.getItem(LAST_BACKUP_STORAGE_KEY);
@@ -3665,27 +3372,9 @@ const isAccountTypeNature = (value: unknown): value is AccountTypeNature =>
 
 
 
-const getLegacyNature = (groupName: string): AccountTypeNature =>
-
-  groupName === '负债' ? 'liability' : 'asset';
-
-
-
 const normalizeGroupNature = (value: unknown, groupName: string): AccountTypeNature =>
 
   isAccountTypeNature(value) ? value : getLegacyNature(groupName);
-
-
-
-const isPositiveNature = (nature: AccountTypeNature) =>
-
-  nature === 'asset' || nature === 'receivable';
-
-
-
-const toStoredAmountByNature = (nature: AccountTypeNature, amount: number) =>
-
-  nature === 'liability' ? -Math.abs(amount) : Math.abs(amount);
 
 
 
@@ -4906,559 +4595,9 @@ const getSegmentedControlStyle = (optionCount: number): CSSProperties =>
 
 
 
-const addDays = (date: Date, days: number) => {
-
-  const nextDate = new Date(date);
-
-  nextDate.setDate(nextDate.getDate() + days);
-
-
-
-  return nextDate;
-
-};
-
-
-
-const toDateInputValue = (date: Date) => {
-
-  const year = date.getFullYear();
-
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-
-  const day = String(date.getDate()).padStart(2, '0');
-
-
-
-  return `${year}-${month}-${day}`;
-
-};
-
-
-
-const getRecent7DayRange = () => {
-
-  const today = new Date();
-
-
-
-  return {
-
-    start: toDateInputValue(addDays(today, -6)),
-
-    end: toDateInputValue(today)
-
-  };
-
-};
-
-
-
-const getSelectedDayCount = (startDate: string, endDate: string) => {
-
-  if (!startDate) {
-
-    return 0;
-
-  }
-
-
-
-  const startTime = getRangeTime(startDate, 'start');
-
-  const endTime = getRangeTime(endDate || startDate, 'start');
-
-  const dayMs = 24 * 60 * 60 * 1000;
-
-
-
-  return Math.abs(Math.round((endTime - startTime) / dayMs)) + 1;
-
-};
-
-
-
-const getDateKeyFromValue = (dateValue: string) =>
-
-  new Date(`${dateValue}T00:00:00`);
-
-
-
-const getTodayDateKey = () => toDateInputValue(new Date());
-
-
-
-const isFutureDateKey = (dateValue: string) => dateValue > getTodayDateKey();
-
-
-
-const clampHistoryDateValue = (dateValue: string) =>
-
-  isFutureDateKey(dateValue) ? getTodayDateKey() : dateValue;
-
-
-
-const getHistoryCalendarLeadMonth = (dateValue = getTodayDateKey()) => {
-
-  const date = getDateKeyFromValue(clampHistoryDateValue(dateValue));
-
-  return new Date(date.getFullYear(), date.getMonth() - 1, 1);
-
-};
-
-
-
-const getMondayDate = (date: Date) => addDays(date, -((date.getDay() + 6) % 7));
-
-
-
-const getDateWeekKey = (dateValue: string) =>
-
-  toDateInputValue(getMondayDate(getDateKeyFromValue(dateValue)));
-
-
-
-const getDateRangeKeys = (startDate: string, endDate: string) => {
-
-  if (!startDate || !endDate) {
-
-    return [];
-
-  }
-
-
-
-  const direction = startDate <= endDate ? 1 : -1;
-
-  const result: string[] = [];
-
-  let cursor = getDateKeyFromValue(startDate);
-
-  const endTime = getDateKeyFromValue(endDate).getTime();
-
-
-
-  while (
-
-    direction === 1
-
-      ? cursor.getTime() <= endTime
-
-      : cursor.getTime() >= endTime
-
-  ) {
-
-    const dateValue = toDateInputValue(cursor);
-
-    if (!isFutureDateKey(dateValue)) {
-
-      result.push(dateValue);
-
-    }
-
-    cursor = addDays(cursor, direction);
-
-  }
-
-
-
-  return result;
-
-};
-
-
-
-const sortFlashDatesByDirection = (
-
-  dates: string[],
-
-  direction: FlashNoteDirection
-
-) => {
-
-  const sortedDates = Array.from(new Set(dates)).sort();
-
-  return direction === 'backward' ? sortedDates.reverse() : sortedDates;
-
-};
-
-
-
-const isValidFlashNumberInput = (value: string) =>
-
-  isMoneyInput(value, { allowNegative: true });
-
-
-
-const parseFlashNumberInput = (value: string) => {
-
-  return parseMoneyInput(value, { allowNegative: true });
-
-};
-
-
-
-const getFlashMonthStart = (date = new Date()) =>
-
-  new Date(date.getFullYear(), date.getMonth(), 1);
-
-
-
-const getFlashDefaultVisibleMonth = (date = new Date()) =>
-
-  getFlashMonthStart(new Date(date.getFullYear(), date.getMonth() - 1, 1));
-
-
-
-const formatDateRangeDisplay = (startDate: string, endDate: string) => {
-
-  if (!startDate) {
-
-    return '';
-
-  }
-
-
-
-  const safeEndDate = endDate || startDate;
-
-  const dateText = startDate === safeEndDate ? startDate : `${startDate} 至 ${safeEndDate}`;
-
-
-
-  return `${dateText}，共选取 ${getSelectedDayCount(startDate, safeEndDate)} 天`;
-
-};
-
-
-
-const parseDateToken = (token: string) => {
-
-  const trimmedToken = token.trim();
-
-
-
-  if (!/^\d{4}$|^\d{6}$/.test(trimmedToken)) {
-
-    return null;
-
-  }
-
-
-
-  const year =
-
-    trimmedToken.length === 6
-
-      ? 2000 + Number(trimmedToken.slice(0, 2))
-
-      : new Date().getFullYear();
-
-  const month =
-
-    trimmedToken.length === 6
-
-      ? Number(trimmedToken.slice(2, 4))
-
-      : Number(trimmedToken.slice(0, 2));
-
-  const day =
-
-    trimmedToken.length === 6
-
-      ? Number(trimmedToken.slice(4, 6))
-
-      : Number(trimmedToken.slice(2, 4));
-
-  const parsedDate = new Date(year, month - 1, day);
-
-
-
-  if (
-
-    parsedDate.getFullYear() !== year ||
-
-    parsedDate.getMonth() !== month - 1 ||
-
-    parsedDate.getDate() !== day
-
-  ) {
-
-    return null;
-
-  }
-
-
-
-  return {
-
-    value: toDateInputValue(parsedDate),
-
-    year,
-
-    hasExplicitYear: trimmedToken.length === 6
-
-  };
-
-};
-
-
-
-const getHistoryRangeTokens = (value: string) => {
-
-  const normalizedValue = value.replace(/至/g, ' ');
-
-  const explicitDateTokens = normalizedValue.match(/\d{4}-\d{2}-\d{2}/g) ?? [];
-
-
-
-  if (explicitDateTokens.length > 0) {
-
-    return explicitDateTokens.map((dateValue) => dateValue.replace(/\D/g, '').slice(2));
-
-  }
-
-
-
-  return normalizedValue.match(/\d{4,6}/g) ?? [];
-
-};
-
-
-
-const parseHistoryRangeInput = (value: string) => {
-
-  const tokens = getHistoryRangeTokens(value);
-
-
-
-  if (tokens.length < 2) {
-
-    return null;
-
-  }
-
-
-
-  const firstToken = tokens[0] ?? '';
-
-  const secondToken = tokens[1] ?? '';
-
-  const firstDate = parseDateToken(firstToken);
-
-  const secondDate = parseDateToken(secondToken);
-
-
-
-  if (!firstDate || !secondDate) {
-
-    return null;
-
-  }
-
-
-
-  return firstDate.value <= secondDate.value
-
-    ? { start: firstDate.value, end: secondDate.value }
-
-    : { start: secondDate.value, end: firstDate.value };
-
-};
-
-
-
-const getLastWeekRange = () => {
-
-  const today = new Date();
-
-  const daysSinceMonday = (today.getDay() + 6) % 7;
-
-  const thisMonday = addDays(today, -daysSinceMonday);
-
-
-
-  return {
-
-    start: toDateInputValue(addDays(thisMonday, -7)),
-
-    end: toDateInputValue(addDays(thisMonday, -1))
-
-  };
-
-};
-
-
-
-const getRangeTime = (dateValue: string, edge: 'start' | 'end') => {
-
-  if (!dateValue) {
-
-    return edge === 'start' ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY;
-
-  }
-
-
-
-  const time = new Date(`${dateValue}T${edge === 'start' ? '00:00:00' : '23:59:59.999'}`).getTime();
-
-
-
-  return Number.isFinite(time)
-
-    ? time
-
-    : edge === 'start'
-
-      ? Number.NEGATIVE_INFINITY
-
-      : Number.POSITIVE_INFINITY;
-
-};
-
-
-
-const isWithinDateRange = (time: string, startDate: string, endDate: string) => {
-
-  const timestamp = new Date(time).getTime();
-
-
-
-  return timestamp >= getRangeTime(startDate, 'start') && timestamp <= getRangeTime(endDate, 'end');
-
-};
-
-
-
-const getHistoryTimestamp = (record: HistoryRecord) => {
-
-  const timestamp = Date.parse(record.time);
-
-
-
-  return Number.isFinite(timestamp) ? timestamp : 0;
-
-};
-
-
-
-const compareHistoryByTimeDesc = (left: HistoryRecord, right: HistoryRecord) =>
-
-  getHistoryTimestamp(right) - getHistoryTimestamp(left);
-
-
-
-const getDateTimestamp = (dateValue: string) => {
-
-  const timestamp = new Date(`${dateValue}T00:00:00`).getTime();
-
-
-
-  return Number.isFinite(timestamp) ? timestamp : 0;
-
-};
-
-
-
-const getDateEndTimestamp = (dateValue: string) => {
-
-  const timestamp = new Date(`${dateValue}T23:59:59.999`).getTime();
-
-
-
-  return Number.isFinite(timestamp) ? timestamp : 0;
-
-};
-
-
-
-const getHistoryDateKey = (time: string) => {
-
-  const timestamp = getValidTimestamp(time);
-
-
-
-  return timestamp === null ? '' : toDateInputValue(new Date(timestamp));
-
-};
-
-
-
-const formatChartNumber = (amount: number | null, maximumFractionDigits = 2) => {
-
-  if (amount === null || !Number.isFinite(amount)) {
-
-    return '-';
-
-  }
-
-
-
-  return new Intl.NumberFormat('zh-CN', {
-
-    maximumFractionDigits
-
-  }).format(roundToMoneyPrecision(amount));
-
-};
-
-
-
-const formatChartPercent = (numerator: number, denominator: number) => {
-
-  if (denominator <= 0) {
-
-    return '0%';
-
-  }
-
-
-
-  return `${((Math.abs(numerator) / Math.abs(denominator)) * 100).toFixed(1)}%`;
-
-};
-
-
-
 const clampNumber = (value: number, min: number, max: number) =>
 
   Math.min(max, Math.max(min, value));
-
-
-
-const getRelativeDateLabel = (dateValue: string) => {
-
-  const today = new Date();
-
-  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-
-  const targetStart = getDateTimestamp(dateValue);
-
-  const dayDistance =
-
-    targetStart === 0 ? 0 : Math.max(0, Math.floor((todayStart - targetStart) / DAY_MS));
-
-
-
-  if (dayDistance === 0) {
-
-    return '今天';
-
-  }
-
-
-
-  if (dayDistance === 1) {
-
-    return '昨天';
-
-  }
-
-
-
-  return `${dayDistance} 天前`;
-
-};
 
 
 
@@ -5522,1106 +4661,6 @@ const deriveRecentNetWorthChange = (history: HistoryRecord[]): RecentNetWorthCha
 
 
 
-const getHistoryOrder = (time: string, fallback: number) => {
-
-  const timestamp = getValidTimestamp(time);
-
-  return timestamp ?? fallback;
-
-};
-
-
-
-const getGroupColorRegistry = (groups: AssetGroup[], history: HistoryRecord[]) => {
-
-  const registry = new Map<string, ChartColorItem>();
-
-
-
-  groups.forEach((group, index) => {
-
-    registry.set(group.name, {
-
-      id: group.name,
-
-      label: group.name,
-
-      amount: 0,
-
-      order: Number.MAX_SAFE_INTEGER - groups.length + index
-
-    });
-
-  });
-
-
-
-  history.forEach((record, index) => {
-
-    const order = getHistoryOrder(record.time, Number.MAX_SAFE_INTEGER - index);
-
-    const existing = registry.get(record.groupName);
-
-
-
-    if (!existing || order < existing.order) {
-
-      registry.set(record.groupName, {
-
-        id: record.groupName,
-
-        label: record.groupName,
-
-        amount: 0,
-
-        order
-
-      });
-
-    }
-
-  });
-
-
-
-  return Array.from(registry.values());
-
-};
-
-
-
-const getActiveGroupTotal = (group: AssetGroup) =>
-
-  toStoredAmountByNature(
-
-    group.nature,
-
-    group.accounts
-
-      .filter((account) => !account.archived)
-
-      .reduce((sum, account) => sum + account.amount, 0)
-
-  );
-
-
-
-const deriveAssetStructureData = (
-
-  groups: AssetGroup[],
-
-  history: HistoryRecord[],
-
-  colorAssignmentMode: NetraflowChartColorAssignmentMode
-
-): AssetStructureChartData => {
-
-  const includedGroups = groups.filter((group) => group.includeInStats);
-
-  const positiveSegments: ChartSegment[] = [];
-
-  const negativeSegments: ChartSegment[] = [];
-
-  const groupByName = new Map(includedGroups.map((group) => [group.name, group]));
-
-  const displayItems = buildDisplayChartItems(
-
-    includedGroups.map((group) => ({
-
-      id: group.name,
-
-      label: group.name,
-
-      amount: Math.abs(getActiveGroupTotal(group)),
-
-      order: group.sortOrder
-
-    })),
-
-    colorAssignmentMode,
-
-    {
-
-      registry: getGroupColorRegistry(groups, history),
-
-      otherId: 'group-other',
-
-      otherLabel: '其他'
-
-    }
-
-  );
-
-
-
-  displayItems.forEach((item) => {
-
-    const sourceGroups = item.sourceIds
-
-      .map((sourceId) => groupByName.get(sourceId))
-
-      .filter((group): group is AssetGroup => Boolean(group));
-
-    const positiveAmount = sourceGroups
-
-      .filter((group) => isPositiveNature(group.nature))
-
-      .reduce((sum, group) => sum + Math.abs(getActiveGroupTotal(group)), 0);
-
-    const negativeAmount = sourceGroups
-
-      .filter((group) => !isPositiveNature(group.nature))
-
-      .reduce((sum, group) => sum + Math.abs(getActiveGroupTotal(group)), 0);
-
-
-
-    if (positiveAmount > 0) {
-
-      positiveSegments.push({
-
-        id: `${item.id}-positive`,
-
-        label: item.label,
-
-        amount: positiveAmount,
-
-        color: item.color,
-
-        sourceIds: item.sourceIds
-
-      });
-
-    }
-
-
-
-    if (negativeAmount > 0) {
-
-      negativeSegments.push({
-
-        id: `${item.id}-negative`,
-
-        label: item.label,
-
-        amount: negativeAmount,
-
-        color: item.color,
-
-        sourceIds: item.sourceIds
-
-      });
-
-    }
-
-  });
-
-
-
-  const positiveTotal = positiveSegments.reduce((sum, segment) => sum + segment.amount, 0);
-
-  const negativeTotal = negativeSegments.reduce((sum, segment) => sum + segment.amount, 0);
-
-
-
-  return {
-
-    positiveSegments,
-
-    negativeSegments,
-
-    positiveTotal,
-
-    negativeTotal,
-
-    debtRatio:
-
-      positiveTotal > 0
-
-        ? negativeTotal / positiveTotal
-
-        : negativeTotal > 0
-
-          ? Number.POSITIVE_INFINITY
-
-          : 0
-
-  };
-
-};
-
-
-
-const createCurrentChartState = (groups: AssetGroup[]) => {
-
-  const state = new Map<string, ChartAccountState>();
-
-
-
-  groups.forEach((group) => {
-
-    if (!group.includeInStats) {
-
-      return;
-
-    }
-
-
-
-    group.accounts.forEach((account) => {
-
-      if (account.archived) {
-
-        return;
-
-      }
-
-
-
-      state.set(account.id, {
-
-        groupName: group.name,
-
-        nature: group.nature,
-
-        amount: toStoredAmountByNature(group.nature, account.amount)
-
-      });
-
-    });
-
-  });
-
-
-
-  return state;
-
-};
-
-
-
-const getChartGroupMeta = (groups: AssetGroup[], groupName: string) => {
-
-  const group = groups.find((currentGroup) => currentGroup.name === groupName);
-
-
-
-  return {
-
-    nature: group?.nature ?? getLegacyNature(groupName),
-
-    includeInStats: group?.includeInStats ?? true
-
-  };
-
-};
-
-
-
-const setChartStateAmount = (
-
-  state: Map<string, ChartAccountState>,
-
-  groups: AssetGroup[],
-
-  record: HistoryRecord,
-
-  amount: number | null
-
-) => {
-
-  const meta = getChartGroupMeta(groups, record.groupName);
-
-
-
-  if (!meta.includeInStats || amount === null) {
-
-    state.delete(record.accountId);
-
-    return;
-
-  }
-
-
-
-  state.set(record.accountId, {
-
-    groupName: record.groupName,
-
-    nature: meta.nature,
-
-    amount: toStoredAmountByNature(meta.nature, amount)
-
-  });
-
-};
-
-
-
-const rollbackHistoryRecordForTrend = (
-
-  state: Map<string, ChartAccountState>,
-
-  groups: AssetGroup[],
-
-  record: HistoryRecord
-
-) => {
-
-  if (record.type === '新增') {
-
-    setChartStateAmount(state, groups, record, record.beforeAmount);
-
-    return;
-
-  }
-
-
-
-  if (record.type === '删除' || record.type === '归档') {
-
-    setChartStateAmount(state, groups, record, record.beforeAmount);
-
-    return;
-
-  }
-
-
-
-  if (record.type === '重新启用') {
-
-    state.delete(record.accountId);
-
-    return;
-
-  }
-
-
-
-  setChartStateAmount(state, groups, record, record.beforeAmount);
-
-};
-
-
-
-const sumChartState = (state: Map<string, ChartAccountState>) => {
-
-  let positive = 0;
-
-  let negative = 0;
-
-
-
-  state.forEach((account) => {
-
-    if (isPositiveNature(account.nature)) {
-
-      positive += Math.abs(account.amount);
-
-      return;
-
-    }
-
-
-
-    negative += Math.abs(account.amount);
-
-  });
-
-
-
-  return {
-
-    positive,
-
-    negative,
-
-    net: positive - negative
-
-  };
-
-};
-
-
-
-const getTrendChangeDateKeys = (history: HistoryRecord[]) =>
-
-  Array.from(
-
-    new Set(
-
-      history
-
-        .map((record) => getHistoryDateKey(record.time))
-
-        .filter((date): date is string => Boolean(date))
-
-    )
-
-  ).sort((left, right) => getDateTimestamp(left) - getDateTimestamp(right));
-
-
-
-const deriveAssetTrendPoints = (
-
-  groups: AssetGroup[],
-
-  history: HistoryRecord[],
-
-  settings: AssetChartSettings['trend']
-
-): TrendChartPoint[] => {
-
-  const includedGroupNames = new Set(
-
-    groups.filter((group) => group.includeInStats).map((group) => group.name)
-
-  );
-
-  const relevantHistory = history.filter((record) => {
-
-    const meta = getChartGroupMeta(groups, record.groupName);
-
-    return meta.includeInStats || includedGroupNames.has(record.groupName);
-
-  });
-
-  const changeDateKeys = getTrendChangeDateKeys(relevantHistory);
-
-  const rangeDateKeys = getChartRangeDateKeys(settings.xAxisRange);
-
-  const rangeStart = rangeDateKeys[0] ?? '';
-
-  const rangeEnd = rangeDateKeys[rangeDateKeys.length - 1] ?? '';
-
-  const changeDateKeysBeforeEnd = changeDateKeys.filter(
-
-    (date) => !rangeEnd || getDateTimestamp(date) <= getDateTimestamp(rangeEnd)
-
-  );
-
-
-
-  if (changeDateKeysBeforeEnd.length < 2 || rangeDateKeys.length === 0) {
-
-    return [];
-
-  }
-
-
-
-  const hasBaselineBeforeRange = changeDateKeysBeforeEnd.some(
-
-    (date) => getDateTimestamp(date) < getDateTimestamp(rangeStart)
-
-  );
-
-  const firstChangeInRange = changeDateKeysBeforeEnd.find(
-
-    (date) => getDateTimestamp(date) >= getDateTimestamp(rangeStart)
-
-  );
-
-  const firstPlotDate = hasBaselineBeforeRange ? rangeStart : firstChangeInRange;
-
-
-
-  if (!firstPlotDate) {
-
-    return [];
-
-  }
-
-
-
-  const pointDateKeys = rangeDateKeys.filter(
-
-    (date) => getDateTimestamp(date) >= getDateTimestamp(firstPlotDate)
-
-  );
-
-  const changeDateKeySet = new Set(changeDateKeysBeforeEnd);
-
-
-
-  const currentState = createCurrentChartState(groups);
-
-  const recordsByTimeDesc = relevantHistory
-
-    .map((record, index) => ({
-
-      record,
-
-      index,
-
-      timestamp: getHistoryTimestamp(record)
-
-    }))
-
-    .filter((entry) => entry.timestamp > 0)
-
-    .sort((left, right) => right.timestamp - left.timestamp || left.index - right.index);
-
-
-
-  return pointDateKeys.map((date) => {
-
-    const state = new Map(currentState);
-
-    const cutoff = getDateEndTimestamp(date);
-
-
-
-    recordsByTimeDesc.forEach((entry) => {
-
-      if (entry.timestamp > cutoff) {
-
-        rollbackHistoryRecordForTrend(state, groups, entry.record);
-
-      }
-
-    });
-
-
-
-    return {
-
-      date,
-
-      kind: changeDateKeySet.has(date) ? 'change-date' : 'carry-forward',
-
-      ...sumChartState(state)
-
-    };
-
-  });
-
-};
-
-
-
-const getGroupDetailHistory = (group: AssetGroup, history: HistoryRecord[]) => {
-
-  const currentAccountIds = new Set(group.accounts.map((account) => account.id));
-
-
-
-  return history.filter(
-
-    (record) => record.groupName === group.name || currentAccountIds.has(record.accountId)
-
-  );
-
-};
-
-
-
-const getAccountColorRegistry = (group: AssetGroup, history: HistoryRecord[]) => {
-
-  const registry = new Map<string, ChartColorItem>();
-
-
-
-  group.accounts.forEach((account, index) => {
-
-    registry.set(account.id, {
-
-      id: account.id,
-
-      label: account.name,
-
-      amount: 0,
-
-      order: getHistoryOrder(account.createdAt, index)
-
-    });
-
-  });
-
-
-
-  getGroupDetailHistory(group, history).forEach((record, index) => {
-
-    const order = getHistoryOrder(record.time, Number.MAX_SAFE_INTEGER - index);
-
-    const existing = registry.get(record.accountId);
-
-
-
-    if (!existing || order < existing.order) {
-
-      registry.set(record.accountId, {
-
-        id: record.accountId,
-
-        label: record.accountName,
-
-        amount: 0,
-
-        order
-
-      });
-
-    }
-
-  });
-
-
-
-  return Array.from(registry.values());
-
-};
-
-
-
-const createCurrentGroupDetailState = (group: AssetGroup) => {
-
-  const state = new Map<string, { label: string; amount: number }>();
-
-
-
-  group.accounts.forEach((account) => {
-
-    if (account.archived) {
-
-      return;
-
-    }
-
-
-
-    state.set(account.id, {
-
-      label: account.name,
-
-      amount: toStoredAmountByNature(group.nature, account.amount)
-
-    });
-
-  });
-
-
-
-  return state;
-
-};
-
-
-
-const setGroupDetailStateAmount = (
-
-  state: Map<string, { label: string; amount: number }>,
-
-  group: AssetGroup,
-
-  record: HistoryRecord,
-
-  amount: number | null
-
-) => {
-
-  if (amount === null) {
-
-    state.delete(record.accountId);
-
-    return;
-
-  }
-
-
-
-  state.set(record.accountId, {
-
-    label: record.accountName,
-
-    amount: toStoredAmountByNature(group.nature, amount)
-
-  });
-
-};
-
-
-
-const rollbackGroupDetailRecordForTrend = (
-
-  state: Map<string, { label: string; amount: number }>,
-
-  group: AssetGroup,
-
-  record: HistoryRecord
-
-) => {
-
-  if (record.type === '新增') {
-
-    setGroupDetailStateAmount(state, group, record, record.beforeAmount);
-
-    return;
-
-  }
-
-
-
-  if (record.type === '删除' || record.type === '归档') {
-
-    setGroupDetailStateAmount(state, group, record, record.beforeAmount);
-
-    return;
-
-  }
-
-
-
-  if (record.type === '重新启用') {
-
-    state.delete(record.accountId);
-
-    return;
-
-  }
-
-
-
-  setGroupDetailStateAmount(state, group, record, record.beforeAmount);
-
-};
-
-
-
-const getGroupDetailStateAtDate = (
-
-  group: AssetGroup,
-
-  currentState: Map<string, { label: string; amount: number }>,
-
-  recordsByTimeDesc: Array<{ record: HistoryRecord; timestamp: number; index: number }>,
-
-  date: string
-
-) => {
-
-  const state = new Map(currentState);
-
-  const cutoff = getDateEndTimestamp(date);
-
-
-
-  recordsByTimeDesc.forEach((entry) => {
-
-    if (entry.timestamp > cutoff) {
-
-      rollbackGroupDetailRecordForTrend(state, group, entry.record);
-
-    }
-
-  });
-
-
-
-  return state;
-
-};
-
-
-
-const deriveGroupDetailStructureData = (
-
-  group: AssetGroup,
-
-  history: HistoryRecord[],
-
-  colorAssignmentMode: NetraflowChartColorAssignmentMode
-
-): GroupDetailStructureData => {
-
-  const registry = getAccountColorRegistry(group, history);
-
-  const registryById = new Map(registry.map((item) => [item.id, item]));
-
-  const activeAccounts = group.accounts.filter((account) => !account.archived);
-
-  const segments = buildDisplayChartItems(
-
-    activeAccounts.map((account, index) => ({
-
-      id: account.id,
-
-      label: account.name,
-
-      amount: Math.abs(account.amount),
-
-      order: registryById.get(account.id)?.order ?? getHistoryOrder(account.createdAt, index)
-
-    })),
-
-    colorAssignmentMode,
-
-    {
-
-      registry,
-
-      otherId: `${group.name}-account-other`,
-
-      otherLabel: '其他'
-
-    }
-
-  );
-
-  const signedTotal = activeAccounts.reduce(
-
-    (sum, account) => sum + toStoredAmountByNature(group.nature, account.amount),
-
-    0
-
-  );
-
-
-
-  return {
-
-    segments,
-
-    total: segments.reduce((sum, segment) => sum + segment.amount, 0),
-
-    signedTotal,
-
-    nature: group.nature
-
-  };
-
-};
-
-
-
-const deriveGroupDetailTrendData = (
-
-  group: AssetGroup,
-
-  history: HistoryRecord[],
-
-  settings: CategoryDetailChartSettings,
-
-  colorAssignmentMode: NetraflowChartColorAssignmentMode
-
-): GroupDetailTrendData => {
-
-  const relevantHistory = getGroupDetailHistory(group, history);
-
-  const changeDateKeys = getTrendChangeDateKeys(relevantHistory);
-
-  const rangeDateKeys = getChartRangeDateKeys(settings.xAxisRange);
-
-  const rangeStart = rangeDateKeys[0] ?? '';
-
-  const rangeEnd = rangeDateKeys[rangeDateKeys.length - 1] ?? '';
-
-  const changeDateKeysBeforeEnd = changeDateKeys.filter(
-
-    (date) => !rangeEnd || getDateTimestamp(date) <= getDateTimestamp(rangeEnd)
-
-  );
-
-
-
-  if (changeDateKeysBeforeEnd.length < 2 || rangeDateKeys.length === 0) {
-
-    return { dates: [], pointKinds: [], series: [], totals: [], nature: group.nature };
-
-  }
-
-
-
-  const hasBaselineBeforeRange = changeDateKeysBeforeEnd.some(
-
-    (date) => getDateTimestamp(date) < getDateTimestamp(rangeStart)
-
-  );
-
-  const firstChangeInRange = changeDateKeysBeforeEnd.find(
-
-    (date) => getDateTimestamp(date) >= getDateTimestamp(rangeStart)
-
-  );
-
-  const firstPlotDate = hasBaselineBeforeRange ? rangeStart : firstChangeInRange;
-
-
-
-  if (!firstPlotDate) {
-
-    return { dates: [], pointKinds: [], series: [], totals: [], nature: group.nature };
-
-  }
-
-
-
-  const dates = rangeDateKeys.filter(
-
-    (date) => getDateTimestamp(date) >= getDateTimestamp(firstPlotDate)
-
-  );
-
-  const changeDateKeySet = new Set(changeDateKeysBeforeEnd);
-
-  const currentState = createCurrentGroupDetailState(group);
-
-  const recordsByTimeDesc = relevantHistory
-
-    .map((record, index) => ({
-
-      record,
-
-      index,
-
-      timestamp: getHistoryTimestamp(record)
-
-    }))
-
-    .filter((entry) => entry.timestamp > 0)
-
-    .sort((left, right) => right.timestamp - left.timestamp || left.index - right.index);
-
-  const dailyStates = dates.map((date) =>
-
-    getGroupDetailStateAtDate(group, currentState, recordsByTimeDesc, date)
-
-  );
-
-  const registry = getAccountColorRegistry(group, history);
-
-  const registryById = new Map(registry.map((item) => [item.id, item]));
-
-  const accountIds = new Set<string>();
-
-
-
-  registry.forEach((item) => accountIds.add(item.id));
-
-  dailyStates.forEach((state) => state.forEach((_, accountId) => accountIds.add(accountId)));
-
-
-
-  const items = Array.from(accountIds).map((accountId) => {
-
-    const values = dailyStates.map((state) => state.get(accountId)?.amount ?? 0);
-
-    const latestValue = values[values.length - 1] ?? 0;
-
-    const maxHistoricalValue = values.reduce(
-
-      (maxValue, value) => Math.max(maxValue, Math.abs(value)),
-
-      0
-
-    );
-
-    const account = group.accounts.find((currentAccount) => currentAccount.id === accountId);
-
-    const registryItem = registryById.get(accountId);
-
-
-
-    return {
-
-      id: accountId,
-
-      label:
-
-        account?.name ??
-
-        registryItem?.label ??
-
-        dailyStates.find((state) => state.has(accountId))?.get(accountId)?.label ??
-
-        accountId,
-
-      archived: Boolean(account?.archived),
-
-      amount: Math.abs(latestValue) > 0 ? Math.abs(latestValue) : maxHistoricalValue > 0 ? Number.EPSILON : 0,
-
-      order: registryItem?.order ?? Number.MAX_SAFE_INTEGER,
-
-      values
-
-    };
-
-  });
-
-  const displayItems = buildDisplayChartItems(items, colorAssignmentMode, {
-
-    registry,
-
-    otherId: `${group.name}-trend-other`,
-
-    otherLabel: '其他',
-
-    ...(items.some((item) => item.archived) ? { maxItems: Number.MAX_SAFE_INTEGER } : {})
-
-  });
-
-  const valuesById = new Map(items.map((item) => [item.id, item.values]));
-
-  const archivedById = new Map(items.map((item) => [item.id, item.archived]));
-
-  const series = displayItems
-
-    .map((item) => ({
-
-      id: item.id,
-
-      label: item.label,
-
-      color: item.color,
-
-      archived: item.sourceIds.length === 1 ? archivedById.get(item.sourceIds[0]) : false,
-
-      values: dates.map((_, index) =>
-
-        item.sourceIds.reduce(
-
-          (sum, accountId) => sum + (valuesById.get(accountId)?.[index] ?? 0),
-
-          0
-
-        )
-
-      )
-
-    }))
-
-    .filter((item) => item.values.some((value) => value !== 0));
-
-  const totals = dates.map((_, index) =>
-
-    series.reduce((sum, item) => sum + (item.values[index] ?? 0), 0)
-
-  );
-
-
-
-  return {
-
-    dates,
-
-    pointKinds: dates.map((date) =>
-
-      changeDateKeySet.has(date) ? 'change-date' : 'carry-forward'
-
-    ),
-
-    series,
-
-    totals,
-
-    nature: group.nature
-
-  };
-
-};
-
-
-
 const getAccountDetailTitle = (groupName: string | undefined, accountName: string) => {
 
   const trimmedGroupName = groupName?.trim() ?? '';
@@ -6671,182 +4710,6 @@ const getGlobalAccountDetailChartSettings = (
   pointValueMode: trendSettings.pointValueMode
 
 });
-
-
-
-const rollbackAccountRecordForTrend = (amount: number | null, record: HistoryRecord) => {
-
-  if (record.type === '新增') {
-
-    return record.beforeAmount;
-
-  }
-
-
-
-  if (record.type === '删除' || record.type === '归档') {
-
-    return record.beforeAmount;
-
-  }
-
-
-
-  if (record.type === '重新启用') {
-
-    return null;
-
-  }
-
-
-
-  return record.beforeAmount;
-
-};
-
-
-
-const deriveAccountTrendPoints = (
-
-  account: Account,
-
-  history: HistoryRecord[],
-
-  settings: AccountDetailChartSettings
-
-): TrendChartPoint[] => {
-
-  const relevantHistory = history.filter((record) => record.accountId === account.id);
-
-  const changeDateKeys = getTrendChangeDateKeys(relevantHistory);
-
-  const rangeDateKeys = getChartRangeDateKeys(settings.xAxisRange);
-
-  const rangeStart = rangeDateKeys[0] ?? '';
-
-  const rangeEnd = rangeDateKeys[rangeDateKeys.length - 1] ?? '';
-
-  const changeDateKeysBeforeEnd = changeDateKeys.filter(
-
-    (date) => !rangeEnd || getDateTimestamp(date) <= getDateTimestamp(rangeEnd)
-
-  );
-
-
-
-  if (changeDateKeysBeforeEnd.length < 2 || rangeDateKeys.length === 0) {
-
-    return [];
-
-  }
-
-
-
-  const hasBaselineBeforeRange = changeDateKeysBeforeEnd.some(
-
-    (date) => getDateTimestamp(date) < getDateTimestamp(rangeStart)
-
-  );
-
-  const firstChangeInRange = changeDateKeysBeforeEnd.find(
-
-    (date) => getDateTimestamp(date) >= getDateTimestamp(rangeStart)
-
-  );
-
-  const firstPlotDate = hasBaselineBeforeRange ? rangeStart : firstChangeInRange;
-
-
-
-  if (!firstPlotDate) {
-
-    return [];
-
-  }
-
-
-
-  const pointDateKeys = rangeDateKeys.filter(
-
-    (date) => getDateTimestamp(date) >= getDateTimestamp(firstPlotDate)
-
-  );
-
-  const changeDateKeySet = new Set(changeDateKeysBeforeEnd);
-
-  const recordsByTimeDesc = relevantHistory
-
-    .map((record, index) => ({
-
-      record,
-
-      index,
-
-      timestamp: getHistoryTimestamp(record)
-
-    }))
-
-    .filter((entry) => entry.timestamp > 0)
-
-    .sort((left, right) => right.timestamp - left.timestamp || left.index - right.index);
-
-
-
-  return pointDateKeys.map((date) => {
-
-    const cutoff = getDateEndTimestamp(date);
-
-    const amount = recordsByTimeDesc.reduce<number | null>((currentAmount, entry) => {
-
-      if (entry.timestamp > cutoff) {
-
-        return rollbackAccountRecordForTrend(currentAmount, entry.record);
-
-      }
-
-
-
-      return currentAmount;
-
-    }, account.amount);
-
-    const value = amount ?? 0;
-
-
-
-    return {
-
-      date,
-
-      kind: changeDateKeySet.has(date) ? 'change-date' : 'carry-forward',
-
-      net: value,
-
-      positive: value,
-
-      negative: value
-
-    };
-
-  });
-
-};
-
-
-
-const getCalendarDays = (monthDate: Date) => {
-
-  const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-
-  const leadingDays = (monthStart.getDay() + 6) % 7;
-
-  const calendarStart = addDays(monthStart, -leadingDays);
-
-
-
-  return Array.from({ length: 42 }, (_, index) => addDays(calendarStart, index));
-
-};
 
 
 
@@ -6911,74 +4774,6 @@ const getValueLabelIndexes = (
 ) => {
 
   return getChartValueLabelIndexes(series.values, mode, width);
-
-};
-
-
-
-const createSteppedHorizontalLinePath = (
-
-  values: number[],
-
-  getX: (index: number) => number,
-
-  getY: (value: number) => number
-
-) => {
-
-  const commands: string[] = [];
-
-
-
-  for (let index = 1; index < values.length; index += 1) {
-
-    commands.push(
-
-      `M ${getX(index - 1)} ${getY(values[index - 1])} H ${getX(index)}`
-
-    );
-
-  }
-
-
-
-  return commands.join(' ');
-
-};
-
-
-
-const createSteppedVerticalLinePath = (
-
-  values: number[],
-
-  getX: (index: number) => number,
-
-  getY: (value: number) => number
-
-) => {
-
-  const commands: string[] = [];
-
-
-
-  for (let index = 1; index < values.length; index += 1) {
-
-    if (values[index] !== values[index - 1]) {
-
-      commands.push(
-
-        `M ${getX(index)} ${getY(values[index - 1])} V ${getY(values[index])}`
-
-      );
-
-    }
-
-  }
-
-
-
-  return commands.join(' ');
 
 };
 
@@ -8044,186 +5839,6 @@ function GroupDetailTrendPanel({
 
 
 
-const normalizeTypeSearchText = (value: string) => value.trim().toLocaleLowerCase('zh-CN');
-
-
-
-const getSubsequenceMatchScore = (candidate: string, query: string) => {
-
-  let queryIndex = 0;
-
-  let score = 0;
-
-
-
-  for (const character of candidate) {
-
-    if (character === query[queryIndex]) {
-
-      queryIndex += 1;
-
-      score += 1;
-
-    }
-
-  }
-
-
-
-  return queryIndex === query.length ? score : null;
-
-};
-
-
-
-const getAccountTypeMatchScore = (name: string, query: string) => {
-
-  const candidate = normalizeTypeSearchText(name);
-
-
-
-  if (!query || !candidate) {
-
-    return -1;
-
-  }
-
-
-
-  if (candidate === query) {
-
-    return 1000;
-
-  }
-
-
-
-  if (candidate.startsWith(query)) {
-
-    return 900 - (candidate.length - query.length);
-
-  }
-
-
-
-  const includedAt = candidate.indexOf(query);
-
-
-
-  if (includedAt >= 0) {
-
-    return 700 - includedAt - (candidate.length - query.length) * 0.1;
-
-  }
-
-
-
-  const subsequenceScore = getSubsequenceMatchScore(candidate, query);
-
-
-
-  if (subsequenceScore !== null) {
-
-    return 500 + subsequenceScore;
-
-  }
-
-
-
-  const queryCharacters = Array.from(new Set(query));
-
-  const overlapCount = queryCharacters.filter((character) =>
-
-    candidate.includes(character)
-
-  ).length;
-
-
-
-  return overlapCount > 0 ? 100 + overlapCount / queryCharacters.length : -1;
-
-};
-
-
-
-const findBestAccountTypeMatch = (groups: AssetGroup[], input: string) => {
-
-  const query = normalizeTypeSearchText(input);
-
-
-
-  if (!query) {
-
-    return null;
-
-  }
-
-
-
-  return groups
-
-    .map((group, index) => ({
-
-      group,
-
-      index,
-
-      score: getAccountTypeMatchScore(group.name, query)
-
-    }))
-
-    .filter((result) => result.score >= 0)
-
-    .sort((left, right) => right.score - left.score || left.index - right.index)[0]?.group ?? null;
-
-};
-
-
-
-const getAccountTypeGhostText = (input: string, match: AssetGroup | null) => {
-
-  const trimmedInput = input.trim();
-
-
-
-  if (!trimmedInput || !match) {
-
-    return '';
-
-  }
-
-
-
-  const normalizedInput = normalizeTypeSearchText(trimmedInput);
-
-  const normalizedMatch = normalizeTypeSearchText(match.name);
-
-
-
-  if (normalizedInput === normalizedMatch) {
-
-    return '';
-
-  }
-
-
-
-  if (normalizedMatch.startsWith(normalizedInput)) {
-
-    return match.name.slice(trimmedInput.length);
-
-  }
-
-
-
-  return ` → ${match.name}`;
-
-};
-
-
-
-
-
 function App() {
 
   const mainContentRef = useRef<HTMLElement | null>(null);
@@ -8263,14 +5878,6 @@ function App() {
   const userSettingsFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-
-  const flashSequenceInputRef = useRef<HTMLInputElement | null>(null);
-
-  const flashEditInputRef = useRef<HTMLInputElement | null>(null);
-
-  const flashCorrectionEntrySnapshotRef = useRef<FlashCorrectionEntrySnapshot | null>(null);
-
-  const flashCorrectionTouchedRef = useRef(false);
 
   const searchInteractionHoldUntilRef = useRef(0);
 
@@ -8344,7 +5951,7 @@ function App() {
 
   const [isFlashNoteOpen, setIsFlashNoteOpen] = useState(false);
 
-  const [flashNoteStage, setFlashNoteStage] = useState<FlashNoteStage>('select');
+  const [flashNoteStage, setFlashNoteStage] = useState<FlashStep>('select');
 
   const [flashNoteAccount, setFlashNoteAccount] = useState<AccountPointer>(null);
 
@@ -8366,8 +5973,6 @@ function App() {
 
   const [flashDragPreviewDates, setFlashDragPreviewDates] = useState<string[]>([]);
 
-  const [flashKeyboardDate, setFlashKeyboardDate] = useState('');
-
   const [flashInputMode, setFlashInputMode] = useState<FlashNoteInputMode>('change');
 
   const [flashCells, setFlashCells] = useState<Record<string, FlashNoteCell>>({});
@@ -8378,27 +5983,13 @@ function App() {
 
   const [isFlashInputTailLocked, setIsFlashInputTailLocked] = useState(false);
 
-  const [flashCorrectionSelection, setFlashCorrectionSelection] = useState<string[]>([]);
-
-  const [flashCorrectionRangeStart, setFlashCorrectionRangeStart] = useState('');
-
-  const [flashCorrectionRangeEnd, setFlashCorrectionRangeEnd] = useState('');
-
-  const [flashStashSegments, setFlashStashSegments] = useState<FlashNoteStashSegment[]>([]);
-
-  const [flashContextMenu, setFlashContextMenu] = useState<FlashNoteContextMenu>(null);
-
   const [flashEditingDate, setFlashEditingDate] = useState('');
-
-  const [, setFlashEditingValue] = useState('');
 
   const [flashShortcutHintHidden, setFlashShortcutHintHidden] = useState(false);
 
   const [isFlashExitConfirmOpen, setIsFlashExitConfirmOpen] = useState(false);
 
   const [isFlashReturnDateConfirmOpen, setIsFlashReturnDateConfirmOpen] = useState(false);
-
-  const [isFlashReturnSequenceConfirmOpen, setIsFlashReturnSequenceConfirmOpen] = useState(false);
 
   const [editingAccountInfo, setEditingAccountInfo] = useState<AccountPointer>(null);
 
@@ -13122,7 +10713,13 @@ function App() {
 
     const safeDates = flashSelectedDates.filter((dateValue) => !isFutureDateKey(dateValue));
 
-    if (flashStartDate && !flashEndDate && !isFutureDateKey(flashStartDate)) {
+    if (
+      flashStartDate &&
+      !flashEndDate &&
+      safeDates.length === 1 &&
+      safeDates[0] === flashStartDate &&
+      !isFutureDateKey(flashStartDate)
+    ) {
 
       return getContinuousFlashDates({
 
@@ -13140,9 +10737,9 @@ function App() {
 
 
 
-    if (safeDates.length === 0 && flashStartDate && !isFutureDateKey(flashStartDate)) {
+    if (safeDates.length === 0) {
 
-      return [flashStartDate];
+      return [];
 
     }
 
@@ -13151,62 +10748,6 @@ function App() {
     return sortFlashDatesByDirection(safeDates, flashDirection);
 
   }, [flashCells, flashDirection, flashEndDate, flashInputCursor, flashSelectedDates, flashStartDate]);
-
-  const flashCorrectionTrackDates = useMemo(() => {
-
-    if (!flashStartDate) {
-
-      return [];
-
-    }
-
-
-
-    if (flashEndDate) {
-
-      return sortFlashDatesByDirection(
-
-        getDateRangeKeys(flashStartDate, flashEndDate),
-
-        flashDirection
-
-      );
-
-    }
-
-
-
-    if (!flashCorrectionRangeStart || !flashCorrectionRangeEnd) {
-
-      return flashTrackDates;
-
-    }
-
-
-
-    return sortFlashDatesByDirection(
-
-      getDateRangeKeys(flashCorrectionRangeStart, flashCorrectionRangeEnd),
-
-      flashDirection
-
-    );
-
-  }, [
-
-    flashCorrectionRangeEnd,
-
-    flashCorrectionRangeStart,
-
-    flashDirection,
-
-    flashEndDate,
-
-    flashStartDate,
-
-    flashTrackDates
-
-  ]);
 
   const flashSelectedDateSet = useMemo(
 
@@ -13234,9 +10775,7 @@ function App() {
 
     flashNoteStage !== 'select' ||
 
-    Object.values(flashCells).some((cell) => cell.value.trim() || cell.enabled || cell.missing) ||
-
-    flashStashSegments.length > 0;
+    Object.values(flashCells).some((cell) => cell.value.trim() || cell.enabled || cell.missing);
 
 
 
@@ -13258,9 +10797,7 @@ function App() {
 
         original: flashSelectedDateSet.has(dateValue),
 
-        missing: false,
-
-        pendingDelete: false
+        missing: false
 
       }
 
@@ -13294,49 +10831,13 @@ function App() {
 
     mode: FlashNoteSelectionMode
 
-  ) => {
-
-    const safeCandidateDates = Array.from(
-
-      new Set(candidateDates.filter((dateValue) => !isFutureDateKey(dateValue)))
-
-    );
-
-    const currentSet = new Set(flashSelectedDates);
-
-    const candidateSet = new Set(safeCandidateDates);
-
-
-
-    if (mode === 'replace') {
-
-      return safeCandidateDates.sort();
-
-    }
-
-
-
-    if (mode === 'intersect') {
-
-      return flashSelectedDates.filter((dateValue) => candidateSet.has(dateValue)).sort();
-
-    }
-
-
-
-    if (mode === 'subtract') {
-
-      return flashSelectedDates.filter((dateValue) => !candidateSet.has(dateValue)).sort();
-
-    }
-
-
-
-    safeCandidateDates.forEach((dateValue) => currentSet.add(dateValue));
-
-    return Array.from(currentSet).sort();
-
-  };
+  ) =>
+    resolveFlashSelectionDates({
+      candidateDates,
+      isDateDisabled: isFutureDateKey,
+      mode,
+      selectedDates: flashSelectedDates
+    });
 
 
 
@@ -13380,25 +10881,19 @@ function App() {
 
 
 
-    if (!bounds?.keepBounds) {
+    const nextBounds = resolveFlashSelectionBounds({
+      currentEndDate: flashEndDate,
+      currentStartDate: flashStartDate,
+      mode,
+      nextDates,
+      requestedEndDate: bounds?.end,
+      requestedStartDate: bounds?.start,
+      shouldPreserveBounds: Boolean(bounds?.keepBounds)
+    });
 
-      const nextStartDate = bounds?.start ?? nextDates[0] ?? '';
+    setFlashStartDate(nextBounds.startDate);
 
-      const nextEndDate = bounds?.end ?? '';
-
-      setFlashStartDate(nextStartDate);
-
-      setFlashEndDate(nextEndDate && nextEndDate !== nextStartDate ? nextEndDate : '');
-
-      setFlashKeyboardDate(nextStartDate);
-
-    } else if (!flashStartDate && nextDates[0]) {
-
-      setFlashStartDate(nextDates[0]);
-
-      setFlashKeyboardDate(nextDates[0]);
-
-    }
+    setFlashEndDate(nextBounds.endDate);
 
 
 
@@ -13421,8 +10916,6 @@ function App() {
     setFlashDragStartDate(dateValue);
 
     setFlashDragPreviewDates([dateValue]);
-
-    setFlashKeyboardDate(dateValue);
 
   };
 
@@ -13634,8 +11127,6 @@ function App() {
 
     setFlashDragPreviewDates([]);
 
-    setFlashKeyboardDate('');
-
     setFlashInputMode('change');
 
     setFlashCells({});
@@ -13646,31 +11137,13 @@ function App() {
 
     setIsFlashInputTailLocked(false);
 
-    setFlashCorrectionSelection([]);
-
-    setFlashCorrectionRangeStart('');
-
-    setFlashCorrectionRangeEnd('');
-
-    setFlashStashSegments([]);
-
-    setFlashContextMenu(null);
-
     setFlashEditingDate('');
-
-    setFlashEditingValue('');
 
     setFlashShortcutHintHidden(false);
 
     setIsFlashExitConfirmOpen(false);
 
     setIsFlashReturnDateConfirmOpen(false);
-
-    setIsFlashReturnSequenceConfirmOpen(false);
-
-    flashCorrectionEntrySnapshotRef.current = null;
-
-    flashCorrectionTouchedRef.current = false;
 
   };
 
@@ -13752,23 +11225,7 @@ function App() {
 
     setIsFlashInputTailLocked(false);
 
-    setFlashCorrectionSelection([]);
-
-    setFlashCorrectionRangeStart('');
-
-    setFlashCorrectionRangeEnd('');
-
-    setFlashStashSegments([]);
-
-    setFlashContextMenu(null);
-
     setFlashEditingDate('');
-
-    setFlashEditingValue('');
-
-    flashCorrectionEntrySnapshotRef.current = null;
-
-    flashCorrectionTouchedRef.current = false;
 
   };
 
@@ -13844,7 +11301,11 @@ function App() {
 
 
 
-    const initialTrackDates = flashEndDate ? flashTrackDates : flashTrackDates.slice(0, 1);
+    const isOpenSingleDateSelection =
+      !flashEndDate &&
+      flashSelectedDates.length === 1 &&
+      flashSelectedDates[0] === flashStartDate;
+    const initialTrackDates = isOpenSingleDateSelection ? flashTrackDates.slice(0, 1) : flashTrackDates;
 
     const nextCells = initialTrackDates.reduce<Record<string, FlashNoteCell>>(
 
@@ -13862,9 +11323,7 @@ function App() {
 
           original: true,
 
-          missing: false,
-
-          pendingDelete: false
+          missing: false
 
         }
 
@@ -13940,9 +11399,7 @@ function App() {
 
         original: true,
 
-        missing: parsedValue === null,
-
-        pendingDelete: false
+        missing: parsedValue === null
 
       })
 
@@ -14012,9 +11469,7 @@ function App() {
 
           enabled: true,
 
-          missing: true,
-
-          pendingDelete: false
+          missing: true
 
         })
 
@@ -14066,9 +11521,7 @@ function App() {
 
         enabled: true,
 
-        missing: true,
-
-        pendingDelete: false
+        missing: true
 
       })
 
@@ -14138,8 +11591,6 @@ function App() {
 
     setFlashEditingDate(firstSelectableDate);
 
-    setFlashEditingValue(firstSelectableDate ? getFlashCell(firstSelectableDate).value : '');
-
     setFlashNoteStage('confirm');
 
   };
@@ -14149,100 +11600,6 @@ function App() {
   const cancelFlashCellEdit = () => {
 
     setFlashEditingDate('');
-
-    setFlashEditingValue('');
-
-  };
-
-
-
-  const deleteSelectedFlashCells = () => {
-
-    const deletableDates = flashCorrectionSelection.filter(
-
-      (dateValue) => parseFlashNumberInput(getFlashCell(dateValue).value) !== null
-
-    );
-
-
-
-    if (deletableDates.length === 0) {
-
-      return;
-
-    }
-
-
-
-    const shouldDeleteNow = deletableDates.every(
-
-      (dateValue) => getFlashCell(dateValue).pendingDelete
-
-    );
-
-    const nextCells = { ...flashCells };
-
-
-
-    deletableDates.forEach((dateValue) => {
-
-      nextCells[dateValue] = createFlashCell(dateValue, {
-
-        value: shouldDeleteNow ? '' : getFlashCell(dateValue).value,
-
-        enabled: true,
-
-        missing: false,
-
-        pendingDelete: !shouldDeleteNow
-
-      });
-
-    });
-
-
-
-    flashCorrectionTouchedRef.current = true;
-
-    setFlashCells(nextCells);
-
-  };
-
-
-
-  const moveFlashKeyboardDate = (offset: number) => {
-
-    const isDateSelection = flashNoteStage === 'date-select';
-
-    const track = isDateSelection ? flashVisibleSelectableDates : flashCorrectionTrackDates;
-
-    const currentDate =
-
-      flashKeyboardDate || (isDateSelection ? flashStartDate : flashCorrectionSelection[0]) || track[0];
-
-    const currentIndex = currentDate ? track.indexOf(currentDate) : -1;
-
-    const nextDate = track[Math.max(0, Math.min(track.length - 1, currentIndex + offset))];
-
-
-
-    if (!nextDate || isFutureDateKey(nextDate)) {
-
-      return;
-
-    }
-
-
-
-    setFlashKeyboardDate(nextDate);
-
-
-
-    if (flashNoteStage === 'correction') {
-
-      setFlashCorrectionSelection([nextDate]);
-
-    }
 
   };
 
@@ -14322,8 +11679,6 @@ function App() {
 
     setFlashEditingDate(dateValue);
 
-    setFlashEditingValue(getFlashCell(dateValue).value);
-
   };
 
 
@@ -14336,39 +11691,20 @@ function App() {
 
     }
 
-    const normalizedValue = normalizeMoneyInput(nextValue, { allowNegative: true });
+    setFlashCells((currentCells) => {
+      const nextCell = resolveFlashCellValueUpdate({
+        cell: currentCells[dateValue] ?? getFlashCell(dateValue),
+        dateValue,
+        nextValue
+      });
 
-    if (!isValidFlashNumberInput(normalizedValue)) {
-
-      return;
-
-    }
-
-    const parsedValue = parseFlashNumberInput(normalizedValue);
-
-    setFlashEditingValue(normalizedValue);
-
-    setFlashCells((currentCells) => ({
-
-      ...currentCells,
-
-      [dateValue]: {
-
-        ...(currentCells[dateValue] ?? getFlashCell(dateValue)),
-
-        date: dateValue,
-
-        value: normalizedValue,
-
-        enabled: true,
-
-        missing: parsedValue === null,
-
-        pendingDelete: false
-
-      }
-
-    }));
+      return nextCell
+        ? {
+            ...currentCells,
+            [dateValue]: nextCell
+          }
+        : currentCells;
+    });
 
   };
 
@@ -14422,29 +11758,7 @@ function App() {
 
     }
 
-    setFlashEditingValue('');
-
-    setFlashCells((currentCells) => ({
-
-      ...currentCells,
-
-      [flashEditingDate]: {
-
-        ...(currentCells[flashEditingDate] ?? getFlashCell(flashEditingDate)),
-
-        date: flashEditingDate,
-
-        value: '',
-
-        enabled: true,
-
-        missing: true,
-
-        pendingDelete: false
-
-      }
-
-    }));
+    updateFlashConfirmCellValue(flashEditingDate, '');
 
   };
 
@@ -14463,6 +11777,32 @@ function App() {
     const currentIndex = flashEditingDate ? selectableDates.indexOf(flashEditingDate) : -1;
 
     selectFlashConfirmDate(selectableDates[(currentIndex + 1) % selectableDates.length] ?? selectableDates[0]!);
+
+  };
+
+
+
+  const moveFlashConfirmSelection = (key: FlashConfirmNavigationKey) => {
+
+    const selectableDates = flashTrackDates.filter(isFlashConfirmSelectableDate);
+
+    if (!flashEditingDate || selectableDates.length === 0) {
+
+      return;
+
+    }
+
+    const nextDate = resolveFlashConfirmNavigationDate({
+      currentDate: flashEditingDate,
+      key,
+      selectableDates
+    });
+
+    if (nextDate !== flashEditingDate) {
+
+      selectFlashConfirmDate(nextDate);
+
+    }
 
   };
 
@@ -14488,9 +11828,7 @@ function App() {
 
       .filter((dateValue) => {
 
-        const parsedValue = parseFlashNumberInput(getFlashCell(dateValue).value);
-
-        return parsedValue !== null && !getFlashCell(dateValue).pendingDelete;
+        return parseFlashNumberInput(getFlashCell(dateValue).value) !== null;
 
       })
 
@@ -14610,13 +11948,12 @@ function App() {
 
     );
 
+    const flashWriteTime = new Date();
     const nextHistory = [
 
       ...rows.map((row, index) => {
 
-        const recordTime = new Date(`${row.date}T12:00:00`);
-
-        recordTime.setMilliseconds(index);
+        const recordTime = createHistoryTimestampForBusinessDate(row.date, flashWriteTime, index);
 
 
 
@@ -14632,7 +11969,7 @@ function App() {
 
           row.afterAmount,
 
-          recordTime.toISOString(),
+          recordTime,
 
           undefined,
 
@@ -14702,13 +12039,13 @@ function App() {
 
     onDelete: clearFlashConfirmCell,
 
+    onMoveSelection: moveFlashConfirmSelection,
+
     onEscape: () => {
 
       if (flashEditingDate) {
 
         setFlashEditingDate('');
-
-        setFlashEditingValue('');
 
         return;
 
@@ -20207,7 +17544,7 @@ function App() {
 
         formatMoney,
 
-        formatShortTime,
+        formatShortTime: formatHistoryRecordDate,
 
         formatPreciseBackupTime,
 
@@ -20673,7 +18010,7 @@ function App() {
 
     formatAmount: formatHistoryAmount,
 
-    formatShortTime,
+    formatShortTime: formatHistoryRecordDate,
 
     renderFlashSourceIcon: renderFlashLightningIcon
 
@@ -20908,22 +18245,6 @@ function App() {
     if (isFlashReturnDateConfirmOpen) {
 
       return () => setIsFlashReturnDateConfirmOpen(false);
-
-    }
-
-
-
-    if (isFlashReturnSequenceConfirmOpen) {
-
-      return () => setIsFlashReturnSequenceConfirmOpen(false);
-
-    }
-
-
-
-    if (flashContextMenu) {
-
-      return () => setFlashContextMenu(null);
 
     }
 
@@ -21425,30 +18746,6 @@ function App() {
 
   useEffect(() => {
 
-    if (!isFlashNoteOpen || flashNoteStage !== 'input') {
-
-      return;
-
-    }
-
-
-
-    const focusTimer = window.setTimeout(() => {
-
-      flashSequenceInputRef.current?.focus();
-
-    }, 0);
-
-
-
-    return () => window.clearTimeout(focusTimer);
-
-  }, [flashInputCursor, flashNoteStage, isFlashNoteOpen]);
-
-
-
-  useEffect(() => {
-
     if (
 
       !isFlashNoteOpen ||
@@ -21472,162 +18769,6 @@ function App() {
     applyFlashDateRule(flashActiveDateRule);
 
   }, [flashVisibleMonth]);
-
-
-
-  useEffect(() => {
-
-    if (!flashEditingDate) {
-
-      return;
-
-    }
-
-
-
-    const focusTimer = window.setTimeout(() => {
-
-      flashEditInputRef.current?.focus();
-
-      flashEditInputRef.current?.select();
-
-    }, 0);
-
-
-
-    return () => window.clearTimeout(focusTimer);
-
-  }, [flashEditingDate]);
-
-
-
-  useEffect(() => {
-
-    if (!isFlashNoteOpen) {
-
-      return;
-
-    }
-
-
-
-    const handleFlashKeyDown = (event: globalThis.KeyboardEvent) => {
-
-      if (event.defaultPrevented) {
-
-        return;
-
-      }
-
-
-
-      if (flashNoteStage === 'sequence-input') {
-
-        if (event.key === 'Enter' || event.key === 'Tab') {
-
-          event.preventDefault();
-
-          commitFlashSequenceInput();
-
-          return;
-
-        }
-
-
-
-        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
-
-          event.preventDefault();
-
-          undoFlashSequenceInput();
-
-          return;
-
-        }
-
-      }
-
-
-
-      if (flashNoteStage === 'correction' && event.key === 'Delete' && !flashEditingDate) {
-
-        event.preventDefault();
-
-        deleteSelectedFlashCells();
-
-        return;
-
-      }
-
-
-
-      if (flashNoteStage !== 'date-select' && flashNoteStage !== 'correction') {
-
-        return;
-
-      }
-
-
-
-      const arrowOffsets: Record<string, number> = {
-
-        ArrowLeft: -1,
-
-        ArrowRight: 1,
-
-        ArrowUp: -7,
-
-        ArrowDown: 7
-
-      };
-
-      const offset = arrowOffsets[event.key];
-
-
-
-      if (offset === undefined) {
-
-        return;
-
-      }
-
-
-
-      event.preventDefault();
-
-      moveFlashKeyboardDate(offset);
-
-    };
-
-
-
-    document.addEventListener('keydown', handleFlashKeyDown);
-
-
-
-    return () => {
-
-      document.removeEventListener('keydown', handleFlashKeyDown);
-
-    };
-
-  }, [
-
-    commitFlashSequenceInput,
-
-    deleteSelectedFlashCells,
-
-    flashEditingDate,
-
-    flashNoteStage,
-
-    isFlashNoteOpen,
-
-    moveFlashKeyboardDate,
-
-    undoFlashSequenceInput
-
-  ]);
 
 
 
@@ -22213,7 +19354,7 @@ function App() {
       onOpenResult={handleSearchResultOpen}
       onCloseSearch={closeSearch}
       formatMoney={formatMoney}
-      formatShortTime={formatShortTime}
+      formatShortTime={formatHistoryRecordDate}
       getAmountChange={getAmountChange}
       getAccountNatureLabel={getAccountNatureLabel}
     />

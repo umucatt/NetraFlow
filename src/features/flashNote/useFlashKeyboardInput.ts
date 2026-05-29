@@ -1,6 +1,16 @@
 import { useEffect } from 'react';
+import type { FlashConfirmNavigationKey } from './flashNoteUtils';
 
 type FlashKeyboardStep = 'input' | 'confirm';
+
+export type FlashKeyboardAction =
+  | { type: 'escape' }
+  | { type: 'ctrl-z' }
+  | { type: 'enter' }
+  | { type: 'backspace' }
+  | { type: 'delete' }
+  | { type: 'move-selection'; key: FlashConfirmNavigationKey }
+  | { type: 'input-character'; key: string };
 
 type UseFlashKeyboardInputOptions = {
   enabled: boolean;
@@ -11,6 +21,7 @@ type UseFlashKeyboardInputOptions = {
   onBackspace: () => void;
   onCtrlZ: () => void;
   onDelete: () => void;
+  onMoveSelection?: (key: FlashConfirmNavigationKey) => void;
   onEscape: () => void;
 };
 
@@ -23,6 +34,53 @@ const isEditableElement = (target: EventTarget | null) => {
   return target.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select';
 };
 
+const isFlashConfirmNavigationKey = (key: string): key is FlashConfirmNavigationKey =>
+  key === 'ArrowLeft' || key === 'ArrowRight' || key === 'ArrowUp' || key === 'ArrowDown';
+
+export const resolveFlashKeyboardAction = ({
+  ctrlKey = false,
+  hasConfirmSelection = false,
+  key,
+  metaKey = false,
+  step
+}: {
+  ctrlKey?: boolean;
+  hasConfirmSelection?: boolean;
+  key: string;
+  metaKey?: boolean;
+  step: FlashKeyboardStep;
+}): FlashKeyboardAction | null => {
+  if (key === 'Escape') {
+    return { type: 'escape' };
+  }
+
+  if ((ctrlKey || metaKey) && key.toLowerCase() === 'z') {
+    return { type: 'ctrl-z' };
+  }
+
+  if (key === 'Enter') {
+    return { type: 'enter' };
+  }
+
+  if (key === 'Backspace') {
+    return { type: 'backspace' };
+  }
+
+  if (key === 'Delete') {
+    return { type: 'delete' };
+  }
+
+  if (step === 'confirm' && hasConfirmSelection && isFlashConfirmNavigationKey(key)) {
+    return { type: 'move-selection', key };
+  }
+
+  if (step === 'confirm' && !hasConfirmSelection) {
+    return null;
+  }
+
+  return /^[\d.+-]$/.test(key) ? { type: 'input-character', key } : null;
+};
+
 export function useFlashKeyboardInput({
   enabled,
   step,
@@ -32,6 +90,7 @@ export function useFlashKeyboardInput({
   onBackspace,
   onCtrlZ,
   onDelete,
+  onMoveSelection,
   onEscape
 }: UseFlashKeyboardInputOptions) {
   useEffect(() => {
@@ -44,43 +103,34 @@ export function useFlashKeyboardInput({
         return;
       }
 
-      if (event.key === 'Escape') {
-        event.preventDefault();
+      const action = resolveFlashKeyboardAction({
+        ctrlKey: event.ctrlKey,
+        hasConfirmSelection,
+        key: event.key,
+        metaKey: event.metaKey,
+        step
+      });
+
+      if (!action) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (action.type === 'escape') {
         onEscape();
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
-        event.preventDefault();
+      } else if (action.type === 'ctrl-z') {
         onCtrlZ();
-        return;
-      }
-
-      if (event.key === 'Enter') {
-        event.preventDefault();
+      } else if (action.type === 'enter') {
         onEnter();
-        return;
-      }
-
-      if (event.key === 'Backspace') {
-        event.preventDefault();
+      } else if (action.type === 'backspace') {
         onBackspace();
-        return;
-      }
-
-      if (event.key === 'Delete') {
-        event.preventDefault();
+      } else if (action.type === 'delete') {
         onDelete();
-        return;
-      }
-
-      if (step === 'confirm' && !hasConfirmSelection) {
-        return;
-      }
-
-      if (/^[\d.+-]$/.test(event.key)) {
-        event.preventDefault();
-        onInputCharacter(event.key);
+      } else if (action.type === 'move-selection') {
+        onMoveSelection?.(action.key);
+      } else {
+        onInputCharacter(action.key);
       }
     };
 
@@ -98,6 +148,7 @@ export function useFlashKeyboardInput({
     onEnter,
     onEscape,
     onInputCharacter,
+    onMoveSelection,
     step
   ]);
 }

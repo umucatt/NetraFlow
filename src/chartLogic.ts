@@ -762,6 +762,36 @@ export const createSteppedLinePath = (
   return commands.join(' ');
 };
 
+export const createSteppedHorizontalLinePath = (
+  values: number[],
+  getX: (index: number) => number,
+  getY: (value: number) => number
+) => {
+  const commands: string[] = [];
+
+  for (let index = 1; index < values.length; index += 1) {
+    commands.push(`M ${getX(index - 1)} ${getY(values[index - 1])} H ${getX(index)}`);
+  }
+
+  return commands.join(' ');
+};
+
+export const createSteppedVerticalLinePath = (
+  values: number[],
+  getX: (index: number) => number,
+  getY: (value: number) => number
+) => {
+  const commands: string[] = [];
+
+  for (let index = 1; index < values.length; index += 1) {
+    if (values[index] !== values[index - 1]) {
+      commands.push(`M ${getX(index)} ${getY(values[index - 1])} V ${getY(values[index])}`);
+    }
+  }
+
+  return commands.join(' ');
+};
+
 export const createSteppedAreaPath = (
   topValues: number[],
   baseValues: number[],

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { FlashCell } from './flashNoteTypes';
 import { FlashCalendarGrid } from './FlashCalendarGrid';
 
@@ -18,8 +19,14 @@ export function FlashConfirmStep({
   selectedDate,
   onSelectDate
 }: FlashConfirmStepProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    rootRef.current?.closest<HTMLElement>('.flash-note-main')?.scrollTo({ top: 0, behavior: 'auto' });
+  }, []);
+
   return (
-    <div className="flash-note-stage-body flash-note-stage-body--confirm">
+    <div ref={rootRef} className="flash-note-stage-body flash-note-stage-body--confirm">
       <FlashCalendarGrid
         mode="confirm"
         weeks={weeks}

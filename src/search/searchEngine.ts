@@ -41,6 +41,10 @@ import {
 
 type SearchScoredCandidate = NonNullable<ReturnType<typeof scoreSearchCandidate>>;
 type SearchScoredTermMatch = SearchScoredCandidate['termMatches'][number];
+type HistoryBalanceSignLookup = {
+  accountIds: Set<string>;
+  accountNames: Set<string>;
+};
 
 const createIndexedTextField = (
   value: string | null | undefined,
@@ -140,11 +144,14 @@ const getResultMatchFields = (
 const createSourceText = (record: HistoryRecord) =>
   record.relatedTime ? '汇总导入' : record.note?.includes('闪记') ? '闪记' : '';
 
-const formatSearchCompactAmount = (amount: number) =>
-  new Intl.NumberFormat('zh-CN', {
+const formatSearchCompactAmount = (amount: number, preserveNegativeSign = false) => {
+  const formattedAmount = new Intl.NumberFormat('zh-CN', {
     maximumFractionDigits: 0,
     minimumFractionDigits: 0
   }).format(Math.round(Math.abs(amount)));
+
+  return preserveNegativeSign && amount < 0 ? `-${formattedAmount}` : formattedAmount;
+};
 
 const formatSearchSignedAmount = (amount: number) => {
   if (amount > 0) {
@@ -158,17 +165,21 @@ const formatSearchSignedAmount = (amount: number) => {
   return '0';
 };
 
-const formatSearchBalanceAmount = (amount: number | null | undefined) => {
+const formatSearchBalanceAmount = (
+  amount: number | null | undefined,
+  preserveNegativeSign = false
+) => {
   if (typeof amount !== 'number' || !Number.isFinite(amount)) {
     return '-';
   }
 
-  return formatSearchCompactAmount(amount);
+  return formatSearchCompactAmount(amount, preserveNegativeSign);
 };
 
 const getHistoryBalanceDisplayText = (
   record: HistoryRecord,
-  matchedAmount: number
+  matchedAmount: number,
+  preserveNegativeSign = false
 ) => {
   const beforeAmount = record.beforeAmount;
   const afterAmount = record.afterAmount;
@@ -179,11 +190,42 @@ const getHistoryBalanceDisplayText = (
     typeof afterAmount === 'number' &&
     Number.isFinite(afterAmount)
   ) {
-    return `${formatSearchBalanceAmount(beforeAmount)} → ${formatSearchBalanceAmount(afterAmount)}`;
+    return `${formatSearchBalanceAmount(beforeAmount, preserveNegativeSign)} → ${formatSearchBalanceAmount(
+      afterAmount,
+      preserveNegativeSign
+    )}`;
   }
 
-  return formatSearchBalanceAmount(matchedAmount);
+  return formatSearchBalanceAmount(matchedAmount, preserveNegativeSign);
 };
+
+const getHistoryAccountLookupKey = (groupName: string, accountName: string) =>
+  `${groupName}\u0000${accountName}`;
+
+const createHistoryBalanceSignLookup = (groups: AssetGroup[]): HistoryBalanceSignLookup => {
+  const accountIds = new Set<string>();
+  const accountNames = new Set<string>();
+
+  groups.forEach((group) => {
+    if (group.nature !== 'liability') {
+      return;
+    }
+
+    group.accounts.forEach((account) => {
+      accountIds.add(account.id);
+      accountNames.add(getHistoryAccountLookupKey(group.name, account.name));
+    });
+  });
+
+  return { accountIds, accountNames };
+};
+
+const shouldPreserveHistoryBalanceSign = (
+  lookup: HistoryBalanceSignLookup,
+  record: HistoryRecord
+) =>
+  lookup.accountIds.has(record.accountId) ||
+  lookup.accountNames.has(getHistoryAccountLookupKey(record.groupName, record.accountName));
 
 const getHistoryMatchedAmount = (
   record: HistoryRecord,
@@ -291,7 +333,10 @@ export const createGlobalSearchIndex = (
   historyRecords: HistoryRecord[],
   snapshots: BackupRecord[],
   options: CreateSearchIndexOptions
-): SearchIndexedData => ({
+): SearchIndexedData => {
+  const historyBalanceSignLookup = createHistoryBalanceSignLookup(groups);
+
+  return {
   accounts: groups.flatMap((group, groupIndex) =>
     group.accounts.map((account, accountIndex) => {
       const archiveText = account.archived ? '已归档' : '账户';
@@ -337,8 +382,12 @@ export const createGlobalSearchIndex = (
     const delta = afterAmount - beforeAmount;
     const sourceText = createSourceText(record);
     const deltaDisplay = formatSearchSignedAmount(delta);
-    const balanceBeforeDisplay = formatSearchBalanceAmount(record.beforeAmount);
-    const balanceAfterDisplay = formatSearchBalanceAmount(record.afterAmount);
+    const preserveBalanceSign = shouldPreserveHistoryBalanceSign(
+      historyBalanceSignLookup,
+      record
+    );
+    const balanceBeforeDisplay = formatSearchBalanceAmount(record.beforeAmount, preserveBalanceSign);
+    const balanceAfterDisplay = formatSearchBalanceAmount(record.afterAmount, preserveBalanceSign);
 
     return {
       record,
@@ -351,7 +400,7 @@ export const createGlobalSearchIndex = (
         delta: deltaDisplay,
         balanceBefore: balanceBeforeDisplay,
         balanceAfter: balanceAfterDisplay,
-        balanceRange: getHistoryBalanceDisplayText(record, afterAmount)
+        balanceRange: getHistoryBalanceDisplayText(record, afterAmount, preserveBalanceSign)
       },
       index,
       candidate: {
@@ -417,31 +466,38 @@ export const createGlobalSearchIndex = (
       recencyDate: record.backedUpAt
     }
   })),
-  settings: (options.settingsItems ?? []).map((item, index) => ({
-    item,
-    title: item.title,
-    subtitle: `${item.group} · ${item.description}`,
-    value: item.group,
-    index,
-    candidate: {
-      textFields: [
-        createIndexedTextField(item.title, 'name', 0.95),
-        createIndexedTextField(item.group, 'name', 0.9),
-        createIndexedTextField(item.keywords?.join(' '), 'detail', 0.75),
-        createIndexedTextField(item.description, 'weak', 0.5),
-        createIndexedTextField(item.pinyinKeywords?.join(' '), 'weak', 0.4, 'pinyin-full'),
-        createIndexedTextField(item.pinyinInitials?.join(' '), 'weak', 0.4, 'pinyin-initials')
-      ],
-      recencyDate: null
-    }
-  })),
+  settings: (options.settingsItems ?? []).map((item, index) => {
+    const isSectionItem = item.id === item.section;
+    const keywordWeight = isSectionItem ? 0.66 : 0.75;
+    const pinyinWeight = isSectionItem ? 0.32 : 0.4;
+
+    return {
+      item,
+      title: item.title,
+      subtitle: `${item.group} · ${item.description}`,
+      value: item.group,
+      index,
+      candidate: {
+        textFields: [
+          createIndexedTextField(item.title, 'name', 0.95),
+          createIndexedTextField(item.group, 'name', 0.9),
+          createIndexedTextField(item.keywords?.join(' '), 'detail', keywordWeight),
+          createIndexedTextField(item.description, 'weak', 0.5),
+          createIndexedTextField(item.pinyinKeywords?.join(' '), 'weak', pinyinWeight, 'pinyin-full'),
+          createIndexedTextField(item.pinyinInitials?.join(' '), 'weak', pinyinWeight, 'pinyin-initials')
+        ],
+        recencyDate: null
+      }
+    };
+  }),
   totals: {
     account: groups.reduce((count, group) => count + group.accounts.length, 0),
     history: historyRecords.length,
     snapshot: snapshots.length,
     settings: options.settingsItems?.length ?? 0
   }
-});
+  };
+};
 
 const makeScoredResults = <TInput, TResult extends GlobalSearchResult>(
   inputs: TInput[],

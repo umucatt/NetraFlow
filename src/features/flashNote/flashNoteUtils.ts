@@ -1,5 +1,5 @@
 import { isMoneyInput, normalizeMoneyInput, parseMoneyInput } from '../../money';
-import type { FlashCell, FlashDateRule, FlashDirection } from './flashNoteTypes';
+import type { FlashCell, FlashDateRule, FlashDirection, FlashSelectionMode } from './flashNoteTypes';
 
 export const FLASH_WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'];
 
@@ -115,6 +115,39 @@ export const getFlashRangeExcludedDates = ({
   return getFlashDateRange(startDate, endDate).filter((dateValue) => !selectedDates.has(dateValue));
 };
 
+export const resolveFlashSelectionDates = ({
+  candidateDates,
+  isDateDisabled = isFutureFlashDate,
+  mode,
+  selectedDates
+}: {
+  candidateDates: string[];
+  isDateDisabled?: (dateValue: string) => boolean;
+  mode: FlashSelectionMode;
+  selectedDates: string[];
+}) => {
+  const safeCandidateDates = Array.from(
+    new Set(candidateDates.filter((dateValue) => !isDateDisabled(dateValue)))
+  );
+  const candidateSet = new Set(safeCandidateDates);
+
+  if (mode === 'replace') {
+    return safeCandidateDates.sort();
+  }
+
+  if (mode === 'intersect') {
+    return selectedDates.filter((dateValue) => candidateSet.has(dateValue)).sort();
+  }
+
+  if (mode === 'subtract') {
+    return selectedDates.filter((dateValue) => !candidateSet.has(dateValue)).sort();
+  }
+
+  const nextSelection = new Set(selectedDates);
+  safeCandidateDates.forEach((dateValue) => nextSelection.add(dateValue));
+  return Array.from(nextSelection).sort();
+};
+
 export const sortFlashDatesByDirection = (dates: string[], direction: FlashDirection) => {
   const sortedDates = Array.from(new Set(dates)).sort();
   return direction === 'backward' ? sortedDates.reverse() : sortedDates;
@@ -124,6 +157,42 @@ export const getFlashDirectionFromDates = (
   startDate: string,
   endDate: string
 ): FlashDirection => (startDate && endDate && endDate < startDate ? 'backward' : 'forward');
+
+export const resolveFlashSelectionBounds = ({
+  currentEndDate,
+  currentStartDate,
+  mode,
+  nextDates,
+  requestedEndDate = '',
+  requestedStartDate = '',
+  shouldPreserveBounds = false
+}: {
+  currentEndDate: string;
+  currentStartDate: string;
+  mode: FlashSelectionMode;
+  nextDates: string[];
+  requestedEndDate?: string;
+  requestedStartDate?: string;
+  shouldPreserveBounds?: boolean;
+}) => {
+  const sortedDates = Array.from(new Set(nextDates)).sort();
+  const firstDate = sortedDates[0] ?? '';
+
+  if (mode === 'replace' && !shouldPreserveBounds) {
+    const nextStartDate = requestedStartDate || firstDate;
+    const nextEndDate = requestedEndDate || '';
+
+    return {
+      endDate: nextEndDate && nextEndDate !== nextStartDate ? nextEndDate : '',
+      startDate: nextStartDate
+    };
+  }
+
+  return {
+    endDate: currentEndDate,
+    startDate: currentStartDate
+  };
+};
 
 export const getContinuousFlashDates = ({
   startDate,
@@ -188,6 +257,36 @@ export const getFlashWeeksForDates = (dates: string[]) => {
   );
 };
 
+export type FlashConfirmNavigationKey = 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown';
+
+const flashConfirmNavigationOffsets: Record<FlashConfirmNavigationKey, number> = {
+  ArrowDown: 7,
+  ArrowLeft: -1,
+  ArrowRight: 1,
+  ArrowUp: -7
+};
+
+export const resolveFlashConfirmNavigationDate = ({
+  currentDate,
+  key,
+  selectableDates
+}: {
+  currentDate: string;
+  key: FlashConfirmNavigationKey;
+  selectableDates: string[];
+}) => {
+  if (!currentDate) {
+    return currentDate;
+  }
+
+  const selectableDateSet = new Set(selectableDates);
+  const targetDate = toFlashDateValue(
+    addFlashDays(getFlashDate(currentDate), flashConfirmNavigationOffsets[key])
+  );
+
+  return selectableDateSet.has(targetDate) ? targetDate : currentDate;
+};
+
 export const isValidFlashNumberInput = (value: string) =>
   isMoneyInput(value, { allowNegative: true });
 
@@ -212,6 +311,31 @@ export const appendFlashInputCharacter = (value: string, key: string) => {
 };
 
 export const backspaceFlashInputValue = (value: string) => value.slice(0, -1);
+
+export const resolveFlashCellValueUpdate = ({
+  cell,
+  dateValue,
+  nextValue
+}: {
+  cell: FlashCell;
+  dateValue: string;
+  nextValue: string;
+}) => {
+  const normalizedValue = normalizeMoneyInput(nextValue, { allowNegative: true });
+
+  if (!isValidFlashNumberInput(normalizedValue)) {
+    return null;
+  }
+
+  const parsedValue = parseFlashNumberInput(normalizedValue);
+  return {
+    ...cell,
+    date: dateValue,
+    enabled: true,
+    missing: parsedValue === null,
+    value: normalizedValue
+  };
+};
 
 export const resolveFlashUndoStep = ({
   cells,
