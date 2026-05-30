@@ -53,6 +53,7 @@ export type RollupImportParseResult =
     };
 
 export type RollupAccountAssignment = {
+  groupId: string;
   groupName: string;
   accountId: string;
 };

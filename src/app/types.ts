@@ -1,5 +1,6 @@
 export type Account = {
   id: string;
+  groupId: string;
   name: string;
   amount: number;
   createdAt: string;
@@ -11,10 +12,14 @@ export type Account = {
 export type AccountTypeNature = 'asset' | 'receivable' | 'liability';
 
 export type AssetGroup = {
+  id: string;
   name: string;
   nature: AccountTypeNature;
   includeInStats: boolean;
   sortOrder: number;
+};
+
+export type AssetGroupWithAccounts = AssetGroup & {
   accounts: Account[];
 };
 
@@ -40,15 +45,18 @@ export type HistoryRecord = {
 
 export type AppData = {
   groups: AssetGroup[];
+  accounts: Account[];
   history: HistoryRecord[];
 };
 
 export type AccountPointer = {
-  groupName: string;
+  groupId: string;
   accountId: string;
+  groupName?: string;
 } | null;
 
 export type ArchivedAccountEntry = Account & {
+  groupId: string;
   groupName: string;
 };
 

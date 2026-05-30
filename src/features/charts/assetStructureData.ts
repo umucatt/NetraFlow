@@ -1,6 +1,6 @@
 import { getHistoryOrder } from '../../app/dateUtils';
 import { isPositiveNature, toStoredAmountByNature } from '../../app/accountNature';
-import type { AssetGroup, HistoryRecord } from '../../app/types';
+import type { AssetGroupWithAccounts, HistoryRecord } from '../../app/types';
 import {
   buildDisplayChartItems,
   type ChartColorAssignmentMode,
@@ -24,7 +24,7 @@ export type AssetStructureChartData = {
   debtRatio: number;
 };
 
-export const getGroupColorRegistry = (groups: AssetGroup[], history: HistoryRecord[]) => {
+export const getGroupColorRegistry = (groups: AssetGroupWithAccounts[], history: HistoryRecord[]) => {
   const registry = new Map<string, ChartColorItem>();
 
   groups.forEach((group, index) => {
@@ -53,7 +53,7 @@ export const getGroupColorRegistry = (groups: AssetGroup[], history: HistoryReco
   return Array.from(registry.values());
 };
 
-export const getActiveGroupTotal = (group: AssetGroup) =>
+export const getActiveGroupTotal = (group: AssetGroupWithAccounts) =>
   toStoredAmountByNature(
     group.nature,
     group.accounts
@@ -62,7 +62,7 @@ export const getActiveGroupTotal = (group: AssetGroup) =>
   );
 
 export const deriveAssetStructureData = (
-  groups: AssetGroup[],
+  groups: AssetGroupWithAccounts[],
   history: HistoryRecord[],
   colorAssignmentMode: ChartColorAssignmentMode
 ): AssetStructureChartData => {
@@ -88,7 +88,7 @@ export const deriveAssetStructureData = (
   displayItems.forEach((item) => {
     const sourceGroups = item.sourceIds
       .map((sourceId) => groupByName.get(sourceId))
-      .filter((group): group is AssetGroup => Boolean(group));
+      .filter((group): group is AssetGroupWithAccounts => Boolean(group));
     const positiveAmount = sourceGroups
       .filter((group) => isPositiveNature(group.nature))
       .reduce((sum, group) => sum + Math.abs(getActiveGroupTotal(group)), 0);

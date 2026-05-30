@@ -16,6 +16,7 @@ type AccountAdjustDirection = 'increase' | 'decrease';
 
 type ArchivedAccount = {
   id: string;
+  groupId: string;
   name: string;
   amount: number;
   createdAt: string;
@@ -23,6 +24,11 @@ type ArchivedAccount = {
   archived?: boolean;
   archivedAt?: string;
   groupName: string;
+};
+
+type AccountRestoreTargetGroup = {
+  id: string;
+  name: string;
 };
 
 const centeredBackdropStyle: CSSProperties = {
@@ -176,6 +182,12 @@ type AccountRestoreDialogProps = {
   onCancel: () => void;
 };
 
+type AccountRestoreTargetDialogProps = {
+  groups: AccountRestoreTargetGroup[];
+  onChooseGroup: (groupId: string) => void;
+  onCancel: () => void;
+};
+
 function AccountRestoreDialog({
   archivedAccounts,
   filteredAccounts,
@@ -252,6 +264,48 @@ function AccountRestoreDialog({
             )}
           </>
         )}
+      </section>
+    </DialogShell>
+  );
+}
+
+function AccountRestoreTargetDialog({
+  groups,
+  onChooseGroup,
+  onCancel
+}: AccountRestoreTargetDialogProps) {
+  return (
+    <DialogShell
+      title="原账户类别已删除，请选择恢复到哪个账户类别"
+      headerClassName="account-add-restore-panel__header"
+      titleClassName="account-add-restore-panel__title"
+      titleStyle={{ margin: 0 }}
+      className="account-add-restore-panel account-restore-target-dialog"
+      backdropClassName="modal-backdrop"
+      cardStyle={addRestoreCardStyle}
+      onClose={onCancel}
+    >
+      <section
+        className="flash-note-account-picker quick-single-entry-account-picker account-restore-target-picker"
+        aria-label="选择恢复账户类别"
+      >
+        {groups.length > 0 ? (
+          <div className="flash-note-account-group quick-single-entry-account-group">
+            <span>账户类别</span>
+            <div>
+              {groups.map((group) => (
+                <button
+                  key={group.id}
+                  type="button"
+                  className="flash-note-account-chip account-restore-target-chip"
+                  onClick={() => onChooseGroup(group.id)}
+                >
+                  <span>{group.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </section>
     </DialogShell>
   );
@@ -482,4 +536,9 @@ function AccountCreateDialog({
   );
 }
 
-export { AccountAmountEditorDialog, AccountCreateDialog, AccountRestoreDialog };
+export {
+  AccountAmountEditorDialog,
+  AccountCreateDialog,
+  AccountRestoreDialog,
+  AccountRestoreTargetDialog
+};

@@ -1,6 +1,6 @@
 import { toStoredAmountByNature } from '../../app/accountNature';
 import { getHistoryOrder } from '../../app/dateUtils';
-import type { AccountTypeNature, AssetGroup, HistoryRecord } from '../../app/types';
+import type { AccountTypeNature, AssetGroupWithAccounts, HistoryRecord } from '../../app/types';
 import {
   buildDisplayChartItems,
   type ChartColorAssignmentMode,
@@ -15,7 +15,7 @@ export type GroupDetailStructureData = {
   nature: AccountTypeNature;
 };
 
-export const getGroupDetailHistory = (group: AssetGroup, history: HistoryRecord[]) => {
+export const getGroupDetailHistory = (group: AssetGroupWithAccounts, history: HistoryRecord[]) => {
   const currentAccountIds = new Set(group.accounts.map((account) => account.id));
 
   return history.filter(
@@ -23,7 +23,7 @@ export const getGroupDetailHistory = (group: AssetGroup, history: HistoryRecord[
   );
 };
 
-export const getAccountColorRegistry = (group: AssetGroup, history: HistoryRecord[]) => {
+export const getAccountColorRegistry = (group: AssetGroupWithAccounts, history: HistoryRecord[]) => {
   const registry = new Map<string, ChartColorItem>();
 
   group.accounts.forEach((account, index) => {
@@ -53,7 +53,7 @@ export const getAccountColorRegistry = (group: AssetGroup, history: HistoryRecor
 };
 
 export const deriveGroupDetailStructureData = (
-  group: AssetGroup,
+  group: AssetGroupWithAccounts,
   history: HistoryRecord[],
   colorAssignmentMode: ChartColorAssignmentMode
 ): GroupDetailStructureData => {

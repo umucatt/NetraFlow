@@ -5,7 +5,8 @@ export { default as AccountDetailPanel } from './AccountDetailPanel';
 export {
   AccountAmountEditorDialog,
   AccountCreateDialog,
-  AccountRestoreDialog
+  AccountRestoreDialog,
+  AccountRestoreTargetDialog
 } from './AccountEditorDialog';
 export { default as AccountHistoryList } from './AccountHistoryList';
 export { default as AccountInfoEditorDialog } from './AccountInfoEditorDialog';

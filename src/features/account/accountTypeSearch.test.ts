@@ -9,11 +9,11 @@ import {
 } from './accountTypeSearch';
 
 const createGroup = (name: string, sortOrder = 0): AssetGroup => ({
+  id: `group-${sortOrder}-${name}`,
   name,
   nature: 'asset',
   includeInStats: true,
-  sortOrder,
-  accounts: []
+  sortOrder
 });
 
 test('account type search keeps exact and prefix matches ahead of weaker matches', () => {

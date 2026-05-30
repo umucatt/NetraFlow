@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import test, { afterEach, mock } from 'node:test';
-import type { Account, AccountTypeNature, AssetGroup, HistoryRecord } from '../../app/types';
+import type { Account, AccountTypeNature, AssetGroupWithAccounts, HistoryRecord } from '../../app/types';
 import { deriveAssetTrendPoints, type TrendChartPoint } from './assetTrendData';
 
 const FIXED_NOW = new Date('2026-05-27T12:00:00');
@@ -26,15 +26,17 @@ const account = (id: string, amount: number, overrides: Partial<Account> = {}): 
   name: id,
   amount,
   createdAt: atNoon('2026-04-20'),
-  ...overrides
+  ...overrides,
+  groupId: overrides.groupId ?? 'group-test'
 });
 
 const group = (
   name: string,
   nature: AccountTypeNature,
   accounts: Account[],
-  overrides: Partial<AssetGroup> = {}
-): AssetGroup => ({
+  overrides: Partial<AssetGroupWithAccounts> = {}
+): AssetGroupWithAccounts => ({
+  id: `group-${name}`,
   name,
   nature,
   includeInStats: true,

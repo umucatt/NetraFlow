@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import test, { afterEach, mock } from 'node:test';
-import type { Account, AccountTypeNature, AssetGroup, HistoryRecord } from '../../app/types';
+import type { Account, AccountTypeNature, AssetGroupWithAccounts, HistoryRecord } from '../../app/types';
 import { NETRAFLOW_CHART_PALETTE, type ChartColorAssignmentMode } from '../../chartLogic';
 import {
   deriveGroupDetailTrendData,
@@ -27,6 +27,7 @@ const atNoon = (date: string) => `${date}T12:00:00`;
 
 const account = (id: string, amount: number, overrides: Partial<Account> = {}): Account => ({
   id,
+  groupId: overrides.groupId ?? 'group-test',
   name: overrides.name ?? id,
   amount,
   createdAt: overrides.createdAt ?? atNoon('2026-04-20'),
@@ -39,8 +40,9 @@ const group = (
   name: string,
   nature: AccountTypeNature,
   accounts: Account[],
-  overrides: Partial<AssetGroup> = {}
-): AssetGroup => ({
+  overrides: Partial<AssetGroupWithAccounts> = {}
+): AssetGroupWithAccounts => ({
+  id: `group-${name}`,
   name,
   nature,
   includeInStats: true,
@@ -62,7 +64,7 @@ const historyRecord = (overrides: Partial<HistoryRecord>): HistoryRecord => ({
 });
 
 const derive = (
-  targetGroup: AssetGroup,
+  targetGroup: AssetGroupWithAccounts,
   history: HistoryRecord[],
   colorAssignmentMode: ChartColorAssignmentMode = 'share'
 ) => deriveGroupDetailTrendData(targetGroup, history, SETTINGS, colorAssignmentMode);

@@ -3,10 +3,13 @@ import type {
   Account,
   AccountTypeNature,
   AssetGroup,
+  AssetGroupWithAccounts,
   BackupRecord,
   HistoryRecord,
   HistoryType
-} from './search/searchTypes';
+} from './app/types';
+import { deriveGroupsWithAccounts } from './app/accountData';
+import { createStableAccountId, createStableGroupId } from './app/ids';
 
 export type ExampleTemplateId = 'light' | 'daily' | 'advanced';
 
@@ -60,6 +63,7 @@ type ExampleRemarkCategory = 'liquid' | 'investment' | 'debt' | 'fixed' | 'recei
 export type ExampleGeneratedData = {
   appData: {
     groups: AssetGroup[];
+    accounts: Account[];
     history: HistoryRecord[];
   };
   backupRecords: BackupRecord[];
@@ -550,6 +554,7 @@ const createExampleAccount = (
   definition: ExampleAccountDefinition,
   templateId: ExampleTemplateId,
   index: number,
+  accountId: string,
   archived = false
 ): ExampleEntry => {
   const createdDaysAgo =
@@ -563,7 +568,8 @@ const createExampleAccount = (
   return {
     definition,
     account: {
-      id: `example-${templateId}-${definition.key}-${index}`,
+      id: accountId,
+      groupId: '',
       name: definition.name,
       amount: 0,
       createdAt,
@@ -725,7 +731,15 @@ const distributeExampleDebtAmounts = (
 const createExampleGroups = (
   entries: Array<{ definition: ExampleAccountDefinition; account: Account }>
 ) => {
-  const groupOrder = ['流动资金', '稳健理财', '投资资产', '固定资产', '应收款', '负债'];
+  const groupOrder = [
+    '\u6d41\u52a8\u8d44\u91d1',
+    '\u7a33\u5065\u7406\u8d22',
+    '\u6295\u8d44\u8d44\u4ea7',
+    '\u56fa\u5b9a\u8d44\u4ea7',
+    '\u5e94\u6536\u6b3e',
+    '\u8d1f\u503a'
+  ];
+  const groupIds = new Set<string>();
 
   return groupOrder.flatMap((groupName, sortOrder): AssetGroup[] => {
     const groupEntries = entries.filter(({ definition }) => definition.groupName === groupName);
@@ -734,13 +748,19 @@ const createExampleGroups = (
       return [];
     }
 
+    const groupId = createStableGroupId(groupIds);
+    groupIds.add(groupId);
+    groupEntries.forEach(({ account }) => {
+      account.groupId = groupId;
+    });
+
     return [
       {
+        id: groupId,
         name: groupName,
         nature: groupEntries[0].definition.nature,
         includeInStats: true,
-        sortOrder,
-        accounts: groupEntries.map(({ account }) => account)
+        sortOrder
       }
     ];
   });
@@ -1081,7 +1101,7 @@ const createExampleBackupRecords = (
     };
   }).sort((left, right) => Date.parse(right.backedUpAt) - Date.parse(left.backedUpAt));
 
-export const getExampleAccounts = (groups: AssetGroup[]) =>
+export const getExampleAccounts = (groups: AssetGroupWithAccounts[]) =>
   groups.flatMap((group) => group.accounts.map((account) => ({ group, account })));
 
 export const isExampleAccountNameAllowed = (name: string) =>
@@ -1142,10 +1162,15 @@ const formatExampleFutureRecordError = (
 ) =>
   `${accountName}: 历史记录包含未来日期（类型：${record.type}，阶段：${getExampleRecordStage(record)}，记录时间：${record.time}，校验时间：${new Date(now).toISOString()}）`;
 
-export const validateExampleHistoryConsistency = (appData: { groups: AssetGroup[]; history: HistoryRecord[] }) => {
+export const validateExampleHistoryConsistency = (appData: {
+  groups: AssetGroup[];
+  accounts: Account[];
+  history: HistoryRecord[];
+}) => {
   const errors: string[] = [];
   const now = EXAMPLE_GENERATION_NOW.getTime();
-  const accounts = getExampleAccounts(appData.groups);
+  const groupsWithAccounts = deriveGroupsWithAccounts(appData.groups, appData.accounts);
+  const accounts = getExampleAccounts(groupsWithAccounts);
   const accountById = new Map(accounts.map(({ account }) => [account.id, account]));
 
   accounts.forEach(({ account }) => {
@@ -1301,14 +1326,19 @@ export const createExampleData = (templateId: ExampleTemplateId): ExampleGenerat
     }
   }
 
-  const entries = selectedDefinitions.map((definition, index) =>
-    createExampleAccount(
+  const accountIds = new Set<string>();
+  const entries = selectedDefinitions.map((definition, index) => {
+    const accountId = createStableAccountId(accountIds);
+    accountIds.add(accountId);
+
+    return createExampleAccount(
       definition,
       template.id,
       index,
+      accountId,
       definition.key === 'archived-old'
-    )
-  );
+    );
+  });
 
   assignExampleLifecycles(template, entries);
   distributeExamplePositiveAmounts(entries, targetPositiveTotal);
@@ -1316,8 +1346,10 @@ export const createExampleData = (templateId: ExampleTemplateId): ExampleGenerat
 
   const dayLimit = randomIntBetween(template.dayRange[0], template.dayRange[1]);
   const history = createExampleHistory(template, entries, dayLimit);
+  const groups = createExampleGroups(entries);
   const appData = {
-    groups: createExampleGroups(entries),
+    groups,
+    accounts: entries.map(({ account }) => account),
     history
   };
   const validationErrors = validateExampleHistoryConsistency(appData);

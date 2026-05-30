@@ -204,14 +204,14 @@ test('does not make empty accountKeyword or non-CNY currency high risk by itself
 test('requires every account keyword group to have an account assignment', () => {
   assert.equal(
     areAllRollupGroupsAssigned(['支付宝', '微信支付'], {
-      支付宝: { groupName: '现金', accountId: 'a1' }
+      支付宝: { groupId: 'g-cash', groupName: '现金', accountId: 'a1' }
     }),
     false
   );
   assert.equal(
     areAllRollupGroupsAssigned(['支付宝', '微信支付'], {
-      支付宝: { groupName: '现金', accountId: 'a1' },
-      微信支付: { groupName: '现金', accountId: 'a2' }
+      支付宝: { groupId: 'g-cash', groupName: '现金', accountId: 'a1' },
+      微信支付: { groupId: 'g-cash', groupName: '现金', accountId: 'a2' }
     }),
     true
   );

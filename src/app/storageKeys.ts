@@ -1,5 +1,7 @@
 export const GROUPS_STORAGE_KEY = 'asset-overview-groups';
 
+export const ACCOUNTS_STORAGE_KEY = 'asset-overview-accounts';
+
 export const HISTORY_STORAGE_KEY = 'asset-overview-history';
 
 export const LAST_BACKUP_STORAGE_KEY = 'lastBackupAt';

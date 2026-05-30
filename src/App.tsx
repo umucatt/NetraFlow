@@ -45,11 +45,11 @@ import {
   toDateInputValue
 } from './app/dateUtils';
 import {
-  getLegacyNature,
   isPositiveNature,
   toStoredAmountByNature
 } from './app/accountNature';
 import {
+  ACCOUNTS_STORAGE_KEY,
   AUTO_BACKUP_SETTINGS_STORAGE_KEY,
   BACKUP_RECORDS_STORAGE_KEY,
   CHART_SETTINGS_STORAGE_KEY,
@@ -69,6 +69,20 @@ import {
   USER_SETTINGS_FILE_TYPE,
   USER_SETTINGS_FILE_VERSION
 } from './app/storageKeys';
+import {
+  canDeleteAssetGroup,
+  cloneAppData,
+  deleteAssetGroupFromAppData,
+  deriveGroupsWithAccounts,
+  getArchivedAccountEntries,
+  getArchivedAccountRestoreGroup,
+  getArchivedAccountRestoreTargetGroups,
+  normalizeGroupsAndAccounts,
+  normalizeGroupNature,
+  restoreArchivedAccountToGroup,
+  stripRuntimeAccountsFromGroups
+} from './app/accountData';
+import { createStableAccountId, createStableGroupId } from './app/ids';
 import {
   NfFlashnoteSourceIcon,
   NfRollupSourceWideIcon,
@@ -96,7 +110,8 @@ import {
   AccountDetailPanel,
   AccountHistoryList,
   AccountInfoEditorDialog,
-  AccountRestoreDialog
+  AccountRestoreDialog,
+  AccountRestoreTargetDialog
 } from './features/account';
 import {
   findBestAccountTypeMatch,
@@ -254,6 +269,7 @@ import type {
   AppData,
   ArchivedAccountEntry,
   AssetGroup,
+  AssetGroupWithAccounts,
   AutoBackupSettings,
   BackupCycle,
   BackupCycleUnit,
@@ -372,7 +388,7 @@ type AccountTypeEditorState = {
 
   mode: 'create' | 'edit';
 
-  groupName?: string;
+  groupId?: string;
 
 } | null;
 
@@ -440,7 +456,7 @@ type GroupPointerInteraction = {
 
   pointerId: number;
 
-  groupName: string;
+  groupId: string;
 
   startX: number;
 
@@ -451,6 +467,22 @@ type GroupPointerInteraction = {
   longPressTriggered: boolean;
 
 };
+
+type ArchivedRestoreSource =
+  | 'account-detail'
+  | 'account-restore-dialog'
+  | 'same-name-account'
+  | 'archived-accounts-list';
+
+type PendingArchivedRestore = {
+  accountId: string;
+  source: ArchivedRestoreSource;
+} | null;
+
+type GroupDropIndicator = {
+  groupId: string;
+  position: 'before' | 'after';
+} | null;
 
 
 
@@ -638,11 +670,11 @@ type SearchNavigationSnapshot = {
 
   selectedAccount: AccountPointer;
 
-  selectedGroupDetailName: string;
+  selectedGroupDetailId: string;
 
   isAccountChartsOpen: boolean;
 
-  expandedGroupNames: string[];
+  expandedGroupIds: string[];
 
   isTotalChartsOpen: boolean;
 
@@ -1787,6 +1819,8 @@ const SIGNED_AMOUNT_BACKGROUNDS = {
 const FIRST_WELCOME_FOOTPRINT_STORAGE_KEYS = [
 
   GROUPS_STORAGE_KEY,
+
+  ACCOUNTS_STORAGE_KEY,
 
   HISTORY_STORAGE_KEY,
 
@@ -3366,18 +3400,6 @@ const storedValueLooksNonEmpty = (raw: string | null) => {
 
 
 
-const isAccountTypeNature = (value: unknown): value is AccountTypeNature =>
-
-  value === 'asset' || value === 'receivable' || value === 'liability';
-
-
-
-const normalizeGroupNature = (value: unknown, groupName: string): AccountTypeNature =>
-
-  isAccountTypeNature(value) ? value : getLegacyNature(groupName);
-
-
-
 const getStatAmount = (nature: AccountTypeNature, amount: number) =>
 
   nature === 'liability' ? -Math.abs(amount) : Math.abs(amount);
@@ -3442,133 +3464,16 @@ const looksLikeHistoryRecord = (value: unknown) =>
 
 
 
-const normalizeGroups = (value: unknown): AssetGroup[] => {
-
-  if (isPlainObject(value) && Array.isArray(value.groups)) {
-
-    return normalizeGroups(value.groups);
-
-  }
-
-
-
-  if (!Array.isArray(value)) {
-
-    return initialGroups;
-
-  }
-
-
-
-  const groups = value
-
-    .filter(isPlainObject)
-
-    .map((group, index) => {
-
-      const groupName = getStringField(group, ['name', 'label', 'title', 'groupName']) ?? '';
-
-      const nature = normalizeGroupNature(group.nature ?? getStringField(group, ['kind']), groupName);
-
-      const sortOrder =
-
-        typeof group.sortOrder === 'number' && Number.isFinite(group.sortOrder)
-
-          ? group.sortOrder
-
-          : index;
-
-      const rawAccounts = Array.isArray(group.accounts) ? group.accounts : [];
-
-
-
-      return {
-
-        ...group,
-
-        name: groupName,
-
-        nature,
-
-        includeInStats:
-
-          typeof group.includeInStats === 'boolean' ? group.includeInStats : true,
-
-        sortOrder,
-
-        accounts: rawAccounts.filter(isPlainObject).flatMap((account) => {
-
-          const accountName = getStringField(account, ['name', 'accountName', 'title']) ?? '';
-
-          const accountAmount = getNumberField(account, ['amount', 'balance', 'value']);
-
-
-
-          if (
-
-            !accountName ||
-
-            typeof accountAmount !== 'number' ||
-
-            !Number.isFinite(accountAmount)
-
-          ) {
-
-            return [];
-
-          }
-
-
-
-          return [
-
-            {
-
-              ...account,
-
-              id: getStringField(account, ['id', 'accountId']) ?? createId('account'),
-
-              name: accountName,
-
-              amount: toStoredAmountByNature(nature, accountAmount),
-
-              createdAt:
-
-                getStringField(account, ['createdAt', 'createdTime', 'time']) ?? INITIAL_TIME,
-
-              alias: getStringField(account, ['alias', 'abbreviation']),
-
-              archived: getBooleanField(account, ['archived']) ?? false,
-
-              archivedAt: getStringField(account, ['archivedAt'])
-
-            }
-
-          ];
-
-        })
-
-      };
-
-    })
-
-    .filter((group) => group.name);
-
-
-
-  return groups
-
-    .sort((left, right) => left.sortOrder - right.sortOrder)
-
-    .map((group, index) => ({ ...group, sortOrder: index }));
-
-};
+const normalizeStoredAccountData = (
+  groupsValue: unknown,
+  accountsValue?: unknown
+) => normalizeGroupsAndAccounts(groupsValue, accountsValue);
 
 
 
 const findAccountByLegacyRecord = (
 
-  groups: AssetGroup[],
+  groups: AssetGroupWithAccounts[],
 
   groupName: string,
 
@@ -3584,7 +3489,7 @@ const findAccountByLegacyRecord = (
 
 
 
-const findAccountById = (groups: AssetGroup[], accountId: string) => {
+const findAccountById = (groups: AssetGroupWithAccounts[], accountId: string) => {
 
   for (const group of groups) {
 
@@ -3608,7 +3513,7 @@ const findAccountById = (groups: AssetGroup[], accountId: string) => {
 
 
 
-const normalizeHistory = (value: unknown, groups: AssetGroup[]): HistoryRecord[] => {
+const normalizeHistory = (value: unknown, groups: AssetGroupWithAccounts[]): HistoryRecord[] => {
 
   if (isPlainObject(value)) {
 
@@ -3798,31 +3703,22 @@ const getBackupFieldValue = (value: unknown, fieldNames: string[]) => {
 
 
 
-const getBackupGroups = (value: unknown) => {
-
+const getBackupAccountData = (value: unknown) => {
   if (Array.isArray(value)) {
-
-    return normalizeGroups(value);
-
+    return normalizeStoredAccountData(value);
   }
 
-
-
   const groupsValue = getBackupFieldValue(value, ['groups', 'assetGroups']);
-
-
+  const accountsValue = getBackupFieldValue(value, ['accounts']);
 
   return Array.isArray(groupsValue) || isPlainObject(groupsValue)
-
-    ? normalizeGroups(groupsValue)
-
-    : [];
-
+    ? normalizeStoredAccountData(groupsValue, accountsValue)
+    : { groups: [], accounts: [] };
 };
 
 
 
-const getBackupHistory = (value: unknown, groups: AssetGroup[]) => {
+const getBackupHistory = (value: unknown, groups: AssetGroupWithAccounts[]) => {
 
   const historyValue = getBackupFieldValue(value, ['history', 'historyRecords']);
 
@@ -3838,94 +3734,49 @@ const getBackupHistory = (value: unknown, groups: AssetGroup[]) => {
 
 
 
-const mergeAccountLists = (currentAccounts: Account[], importedAccounts: Account[]) => {
-
+const mergeAccounts = (currentAccounts: Account[], importedAccounts: Account[]) => {
   const nextAccounts = [...currentAccounts];
 
-
-
   importedAccounts.forEach((importedAccount) => {
-
     const existingIndex = nextAccounts.findIndex((account) => account.id === importedAccount.id);
 
-
-
     if (existingIndex >= 0) {
-
       nextAccounts[existingIndex] = {
-
         ...nextAccounts[existingIndex],
-
         ...importedAccount
-
       };
-
       return;
-
     }
 
-
-
     nextAccounts.push(importedAccount);
-
   });
 
-
-
   return nextAccounts;
-
 };
 
 
 
 const mergeGroups = (currentGroups: AssetGroup[], importedGroups: AssetGroup[]) => {
-
-  const nextGroups = currentGroups.map((group) => ({ ...group, accounts: [...group.accounts] }));
-
-
+  const nextGroups = [...currentGroups];
 
   importedGroups.forEach((importedGroup) => {
-
-    const existingIndex = nextGroups.findIndex((group) => group.name === importedGroup.name);
-
-
+    const existingIndex = nextGroups.findIndex((group) => group.id === importedGroup.id);
 
     if (existingIndex >= 0) {
-
-      const existingGroup = nextGroups[existingIndex];
-
-
-
       nextGroups[existingIndex] = {
-
-        ...existingGroup,
-
-        ...importedGroup,
-
-        accounts: mergeAccountLists(existingGroup.accounts, importedGroup.accounts)
-
+        ...nextGroups[existingIndex],
+        ...importedGroup
       };
-
       return;
-
     }
 
-
-
     nextGroups.push({
-
       ...importedGroup,
-
       sortOrder: nextGroups.length
-
     });
-
   });
 
-
-
   return nextGroups.map((group, index) => ({ ...group, sortOrder: index }));
-
 };
 
 
@@ -3960,7 +3811,17 @@ const mergeHistoryRecords = (
 
 
 
-const normalizeLegacyAccountTypes = (value: unknown): AssetGroup[] => {
+type LegacyGroupDraft = {
+  name: string;
+  nature: AccountTypeNature;
+  includeInStats: boolean;
+  sortOrder: number;
+  accounts: unknown[];
+} & Record<string, unknown>;
+
+
+
+const normalizeLegacyAccountTypes = (value: unknown): LegacyGroupDraft[] => {
 
   const accountTypes =
 
@@ -4050,7 +3911,7 @@ const normalizeLegacyAccountTypes = (value: unknown): AssetGroup[] => {
 
 const appendLegacyAccountsToGroups = (
 
-  groups: AssetGroup[],
+  groups: LegacyGroupDraft[],
 
   value: unknown,
 
@@ -4126,8 +3987,6 @@ const appendLegacyAccountsToGroups = (
 
       ...account,
 
-      id: getStringField(account, ['id', 'accountId']) ?? createId('account'),
-
       name: accountName,
 
       amount,
@@ -4152,7 +4011,7 @@ const appendLegacyAccountsToGroups = (
 
 
 
-const loadLegacyGroupsFromStorage = (): AssetGroup[] | null => {
+const loadLegacyGroupsFromStorage = (): { groups: AssetGroup[]; accounts: Account[] } | null => {
 
   const storedAccountTypes = readStorageJson(LEGACY_ACCOUNT_TYPES_STORAGE_KEY);
 
@@ -4198,13 +4057,13 @@ const loadLegacyGroupsFromStorage = (): AssetGroup[] | null => {
 
 
 
-  return groups.length > 0 ? normalizeGroups(groups) : null;
+  return groups.length > 0 ? normalizeStoredAccountData(groups) : null;
 
 };
 
 
 
-const loadLegacyHistoryFromStorage = (groups: AssetGroup[]) => {
+const loadLegacyHistoryFromStorage = (groups: AssetGroupWithAccounts[]) => {
 
   const storedHistory = readStorageJson(LEGACY_HISTORY_STORAGE_KEY);
 
@@ -4276,9 +4135,10 @@ const loadLegacyHistoryFromStorage = (groups: AssetGroup[]) => {
 
 
 
-const loadGroupsFromStorage = () => {
+const loadAccountDataFromStorage = () => {
 
   const storedGroups = readStorageJson(GROUPS_STORAGE_KEY);
+  const storedAccounts = readStorageJson(ACCOUNTS_STORAGE_KEY);
 
 
 
@@ -4286,7 +4146,13 @@ const loadGroupsFromStorage = () => {
 
     saveBackupBeforeMigration('normalize current account storage');
 
-    return normalizeGroups(storedGroups.value);
+    return {
+      ...normalizeStoredAccountData(
+      storedGroups.value,
+      storedAccounts.parsed ? storedAccounts.value : undefined
+      ),
+      shouldPersist: true
+    };
 
   }
 
@@ -4298,19 +4164,19 @@ const loadGroupsFromStorage = () => {
 
   if (legacyGroups) {
 
-    return legacyGroups;
+    return { ...legacyGroups, shouldPersist: true };
 
   }
 
 
 
-  return initialGroups;
+  return { groups: initialGroups, accounts: [], shouldPersist: false };
 
 };
 
 
 
-const loadHistoryFromStorage = (groups: AssetGroup[]) => {
+const loadHistoryFromStorage = (groups: AssetGroupWithAccounts[]) => {
 
   const storedHistory = readStorageJson(HISTORY_STORAGE_KEY);
 
@@ -4364,12 +4230,17 @@ const hasPossiblyStoredHistoryRecords = () =>
 
 const loadAppData = (): AppData => {
 
-  const groups = loadGroupsFromStorage();
+  const { shouldPersist, ...accountData } = loadAccountDataFromStorage();
+  const groupsWithAccounts = deriveGroupsWithAccounts(accountData.groups, accountData.accounts);
 
-  const history = loadHistoryFromStorage(groups);
+  const history = loadHistoryFromStorage(groupsWithAccounts);
+  const appData = { ...accountData, history };
 
+  if (shouldPersist) {
+    saveAppData(appData);
+  }
 
-  return { groups, history };
+  return appData;
 
 };
 
@@ -4377,13 +4248,18 @@ const loadAppData = (): AppData => {
 
 const saveAppData = (
 
-  { groups, history }: AppData,
+  { groups, accounts, history }: AppData,
 
   options: { allowEmptyHistoryOverwrite?: boolean } = {}
 
 ) => {
 
-  window.localStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify(groups));
+  window.localStorage.setItem(
+    GROUPS_STORAGE_KEY,
+    JSON.stringify(stripRuntimeAccountsFromGroups(groups))
+  );
+
+  window.localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
 
 
 
@@ -4415,22 +4291,6 @@ const saveAppData = (
 
 
 
-const cloneAppData = ({ groups, history }: AppData): AppData => ({
-
-  groups: groups.map((group) => ({
-
-    ...group,
-
-    accounts: group.accounts.map((account) => ({ ...account }))
-
-  })),
-
-  history: history.map((record) => ({ ...record }))
-
-});
-
-
-
 const cloneBackupRecords = (records: BackupRecord[]) =>
 
   records.map((record) => ({ ...record }));
@@ -4440,6 +4300,8 @@ const cloneBackupRecords = (records: BackupRecord[]) =>
 const saveEmptyAssetData = () => {
 
   window.localStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify([]));
+
+  window.localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify([]));
 
   window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify([]));
 
@@ -5867,7 +5729,7 @@ function App() {
 
   const groupPointerInteractionRef = useRef<GroupPointerInteraction | null>(null);
 
-  const groupDoubleClickCandidateRef = useRef<{ groupName: string; time: number } | null>(null);
+  const groupDoubleClickCandidateRef = useRef<{ groupId: string; time: number } | null>(null);
 
   const suppressGroupClickRef = useRef(false);
 
@@ -5995,9 +5857,12 @@ function App() {
 
   const [accountTypeEditor, setAccountTypeEditor] = useState<AccountTypeEditorState>(null);
 
-  const [expandedGroupNames, setExpandedGroupNames] = useState<string[]>([]);
+  const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([]);
 
   const [isGroupEditMode, setIsGroupEditMode] = useState(false);
+
+  const [pendingArchivedRestore, setPendingArchivedRestore] =
+    useState<PendingArchivedRestore>(null);
 
   const [isAddingAccount, setIsAddingAccount] = useState(false);
 
@@ -6219,9 +6084,11 @@ function App() {
 
   const [groupDetailError, setGroupDetailError] = useState('');
 
-  const [draggingGroupName, setDraggingGroupName] = useState('');
+  const [draggingGroupId, setDraggingGroupId] = useState('');
 
-  const [newAccountGroupName, setNewAccountGroupName] = useState('');
+  const [groupDropIndicator, setGroupDropIndicator] = useState<GroupDropIndicator>(null);
+
+  const [newAccountGroupId, setNewAccountGroupId] = useState('');
 
   const [newAccountTypeInput, setNewAccountTypeInput] = useState('');
 
@@ -6239,7 +6106,7 @@ function App() {
 
   const [isGlobalSettingsOpen, setIsGlobalSettingsOpen] = useState(false);
 
-  const [selectedGroupDetailName, setSelectedGroupDetailName] = useState('');
+  const [selectedGroupDetailId, setSelectedGroupDetailId] = useState('');
 
   const [globalSettingsSection, setGlobalSettingsSection] =
 
@@ -6919,7 +6786,11 @@ function App() {
 
 
 
-  const { groups, history } = appData;
+  const { groups: assetGroups, accounts, history } = appData;
+  const groups = useMemo(
+    () => deriveGroupsWithAccounts(assetGroups, accounts),
+    [assetGroups, accounts]
+  );
 
   const newAccountTypeMatch = findBestAccountTypeMatch(groups, newAccountTypeInput);
 
@@ -6969,19 +6840,23 @@ function App() {
 
 
 
-  const archivedAccounts: ArchivedAccountEntry[] = groups.flatMap((group) =>
-
-    group.accounts
-
-      .filter((account) => account.archived)
-
-      .map((account) => ({ ...account, groupName: group.name }))
-
+  const archivedAccounts: ArchivedAccountEntry[] = useMemo(
+    () => getArchivedAccountEntries(groups, accounts, history),
+    [groups, accounts, history]
   );
 
-  const selectedGroupDetail = selectedGroupDetailName
+  const archivedRestoreTargetGroups = useMemo(
+    () => getArchivedAccountRestoreTargetGroups(assetGroups),
+    [assetGroups]
+  );
 
-    ? groups.find((group) => group.name === selectedGroupDetailName)
+  const pendingArchivedRestoreAccount = pendingArchivedRestore
+    ? accounts.find((account) => account.id === pendingArchivedRestore.accountId)
+    : undefined;
+
+  const selectedGroupDetail = selectedGroupDetailId
+
+    ? groups.find((group) => group.id === selectedGroupDetailId)
 
     : undefined;
 
@@ -7125,7 +7000,7 @@ function App() {
 
         assetChartSettings.categoryDetailById,
 
-        selectedGroupDetail.name
+        selectedGroupDetail.id
 
       )
 
@@ -7305,6 +7180,8 @@ function App() {
 
           .map((account) => ({
 
+            groupId: group.id,
+
             groupName: group.name,
 
             account
@@ -7335,7 +7212,7 @@ function App() {
 
   const currentGroup = editingAccount
 
-    ? groups.find((group) => group.name === editingAccount.groupName)
+    ? groups.find((group) => group.id === editingAccount.groupId)
 
     : undefined;
 
@@ -7347,7 +7224,7 @@ function App() {
 
   const selectedGroup = selectedAccount
 
-    ? groups.find((group) => group.name === selectedAccount.groupName)
+    ? groups.find((group) => group.id === selectedAccount.groupId)
 
     : undefined;
 
@@ -7361,7 +7238,7 @@ function App() {
 
   const flashSelectedGroup = flashNoteAccount
 
-    ? groups.find((group) => group.name === flashNoteAccount.groupName)
+    ? groups.find((group) => group.id === flashNoteAccount.groupId)
 
     : undefined;
 
@@ -7373,7 +7250,7 @@ function App() {
 
   const accountInfoGroup = editingAccountInfo
 
-    ? groups.find((group) => group.name === editingAccountInfo.groupName)
+    ? groups.find((group) => group.id === editingAccountInfo.groupId)
 
     : undefined;
 
@@ -7387,7 +7264,7 @@ function App() {
 
     accountTypeEditor?.mode === 'edit'
 
-      ? groups.find((group) => group.name === accountTypeEditor.groupName)
+      ? groups.find((group) => group.id === accountTypeEditor.groupId)
 
       : undefined;
 
@@ -7463,7 +7340,7 @@ function App() {
 
             : selectedGroupDetail
 
-              ? `group-detail:${selectedGroupDetail.name}`
+              ? `group-detail:${selectedGroupDetail.id}`
 
               : selectedAccount && selectedAccountEntry
 
@@ -7515,7 +7392,7 @@ function App() {
 
                   : selectedGroupDetail
 
-                    ? `group-detail-actions:${selectedGroupDetail.name}`
+                    ? `group-detail-actions:${selectedGroupDetail.id}`
 
                     : isGlobalSettingsOpen
 
@@ -7766,16 +7643,21 @@ function App() {
 
 
   const updateAppData = (nextData: AppData) => {
+    const normalizedData: AppData = {
+      groups: stripRuntimeAccountsFromGroups(nextData.groups),
+      accounts: nextData.accounts,
+      history: nextData.history
+    };
 
     dispatchSearchState({ type: 'clear-navigation' });
 
-    setAppData(nextData);
+    setAppData(normalizedData);
 
 
 
     if (!isExampleMode) {
 
-      saveAppData(nextData);
+      saveAppData(normalizedData);
 
       cancelPendingFirstWelcomeForRealChange();
 
@@ -7985,7 +7867,7 @@ function App() {
 
   ) => {
 
-    const categoryIds = groups.map((group) => group.name);
+    const categoryIds = groups.map((group) => group.id);
 
 
 
@@ -8251,7 +8133,7 @@ function App() {
 
     setSelectedAccount(null);
 
-    setSelectedGroupDetailName('');
+    setSelectedGroupDetailId('');
 
     setEditingAccount(null);
 
@@ -8281,7 +8163,7 @@ function App() {
 
     setIsDangerActionsOpen(false);
 
-    setExpandedGroupNames([]);
+    setExpandedGroupIds([]);
 
     setExpandedDetailDates([]);
 
@@ -9061,7 +8943,7 @@ function App() {
 
   const resetAssetHistory = (persist: boolean) => {
 
-    const emptyData: AppData = { groups: [], history: [] };
+    const emptyData: AppData = { groups: [], accounts: [], history: [] };
 
 
 
@@ -10671,15 +10553,21 @@ function App() {
 
 
 
-  const getGroupNature = (groupName: string) =>
+  const getGroupNature = (groupId: string) =>
 
-    groups.find((group) => group.name === groupName)?.nature ?? getLegacyNature(groupName);
+    groups.find((group) => group.id === groupId)?.nature ?? 'asset';
 
 
 
-  const toStoredGroupAmount = (groupName: string, amount: number) =>
+  const toStoredGroupAmount = (groupId: string, amount: number) =>
 
-    toStoredAmountByNature(getGroupNature(groupName), amount);
+    toStoredAmountByNature(getGroupNature(groupId), amount);
+
+
+
+  const getGroupName = (groupId: string) =>
+
+    groups.find((group) => group.id === groupId)?.name ?? '';
 
 
 
@@ -11157,7 +11045,7 @@ function App() {
 
     setSelectedAccount(null);
 
-    setSelectedGroupDetailName('');
+    setSelectedGroupDetailId('');
 
     setIsQuickSingleEntryAccountPickerOpen(false);
 
@@ -11269,9 +11157,10 @@ function App() {
 
 
 
-  const chooseFlashAccount = (groupName: string, account: Account) => {
+  const chooseFlashAccount = (groupId: string, account: Account) => {
+    const group = groups.find((currentGroup) => currentGroup.id === groupId);
 
-    setFlashNoteAccount({ groupName, accountId: account.id });
+    setFlashNoteAccount({ groupId, groupName: group?.name, accountId: account.id });
 
   };
 
@@ -11846,7 +11735,7 @@ function App() {
 
             ? (beforeAmount ?? flashSelectedAccountEntry.amount) + inputAmount
 
-            : toStoredGroupAmount(flashNoteAccount.groupName, inputAmount);
+            : toStoredGroupAmount(flashNoteAccount.groupId, inputAmount);
 
         const afterAmount = roundToMoneyPrecision(rawAfterAmount);
 
@@ -11924,30 +11813,9 @@ function App() {
 
     const nextAmount = latestRowByDate?.afterAmount ?? flashSelectedAccountEntry.amount;
 
-    const nextGroups = groups.map((group) =>
-
-      group.name === flashNoteAccount.groupName
-
-        ? {
-
-            ...group,
-
-            accounts: group.accounts.map((account) =>
-
-              account.id === flashNoteAccount.accountId
-
-                ? { ...account, amount: nextAmount }
-
-                : account
-
-            )
-
-          }
-
-        : group
-
+    const nextAccounts = accounts.map((account) =>
+      account.id === flashNoteAccount.accountId ? { ...account, amount: nextAmount } : account
     );
-
     const flashWriteTime = new Date();
     const nextHistory = [
 
@@ -11963,7 +11831,7 @@ function App() {
 
           flashSelectedAccountEntry,
 
-          flashNoteAccount.groupName,
+          (flashSelectedGroup?.name ?? flashNoteAccount.groupName ?? ''),
 
           row.beforeAmount,
 
@@ -11985,7 +11853,7 @@ function App() {
 
 
 
-    updateAppData({ groups: nextGroups, history: nextHistory });
+    updateAppData({ groups: assetGroups, accounts: nextAccounts, history: nextHistory });
 
     setSelectedAccount(flashNoteAccount);
 
@@ -12067,16 +11935,18 @@ function App() {
 
 
 
-  const getQuickSingleEntryAccount = (groupName: string, accountId: string) =>
+  const getQuickSingleEntryAccount = (groupId: string, accountId: string) =>
     groupTotals
-      .find((group) => group.name === groupName)
+      .find((group) => group.id === groupId)
       ?.activeAccounts.find((account) => account.id === accountId);
 
   const quickSingleEntryAccountGroups: QuickEntryAccountGroup[] = groupTotals.map((group) => ({
+    id: group.id,
     name: group.name,
     accounts: group.activeAccounts.map((account) => ({
       id: account.id,
       name: account.name,
+      groupId: group.id,
       groupName: group.name,
       archived: account.archived
     }))
@@ -12085,11 +11955,11 @@ function App() {
   const renderQuickSingleEntryAccountPicker = () => (
     <QuickEntryAccountPicker
       groups={quickSingleEntryAccountGroups}
-      onChooseAccount={(groupName, accountId) => {
-        const account = getQuickSingleEntryAccount(groupName, accountId);
+      onChooseAccount={(groupId, accountId) => {
+        const account = getQuickSingleEntryAccount(groupId, accountId);
 
         if (account) {
-          chooseQuickSingleEntryAccount(groupName, account);
+          chooseQuickSingleEntryAccount(groupId, account);
         }
       }}
     />
@@ -12243,6 +12113,8 @@ function App() {
 
   const flashAccountGroups = groupTotals.map((group) => ({
 
+    id: group.id,
+
     name: group.name,
 
     accounts: group.activeAccounts.map((account) => ({
@@ -12343,15 +12215,15 @@ function App() {
 
         getCalendarDays={getCalendarDays}
 
-        onChooseAccount={(groupName, accountId) => {
+        onChooseAccount={(groupId, accountId) => {
 
-          const group = groups.find((currentGroup) => currentGroup.name === groupName);
+          const group = groups.find((currentGroup) => currentGroup.id === groupId);
 
           const account = group?.accounts.find((currentAccount) => currentAccount.id === accountId);
 
           if (account) {
 
-            chooseFlashAccount(groupName, account);
+            chooseFlashAccount(groupId, account);
 
           }
 
@@ -12743,15 +12615,15 @@ function App() {
 
 
 
-  const toggleGroup = (groupName: string) => {
+  const toggleGroup = (groupId: string) => {
 
-    setExpandedGroupNames((currentGroups) =>
+    setExpandedGroupIds((currentGroups) =>
 
-      currentGroups.includes(groupName)
+      currentGroups.includes(groupId)
 
-        ? currentGroups.filter((currentGroup) => currentGroup !== groupName)
+        ? currentGroups.filter((currentGroup) => currentGroup !== groupId)
 
-        : [...currentGroups, groupName]
+        : [...currentGroups, groupId]
 
     );
 
@@ -12779,7 +12651,9 @@ function App() {
 
     setIsGroupEditMode(false);
 
-    setDraggingGroupName('');
+    setDraggingGroupId('');
+
+    setGroupDropIndicator(null);
 
   };
 
@@ -12821,7 +12695,7 @@ function App() {
 
     event: PointerEvent<HTMLButtonElement>,
 
-    groupName: string
+    groupId: string
 
   ) => {
 
@@ -12839,7 +12713,7 @@ function App() {
 
       pointerId: event.pointerId,
 
-      groupName,
+      groupId,
 
       startX: event.clientX,
 
@@ -12866,6 +12740,8 @@ function App() {
 
 
       interaction.longPressTriggered = true;
+
+      setExpandedGroupIds([]);
 
       setIsGroupEditMode(true);
 
@@ -12949,7 +12825,7 @@ function App() {
 
 
 
-    if (interaction.longPressTriggered || interaction.moved || draggingGroupName) {
+    if (interaction.longPressTriggered || interaction.moved || draggingGroupId) {
 
       suppressNextGroupClick(interaction.longPressTriggered ? 350 : 0);
 
@@ -13005,9 +12881,9 @@ function App() {
 
 
 
-  const openGroupDetailPage = (groupName: string) => {
+  const openGroupDetailPage = (groupId: string) => {
 
-    const group = groups.find((currentGroup) => currentGroup.name === groupName);
+    const group = groups.find((currentGroup) => currentGroup.id === groupId);
 
 
 
@@ -13035,7 +12911,7 @@ function App() {
 
     setIsTotalChartsOpen(false);
 
-    setSelectedGroupDetailName(group.name);
+    setSelectedGroupDetailId(group.id);
 
     window.setTimeout(() => {
 
@@ -13051,13 +12927,13 @@ function App() {
 
     dispatchSearchState({ type: 'clear-navigation' });
 
-    setSelectedGroupDetailName('');
+    setSelectedGroupDetailId('');
 
   };
 
 
 
-  const handleGroupClick = (groupName: string) => {
+  const handleGroupClick = (groupId: string) => {
 
     if (suppressGroupClickRef.current) {
 
@@ -13087,7 +12963,7 @@ function App() {
 
       previousClick &&
 
-      previousClick.groupName === groupName &&
+      previousClick.groupId === groupId &&
 
       now - previousClick.time <= GROUP_DOUBLE_CLICK_MS
 
@@ -13095,7 +12971,7 @@ function App() {
 
       groupDoubleClickCandidateRef.current = null;
 
-      openGroupDetailPage(groupName);
+      openGroupDetailPage(groupId);
 
       return;
 
@@ -13103,9 +12979,9 @@ function App() {
 
 
 
-    groupDoubleClickCandidateRef.current = { groupName, time: now };
+    groupDoubleClickCandidateRef.current = { groupId, time: now };
 
-    toggleGroup(groupName);
+    toggleGroup(groupId);
 
   };
 
@@ -13113,7 +12989,7 @@ function App() {
 
   const applyAccountTypeUpdate = (
 
-    currentName: string,
+    groupId: string,
 
     nextName: string,
 
@@ -13123,9 +12999,29 @@ function App() {
 
   ) => {
 
-    const nextGroups = groups.map((group) =>
+    const currentGroup = groups.find((group) => group.id === groupId);
 
-      group.name === currentName
+
+
+    if (!currentGroup) {
+
+      return;
+
+    }
+
+
+
+    const currentName = currentGroup.name;
+
+    const targetAccountIds = new Set(
+
+      accounts.filter((account) => account.groupId === groupId).map((account) => account.id)
+
+    );
+
+    const nextGroups = assetGroups.map((group) =>
+
+      group.id === groupId
 
         ? {
 
@@ -13135,15 +13031,7 @@ function App() {
 
             nature: nextNature,
 
-            includeInStats: nextIncludeInStats,
-
-            accounts: group.accounts.map((account) => ({
-
-              ...account,
-
-              amount: toStoredAmountByNature(nextNature, account.amount)
-
-            }))
+            includeInStats: nextIncludeInStats
 
           }
 
@@ -13151,15 +13039,25 @@ function App() {
 
     );
 
+    const nextAccounts = accounts.map((account) =>
+
+      account.groupId === groupId
+
+        ? { ...account, amount: toStoredAmountByNature(nextNature, account.amount) }
+
+        : account
+
+    );
+
     const nextHistory = history.map((record) =>
 
-      record.groupName === currentName ? { ...record, groupName: nextName } : record
+      targetAccountIds.has(record.accountId) ? { ...record, groupName: nextName } : record
 
     );
 
 
 
-    updateAppData({ groups: nextGroups, history: nextHistory });
+    updateAppData({ groups: nextGroups, accounts: nextAccounts, history: nextHistory });
 
     if (currentName !== nextName) {
 
@@ -13167,7 +13065,7 @@ function App() {
 
         const preservedSettings =
 
-          currentSettings.categoryDetailById[currentName] ??
+          currentSettings.categoryDetailById[groupId] ??
 
           currentSettings.globalCategoryDetail;
 
@@ -13175,9 +13073,7 @@ function App() {
 
 
 
-        delete nextSettingsById[currentName];
-
-        nextSettingsById[nextName] = cloneCategoryChartSettings(preservedSettings);
+        nextSettingsById[groupId] = cloneCategoryChartSettings(preservedSettings);
 
 
 
@@ -13193,33 +13089,23 @@ function App() {
 
     }
 
-    setExpandedGroupNames((currentNames) =>
-
-      currentNames.map((groupName) => (groupName === currentName ? nextName : groupName))
-
-    );
-
-    setNewAccountGroupName((groupName) => (groupName === currentName ? nextName : groupName));
-
     setNewAccountTypeInput((typeInput) => (typeInput === currentName ? nextName : typeInput));
-
-    setSelectedGroupDetailName((groupName) => (groupName === currentName ? nextName : groupName));
 
     setSelectedAccount((account) =>
 
-      account?.groupName === currentName ? { ...account, groupName: nextName } : account
+      account?.groupId === groupId ? { ...account, groupName: nextName } : account
 
     );
 
     setEditingAccount((account) =>
 
-      account?.groupName === currentName ? { ...account, groupName: nextName } : account
+      account?.groupId === groupId ? { ...account, groupName: nextName } : account
 
     );
 
     setEditingAccountInfo((account) =>
 
-      account?.groupName === currentName ? { ...account, groupName: nextName } : account
+      account?.groupId === groupId ? { ...account, groupName: nextName } : account
 
     );
 
@@ -13251,27 +13137,21 @@ function App() {
 
 
 
-    if (hasDuplicateGroupName(nextName, accountTypeEditor.groupName)) {
-
-      setAccountTypeError('账户类型名称必须唯一');
-
-      return;
-
-    }
-
-
-
     if (accountTypeEditor.mode === 'create') {
 
       const sortOrder =
 
-        groups.length > 0 ? Math.max(...groups.map((group) => group.sortOrder)) + 1 : 0;
+        assetGroups.length > 0 ? Math.max(...assetGroups.map((group) => group.sortOrder)) + 1 : 0;
+
+      const nextGroupId = createStableGroupId(assetGroups.map((group) => group.id));
 
       const nextGroups = [
 
-        ...groups,
+        ...assetGroups,
 
         {
+
+          id: nextGroupId,
 
           name: nextName,
 
@@ -13279,9 +13159,7 @@ function App() {
 
           includeInStats: accountTypeStatsDraft,
 
-          sortOrder,
-
-          accounts: []
+          sortOrder
 
         }
 
@@ -13289,7 +13167,7 @@ function App() {
 
 
 
-      updateAppData({ groups: nextGroups, history });
+      updateAppData({ groups: nextGroups, accounts, history });
 
       updateAssetChartSettings((currentSettings) => ({
 
@@ -13299,13 +13177,13 @@ function App() {
 
           ...currentSettings.categoryDetailById,
 
-          [nextName]: cloneCategoryChartSettings(currentSettings.globalCategoryDetail)
+          [nextGroupId]: cloneCategoryChartSettings(currentSettings.globalCategoryDetail)
 
         }
 
       }));
 
-      setNewAccountGroupName(nextName);
+      setNewAccountGroupId(nextGroupId);
 
       setNewAccountTypeInput(nextName);
 
@@ -13317,11 +13195,11 @@ function App() {
 
 
 
-    const currentName = accountTypeEditor.groupName;
+    const currentGroupId = accountTypeEditor.groupId;
 
 
 
-    if (!currentName || !accountTypeEditorGroup) {
+    if (!currentGroupId || !accountTypeEditorGroup) {
 
       closeAccountTypeEditor();
 
@@ -13333,7 +13211,7 @@ function App() {
 
     applyAccountTypeUpdate(
 
-      currentName,
+      currentGroupId,
 
       nextName,
 
@@ -13359,8 +13237,6 @@ function App() {
 
 
 
-    const currentName = selectedGroupDetail.name;
-
     const nextName = groupDetailNameDraft.trim();
 
 
@@ -13375,19 +13251,9 @@ function App() {
 
 
 
-    if (hasDuplicateGroupName(nextName, currentName)) {
-
-      setGroupDetailError('账户类型名称必须唯一');
-
-      return;
-
-    }
-
-
-
     applyAccountTypeUpdate(
 
-      currentName,
+      selectedGroupDetail.id,
 
       nextName,
 
@@ -13403,9 +13269,22 @@ function App() {
 
 
 
-  const reorderGroups = (draggedName: string, targetName: string) => {
+  const getGroupDropPosition = (draggedGroupId: string, targetGroupId: string) => {
+    const fromIndex = assetGroups.findIndex((group) => group.id === draggedGroupId);
+    const toIndex = assetGroups.findIndex((group) => group.id === targetGroupId);
 
-    if (draggedName === targetName) {
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+      return null;
+    }
+
+    return fromIndex < toIndex ? 'after' : 'before';
+  };
+
+
+
+  const reorderGroups = (draggedGroupId: string, targetGroupId: string) => {
+
+    if (draggedGroupId === targetGroupId) {
 
       return;
 
@@ -13413,11 +13292,11 @@ function App() {
 
 
 
-    const nextGroups = [...groups];
+    const nextGroups = [...assetGroups];
 
-    const fromIndex = nextGroups.findIndex((group) => group.name === draggedName);
+    const fromIndex = nextGroups.findIndex((group) => group.id === draggedGroupId);
 
-    const toIndex = nextGroups.findIndex((group) => group.name === targetName);
+    const toIndex = nextGroups.findIndex((group) => group.id === targetGroupId);
 
 
 
@@ -13447,6 +13326,8 @@ function App() {
 
       groups: nextGroups.map((group, index) => ({ ...group, sortOrder: index })),
 
+      accounts,
+
       history
 
     });
@@ -13455,7 +13336,7 @@ function App() {
 
 
 
-  const handleGroupDragStart = (event: DragEvent<HTMLElement>, groupName: string) => {
+  const handleGroupDragStart = (event: DragEvent<HTMLElement>, groupId: string) => {
 
     if (!isGroupEditMode) {
 
@@ -13465,7 +13346,8 @@ function App() {
 
 
 
-    setDraggingGroupName(groupName);
+    setDraggingGroupId(groupId);
+    setGroupDropIndicator(null);
 
     suppressGroupClickRef.current = true;
 
@@ -13473,21 +13355,27 @@ function App() {
 
     event.dataTransfer.effectAllowed = 'move';
 
-    event.dataTransfer.setData('text/plain', groupName);
+    event.dataTransfer.setData('text/plain', groupId);
 
   };
 
 
 
-  const handleGroupDragOver = (event: DragEvent<HTMLElement>, groupName: string) => {
+  const handleGroupDragOver = (event: DragEvent<HTMLElement>, groupId: string) => {
 
-    if (!isGroupEditMode || !draggingGroupName || draggingGroupName === groupName) {
+    if (!isGroupEditMode || !draggingGroupId || draggingGroupId === groupId) {
 
       return;
 
     }
 
 
+
+    const position = getGroupDropPosition(draggingGroupId, groupId);
+
+    if (position) {
+      setGroupDropIndicator({ groupId, position });
+    }
 
     event.preventDefault();
 
@@ -13497,7 +13385,21 @@ function App() {
 
 
 
-  const handleGroupDrop = (event: DragEvent<HTMLElement>, groupName: string) => {
+  const handleGroupDragLeave = (event: DragEvent<HTMLElement>, groupId: string) => {
+    const nextTarget = event.relatedTarget;
+
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+      return;
+    }
+
+    setGroupDropIndicator((currentIndicator) =>
+      currentIndicator?.groupId === groupId ? null : currentIndicator
+    );
+  };
+
+
+
+  const handleGroupDrop = (event: DragEvent<HTMLElement>, groupId: string) => {
 
     if (!isGroupEditMode) {
 
@@ -13509,15 +13411,16 @@ function App() {
 
     event.preventDefault();
 
-    const draggedName = event.dataTransfer.getData('text/plain') || draggingGroupName;
+    const draggedId = event.dataTransfer.getData('text/plain') || draggingGroupId;
 
-    reorderGroups(draggedName, groupName);
+    reorderGroups(draggedId, groupId);
 
     suppressNextGroupClick(350);
 
     groupDoubleClickCandidateRef.current = null;
 
-    setDraggingGroupName('');
+    setDraggingGroupId('');
+    setGroupDropIndicator(null);
 
   };
 
@@ -13525,7 +13428,8 @@ function App() {
 
   const handleGroupDragEnd = () => {
 
-    setDraggingGroupName('');
+    setDraggingGroupId('');
+    setGroupDropIndicator(null);
 
     window.setTimeout(() => {
 
@@ -13537,7 +13441,19 @@ function App() {
 
 
 
-  const openAccountDetail = (groupName: string, account: Account) => {
+  const openAccountDetail = (groupId: string, account: Account) => {
+
+    const group = groups.find((currentGroup) => currentGroup.id === groupId);
+
+
+
+    if (!group) {
+
+      return;
+
+    }
+
+
 
     dispatchSearchState({ type: 'clear-navigation' });
 
@@ -13545,11 +13461,11 @@ function App() {
 
     setIsQuickSingleEntryAccountPickerOpen(false);
 
-    setSelectedGroupDetailName('');
+    setSelectedGroupDetailId('');
 
     setIsAccountChartsOpen(false);
 
-    setSelectedAccount({ groupName, accountId: account.id });
+    setSelectedAccount({ groupId, groupName: group.name, accountId: account.id });
 
     setExpandedDetailDates([]);
 
@@ -13625,7 +13541,7 @@ function App() {
 
     setSelectedAccount(null);
 
-    setSelectedGroupDetailName('');
+    setSelectedGroupDetailId('');
 
     setIsQuickSingleEntryAccountPickerOpen(false);
 
@@ -13681,7 +13597,7 @@ function App() {
 
     setSelectedAccount(null);
 
-    setSelectedGroupDetailName('');
+    setSelectedGroupDetailId('');
 
     setEditingAccount(null);
 
@@ -13785,7 +13701,7 @@ function App() {
 
   const openEditor = (
 
-    groupName: string,
+    groupId: string,
 
     account: Account,
 
@@ -13795,13 +13711,15 @@ function App() {
 
   ) => {
 
+    const group = groups.find((currentGroup) => currentGroup.id === groupId);
+
     const today = getAccountOperationTodayDateValue();
 
     const todayMonth = getAccountOperationCalendarMonth(today);
 
 
 
-    setEditingAccount({ groupName, accountId: account.id });
+    setEditingAccount({ groupId, groupName: group?.name, accountId: account.id });
 
     setAccountOperationEntrySource(source);
 
@@ -13901,7 +13819,7 @@ function App() {
 
     exitGroupEditMode();
 
-    setSelectedGroupDetailName('');
+    setSelectedGroupDetailId('');
 
     setIsGlobalSettingsOpen(false);
 
@@ -13979,7 +13897,7 @@ function App() {
 
     setSelectedAccount(null);
 
-    setSelectedGroupDetailName('');
+    setSelectedGroupDetailId('');
 
     setIsGlobalSettingsOpen(false);
 
@@ -14261,6 +14179,8 @@ function App() {
 
     assignRollupAccount(keyword, {
 
+      groupId: match.group.id,
+
       groupName: match.group.name,
 
       accountId: match.account.id
@@ -14273,7 +14193,7 @@ function App() {
 
   const openRollupNewAccount = (keyword: string) => {
 
-    const firstGroupName = groups[0]?.name ?? '';
+    const firstGroup = groups[0];
 
 
 
@@ -14281,9 +14201,9 @@ function App() {
 
     setIsAddingAccount(true);
 
-    setNewAccountGroupName(firstGroupName);
+    setNewAccountGroupId(firstGroup?.id ?? '');
 
-    setNewAccountTypeInput(firstGroupName);
+    setNewAccountTypeInput(firstGroup?.name ?? '');
 
     setNewAccountName(keyword.trim());
 
@@ -14317,7 +14237,7 @@ function App() {
 
     const runningAmounts = new Map<string, number>();
 
-    const finalAmounts = new Map<string, { groupName: string; amount: number }>();
+    const finalAmounts = new Map<string, number>();
 
     const recordsWithAccounts = rollupImportReview.records
 
@@ -14351,6 +14271,8 @@ function App() {
 
           record,
 
+          groupId: match.group.id,
+
           groupName: match.group.name,
 
           account: match.account
@@ -14362,6 +14284,8 @@ function App() {
       .filter((item): item is {
 
         record: RollupImportRecord;
+
+        groupId: string;
 
         groupName: string;
 
@@ -14403,7 +14327,7 @@ function App() {
 
           ? beforeAmount + item.record.amount
 
-          : toStoredGroupAmount(item.groupName, item.record.amount)
+          : toStoredGroupAmount(item.groupId, item.record.amount)
 
       );
 
@@ -14415,13 +14339,7 @@ function App() {
 
       runningAmounts.set(item.account.id, afterAmount);
 
-      finalAmounts.set(item.account.id, {
-
-        groupName: item.groupName,
-
-        amount: afterAmount
-
-      });
+      finalAmounts.set(item.account.id, afterAmount);
 
 
 
@@ -14449,31 +14367,17 @@ function App() {
 
 
 
-    const nextGroups = groups.map((group) => ({
+    const nextAccounts = accounts.map((account) => {
+      const finalAmount = finalAmounts.get(account.id);
 
-      ...group,
-
-      accounts: group.accounts.map((account) => {
-
-        const finalAmount = finalAmounts.get(account.id);
-
-
-
-        return finalAmount && finalAmount.groupName === group.name
-
-          ? { ...account, amount: finalAmount.amount }
-
-          : account;
-
-      })
-
-    }));
+      return typeof finalAmount === 'number' ? { ...account, amount: finalAmount } : account;
+    });
 
     const nextHistory = [...rollupHistory, ...history].sort(compareHistoryByTimeDesc);
 
 
 
-    updateAppData({ groups: nextGroups, history: nextHistory });
+    updateAppData({ groups: assetGroups, accounts: nextAccounts, history: nextHistory });
 
 
 
@@ -14513,21 +14417,22 @@ function App() {
 
 
 
-  const chooseQuickSingleEntryAccount = (groupName: string, account: Account) => {
+  const chooseQuickSingleEntryAccount = (groupId: string, account: Account) => {
+    const group = groups.find((currentGroup) => currentGroup.id === groupId);
 
     closeQuickSingleEntryAccountPicker();
 
-    setSelectedAccount({ groupName, accountId: account.id });
+    setSelectedAccount({ groupId, groupName: group?.name, accountId: account.id });
 
     setExpandedDetailDates([]);
 
-    setSelectedGroupDetailName('');
+    setSelectedGroupDetailId('');
 
     setIsAccountActionMenuOpen(false);
 
     setIsDangerActionsOpen(false);
 
-    openEditor(groupName, account, 'set', 'quick-single-entry');
+    openEditor(groupId, account, 'set', 'quick-single-entry');
 
   };
 
@@ -14695,15 +14600,15 @@ function App() {
 
   const openAddAccount = () => {
 
-    const firstGroupName = groups[0]?.name ?? '';
+    const firstGroup = groups[0];
 
 
 
     setIsAddingAccount(true);
 
-    setNewAccountGroupName(firstGroupName);
+    setNewAccountGroupId(firstGroup?.id ?? '');
 
-    setNewAccountTypeInput(firstGroupName);
+    setNewAccountTypeInput(firstGroup?.name ?? '');
 
     setNewAccountName('');
 
@@ -14723,7 +14628,7 @@ function App() {
 
     setIsAddingAccount(false);
 
-    setNewAccountGroupName('');
+    setNewAccountGroupId('');
 
     setNewAccountTypeInput('');
 
@@ -14751,7 +14656,7 @@ function App() {
 
     setNewAccountTypeInput(value);
 
-    setNewAccountGroupName(exactMatch?.name ?? '');
+    setNewAccountGroupId(exactMatch?.id ?? '');
 
     setNewAccountError('');
 
@@ -14767,7 +14672,7 @@ function App() {
 
     if (newAccountTypeMatch) {
 
-      setNewAccountGroupName(newAccountTypeMatch.name);
+      setNewAccountGroupId(newAccountTypeMatch.id);
 
       setNewAccountTypeInput(newAccountTypeMatch.name);
 
@@ -14815,7 +14720,7 @@ function App() {
 
 
 
-    const currentIndex = groups.findIndex((group) => group.name === newAccountGroupName);
+    const currentIndex = groups.findIndex((group) => group.id === newAccountGroupId);
 
     const safeIndex = currentIndex >= 0 ? currentIndex : 0;
 
@@ -14825,7 +14730,7 @@ function App() {
 
     if (nextGroup) {
 
-      setNewAccountGroupName(nextGroup.name);
+      setNewAccountGroupId(nextGroup.id);
 
       setNewAccountTypeInput(nextGroup.name);
 
@@ -14859,11 +14764,12 @@ function App() {
 
 
 
-  const openAccountInfoEditor = (groupName: string, account: Account) => {
+  const openAccountInfoEditor = (groupId: string, account: Account) => {
+    const group = groups.find((currentGroup) => currentGroup.id === groupId);
 
     setIsAccountActionMenuOpen(false);
 
-    setEditingAccountInfo({ groupName, accountId: account.id });
+    setEditingAccountInfo({ groupId, groupName: group?.name, accountId: account.id });
 
     setAccountNameDraft(account.name);
 
@@ -14925,28 +14831,10 @@ function App() {
 
 
 
-    const nextGroups = groups.map((group) =>
-
-      group.name === editingAccountInfo.groupName
-
-        ? {
-
-            ...group,
-
-            accounts: group.accounts.map((account) =>
-
-              account.id === editingAccountInfo.accountId
-
-                ? { ...account, name: nextName, alias: nextAlias || undefined }
-
-                : account
-
-            )
-
-          }
-
-        : group
-
+    const nextAccounts = accounts.map((account) =>
+      account.id === editingAccountInfo.accountId
+        ? { ...account, name: nextName, alias: nextAlias || undefined }
+        : account
     );
 
     const nextHistory = history.map((record) =>
@@ -14961,7 +14849,7 @@ function App() {
 
 
 
-    updateAppData({ groups: nextGroups, history: nextHistory });
+    updateAppData({ groups: assetGroups, accounts: nextAccounts, history: nextHistory });
 
     closeAccountInfoEditor();
 
@@ -15231,7 +15119,7 @@ function App() {
 
     setSelectedAccount(null);
 
-    setSelectedGroupDetailName('');
+    setSelectedGroupDetailId('');
 
   };
 
@@ -15241,11 +15129,11 @@ function App() {
 
     selectedAccount,
 
-    selectedGroupDetailName,
+    selectedGroupDetailId,
 
     isAccountChartsOpen,
 
-    expandedGroupNames,
+    expandedGroupIds,
 
     isTotalChartsOpen,
 
@@ -15277,11 +15165,11 @@ function App() {
 
     setSelectedAccount(snapshot.selectedAccount);
 
-    setSelectedGroupDetailName(snapshot.selectedGroupDetailName);
+    setSelectedGroupDetailId(snapshot.selectedGroupDetailId);
 
     setIsAccountChartsOpen(snapshot.isAccountChartsOpen);
 
-    setExpandedGroupNames(snapshot.expandedGroupNames);
+    setExpandedGroupIds(snapshot.expandedGroupIds);
 
     setIsTotalChartsOpen(snapshot.isTotalChartsOpen);
 
@@ -15349,7 +15237,7 @@ function App() {
 
     if (target.category === 'account') {
 
-      const group = groups.find((currentGroup) => currentGroup.name === target.groupName);
+      const group = groups.find((currentGroup) => currentGroup.id === target.groupId);
 
       const account = group?.accounts.find(
 
@@ -15415,17 +15303,17 @@ function App() {
 
     if (target.category === 'account') {
 
-      const { group, account } = foundTarget as { group: AssetGroup; account: Account };
+      const { group, account } = foundTarget as { group: AssetGroupWithAccounts; account: Account };
 
 
 
-      setExpandedGroupNames((currentNames) =>
+      setExpandedGroupIds((currentNames) =>
 
-        currentNames.includes(group.name) ? currentNames : [...currentNames, group.name]
+        currentNames.includes(group.id) ? currentNames : [...currentNames, group.id]
 
       );
 
-      setSelectedAccount({ groupName: group.name, accountId: account.id });
+      setSelectedAccount({ groupId: group.id, groupName: group.name, accountId: account.id });
 
       setExpandedDetailDates([]);
 
@@ -15504,11 +15392,11 @@ function App() {
 
       const recordDate = toDateInputValue(new Date(record.time));
 
-      setExpandedGroupNames((currentNames) =>
-        currentNames.includes(group.name) ? currentNames : [...currentNames, group.name]
+      setExpandedGroupIds((currentNames) =>
+        currentNames.includes(group.id) ? currentNames : [...currentNames, group.id]
       );
 
-      setSelectedAccount({ groupName: group.name, accountId: account.id });
+      setSelectedAccount({ groupId: group.id, groupName: group.name, accountId: account.id });
 
       setExpandedDetailDates((currentDates) =>
         currentDates.includes(recordDate) ? currentDates : [...currentDates, recordDate]
@@ -15992,7 +15880,8 @@ function App() {
 
     autoBackupSettings: settings,
 
-    groups,
+    groups: assetGroups,
+    accounts,
 
     history
 
@@ -16466,17 +16355,28 @@ function App() {
 
   const importBackupData = (value: unknown) => {
 
-    const importedGroups = getBackupGroups(value);
+    const importedAccountData = getBackupAccountData(value);
+    const hasImportedAccountData =
+      importedAccountData.groups.length > 0 || importedAccountData.accounts.length > 0;
 
     const groupsAfterImport =
 
-      importedGroups.length > 0 ? mergeGroups(groups, importedGroups) : groups;
+      importedAccountData.groups.length > 0
+        ? mergeGroups(assetGroups, importedAccountData.groups)
+        : assetGroups;
+    const accountsAfterImport = hasImportedAccountData
+      ? mergeAccounts(accounts, importedAccountData.accounts)
+      : accounts;
+    const groupsWithAccountsAfterImport = deriveGroupsWithAccounts(
+      groupsAfterImport,
+      accountsAfterImport
+    );
 
-    const importedHistory = getBackupHistory(value, groupsAfterImport);
+    const importedHistory = getBackupHistory(value, groupsWithAccountsAfterImport);
 
 
 
-    if (importedGroups.length === 0 && importedHistory.length === 0) {
+    if (!hasImportedAccountData && importedHistory.length === 0) {
 
       throw new Error('No supported snapshot data found.');
 
@@ -16486,7 +16386,8 @@ function App() {
 
     if (isExampleMode) {
 
-      const sandboxGroups = importedGroups.length > 0 ? importedGroups : groups;
+      const sandboxGroups = hasImportedAccountData ? importedAccountData.groups : assetGroups;
+      const sandboxAccounts = hasImportedAccountData ? importedAccountData.accounts : accounts;
 
       const sandboxHistory = importedHistory.length > 0 ? importedHistory : history;
 
@@ -16495,6 +16396,7 @@ function App() {
       updateAppData({
 
         groups: sandboxGroups,
+        accounts: sandboxAccounts,
 
         history: sandboxHistory
 
@@ -16561,6 +16463,7 @@ function App() {
     updateAppData({
 
       groups: groupsAfterImport,
+      accounts: accountsAfterImport,
 
       history:
 
@@ -16854,7 +16757,7 @@ function App() {
 
   const performSaveAmount = (editableAmount: number, savedDate: string, note?: string) => {
 
-    if (!editingAccount || !currentAccount) {
+    if (!editingAccount || !currentAccount || !currentGroup) {
 
       return;
 
@@ -16870,7 +16773,7 @@ function App() {
 
     ) {
 
-      window.alert('已存在同名启用账户，请先修改名称后再重新启用');
+      window.alert('已有同名启用账户，请先处理后再重新启用');
 
       return;
 
@@ -16880,57 +16783,41 @@ function App() {
 
     const nextAmount = roundToMoneyPrecision(
 
-      toStoredGroupAmount(editingAccount.groupName, editableAmount)
+      toStoredGroupAmount(editingAccount.groupId, editableAmount)
 
     );
 
     const savedAt = toAccountOperationIsoTime(savedDate);
 
-    const nextGroups = groups.map((group) =>
+    const nextAccounts = accounts.map((account) =>
 
-      group.name === editingAccount.groupName
+      account.id === editingAccount.accountId
 
         ? {
 
-            ...group,
+            ...account,
 
-            accounts: group.accounts.map((account) =>
+            amount: nextAmount,
 
-              account.id === editingAccount.accountId
-
-                ? {
-
-                    ...account,
-
-                    amount: nextAmount,
-
-                    ...(currentAccount.archived
-
-                      ? { archived: false, archivedAt: undefined }
-
-                      : {})
-
-                  }
-
-                : account
-
-            )
+            ...(currentAccount.archived ? { archived: false, archivedAt: undefined } : {})
 
           }
 
-        : group
+        : account
 
     );
+
+    const groupName = currentGroup.name;
 
     const nextHistory = [
 
       createHistoryRecord(
 
-        '修改',
+        '\u4fee\u6539',
 
         currentAccount,
 
-        editingAccount.groupName,
+        groupName,
 
         currentAccount.amount,
 
@@ -16952,11 +16839,11 @@ function App() {
 
             createHistoryRecord(
 
-              '重新启用',
+              '\u91cd\u65b0\u542f\u7528',
 
               currentAccount,
 
-              editingAccount.groupName,
+              groupName,
 
               currentAccount.amount,
 
@@ -16976,7 +16863,7 @@ function App() {
 
 
 
-    updateAppData({ groups: nextGroups, history: nextHistory });
+    updateAppData({ groups: assetGroups, accounts: nextAccounts, history: nextHistory });
 
     closeEditor();
 
@@ -17016,7 +16903,7 @@ function App() {
 
     ) {
 
-      window.alert('已存在同名启用账户，请先修改名称后再重新启用');
+      window.alert('已有同名启用账户，请先处理后再重新启用');
 
       return;
 
@@ -17026,7 +16913,7 @@ function App() {
 
     const nextAmount = roundToMoneyPrecision(
 
-      toStoredGroupAmount(editingAccount.groupName, editableAmount)
+      toStoredGroupAmount(editingAccount.groupId, editableAmount)
 
     );
 
@@ -17042,7 +16929,7 @@ function App() {
 
       setConfirmationDialog({
 
-        title: editMode === 'set' ? '确认修改余额' : '确认增减金额',
+        title: editMode === 'set' ? '确认修改余额' : '确认调整余额',
 
         message: `${currentAccount.name}：${formatMoney(currentAccount.amount)} → ${formatMoney(nextAmount)}`,
 
@@ -17078,21 +16965,22 @@ function App() {
 
     const editableAmount = parseNonNegativeAmount(newAccountAmount);
 
-    const selectedNewAccountGroupName =
+    const selectedNewAccountGroup =
 
+      groups.find((group) => group.id === newAccountGroupId) ??
       groups.find(
 
         (group) =>
 
           normalizeTypeSearchText(group.name) === normalizeTypeSearchText(newAccountTypeInput)
 
-      )?.name ?? newAccountGroupName;
+      );
 
 
 
-    if (!selectedNewAccountGroupName) {
+    if (!selectedNewAccountGroup) {
 
-      setNewAccountError('请选择类型');
+      setNewAccountError('请选择账户类型');
 
       return;
 
@@ -17112,7 +17000,7 @@ function App() {
 
     if (hasActiveDuplicateAccountName(nextName)) {
 
-      setNewAccountError('账户名称必须唯一');
+      setNewAccountError('账户名称已存在');
 
       return;
 
@@ -17130,13 +17018,13 @@ function App() {
 
         title: '重新启用账户',
 
-        message: `账户名称：${archivedMatch.name}`,
+        message: `已归档账户：${archivedMatch.name}`,
 
-        confirmLabel: '重新启用',
+        confirmLabel: '启用',
 
         onConfirm: () => {
 
-          if (restoreAccount(archivedMatch.groupName, archivedMatch)) {
+          if (restoreAccount(archivedMatch.groupId, archivedMatch, 'same-name-account')) {
 
             closeAddAccount();
 
@@ -17154,7 +17042,7 @@ function App() {
 
     if (editableAmount === null) {
 
-      setNewAccountError('请输入非负金额');
+      setNewAccountError('请输入账户金额');
 
       return;
 
@@ -17166,13 +17054,15 @@ function App() {
 
     const nextAccount: Account = {
 
-      id: createId('account'),
+      id: createStableAccountId(accounts.map((account) => account.id)),
+
+      groupId: selectedNewAccountGroup.id,
 
       name: nextName,
 
       amount: roundToMoneyPrecision(
 
-        toStoredGroupAmount(selectedNewAccountGroupName, editableAmount)
+        toStoredGroupAmount(selectedNewAccountGroup.id, editableAmount)
 
       ),
 
@@ -17180,31 +17070,15 @@ function App() {
 
     };
 
-    const nextGroups = groups.map((group) =>
-
-      group.name === selectedNewAccountGroupName
-
-        ? {
-
-            ...group,
-
-            accounts: [...group.accounts, nextAccount]
-
-          }
-
-        : group
-
-    );
-
     const nextHistory = [
 
       createHistoryRecord(
 
-        '新增',
+        '\u65b0\u589e',
 
         nextAccount,
 
-        selectedNewAccountGroupName,
+        selectedNewAccountGroup.name,
 
         null,
 
@@ -17220,7 +17094,7 @@ function App() {
 
 
 
-    updateAppData({ groups: nextGroups, history: nextHistory });
+    updateAppData({ groups: assetGroups, accounts: [...accounts, nextAccount], history: nextHistory });
 
     updateAssetChartSettings((currentSettings) => ({
 
@@ -17248,7 +17122,9 @@ function App() {
 
       assignRollupAccount(rollupPendingNewAccountKey, {
 
-        groupName: selectedNewAccountGroupName,
+        groupId: selectedNewAccountGroup.id,
+
+        groupName: selectedNewAccountGroup.name,
 
         accountId: nextAccount.id
 
@@ -17266,29 +17142,27 @@ function App() {
 
 
 
-  const performDeleteAccount = (groupName: string, account: Account) => {
+  const performDeleteAccount = (groupId: string, account: Account) => {
+
+    const groupName = getGroupName(groupId);
+
+
+
+    if (!groupName) {
+
+      return;
+
+    }
+
+
 
     const deletedAt = new Date().toISOString();
 
-    const nextGroups = groups.map((group) =>
-
-      group.name === groupName
-
-        ? {
-
-            ...group,
-
-            accounts: group.accounts.filter((currentAccount) => currentAccount.id !== account.id)
-
-          }
-
-        : group
-
-    );
+    const nextAccounts = accounts.filter((currentAccount) => currentAccount.id !== account.id);
 
     const existingCreateRecord = history.find(
 
-      (record) => record.accountId === account.id && record.type === '新增'
+      (record) => record.accountId === account.id && record.type === '\u65b0\u589e'
 
     );
 
@@ -17298,7 +17172,7 @@ function App() {
 
       ...(existingCreateRecord ??
 
-        createHistoryRecord('新增', account, groupName, null, account.amount, createdAt)),
+        createHistoryRecord('\u65b0\u589e', account, groupName, null, account.amount, createdAt)),
 
       relatedTime: deletedAt
 
@@ -17306,7 +17180,7 @@ function App() {
 
     const deleteRecord = createHistoryRecord(
 
-      '删除',
+      '\u5220\u9664',
 
       account,
 
@@ -17328,7 +17202,9 @@ function App() {
 
     updateAppData({
 
-      groups: nextGroups,
+      groups: assetGroups,
+
+      accounts: nextAccounts,
 
       history: [deleteRecord, createRecord, ...unrelatedHistory]
 
@@ -17340,7 +17216,7 @@ function App() {
 
 
 
-  const deleteAccount = (groupName: string, account: Account) => {
+  const deleteAccount = (groupId: string, account: Account) => {
 
     setConfirmationDialog({
 
@@ -17350,19 +17226,19 @@ function App() {
 
         <>
 
-          <p>账户名称：{account.name}</p>
+          <p>确定删除 {account.name}</p>
 
-          <p>此操作不可恢复</p>
+          <p>删除后不可恢复</p>
 
         </>
 
       ),
 
-      confirmLabel: '确认删除',
+      confirmLabel: '删除',
 
       tone: 'danger',
 
-      onConfirm: () => performDeleteAccount(groupName, account)
+      onConfirm: () => performDeleteAccount(groupId, account)
 
     });
 
@@ -17370,37 +17246,35 @@ function App() {
 
 
 
-  const performArchiveAccount = (groupName: string, account: Account) => {
+  const performArchiveAccount = (groupId: string, account: Account) => {
+
+    const groupName = getGroupName(groupId);
+
+
+
+    if (!groupName) {
+
+      return;
+
+    }
+
+
 
     const archivedAt = new Date().toISOString();
 
-    const nextGroups = groups.map((group) =>
+    const nextAccounts = accounts.map((currentAccount) =>
 
-      group.name === groupName
+      currentAccount.id === account.id
 
-        ? {
+        ? { ...currentAccount, archived: true, archivedAt }
 
-            ...group,
-
-            accounts: group.accounts.map((currentAccount) =>
-
-              currentAccount.id === account.id
-
-                ? { ...currentAccount, archived: true, archivedAt }
-
-                : currentAccount
-
-            )
-
-          }
-
-        : group
+        : currentAccount
 
     );
 
     const nextHistory = [
 
-      createHistoryRecord('归档', account, groupName, account.amount, account.amount, archivedAt),
+      createHistoryRecord('\u5f52\u6863', account, groupName, account.amount, account.amount, archivedAt),
 
       ...history
 
@@ -17408,7 +17282,7 @@ function App() {
 
 
 
-    updateAppData({ groups: nextGroups, history: nextHistory });
+    updateAppData({ groups: assetGroups, accounts: nextAccounts, history: nextHistory });
 
     closeAccountDetail();
 
@@ -17416,7 +17290,7 @@ function App() {
 
 
 
-  const archiveAccount = (groupName: string, account: Account) => {
+  const archiveAccount = (groupId: string, account: Account) => {
 
     setConfirmationDialog({
 
@@ -17426,19 +17300,19 @@ function App() {
 
         <>
 
-          {account.amount !== 0 ? <p>当前账户余额不为 0</p> : null}
+          {account.amount !== 0 ? <p>账户余额不为 0</p> : null}
 
-          <p>账户名称：{account.name}</p>
+          <p>确定归档 {account.name}</p>
 
-          <p>账户会进入已归档列表，后续仍可在账户新增 / 恢复中重新启用</p>
+          <p>归档后可在账户新增 / 恢复中重新启用</p>
 
         </>
 
       ),
 
-      confirmLabel: '确认归档',
+      confirmLabel: '归档',
 
-      onConfirm: () => performArchiveAccount(groupName, account)
+      onConfirm: () => performArchiveAccount(groupId, account)
 
     });
 
@@ -17446,11 +17320,19 @@ function App() {
 
 
 
-  const restoreAccount = (groupName: string, account: Account) => {
+  const completeArchivedRestoreSource = (source: ArchivedRestoreSource) => {
+    if (source === 'account-restore-dialog' || source === 'same-name-account') {
+      closeAddAccount();
+    }
+  };
+
+
+
+  const performRestoreAccountToGroup = (account: Account, targetGroup: AssetGroup) => {
 
     if (hasActiveDuplicateAccountNameExcept(account.name, account.id)) {
 
-      window.alert('已存在同名启用账户，请先修改名称后再重新启用');
+      window.alert('已有同名启用账户，请先处理后再重新启用');
 
       return false;
 
@@ -17460,61 +17342,158 @@ function App() {
 
     const restoredAt = new Date().toISOString();
 
-    const nextGroups = groups.map((group) =>
-
-      group.name === groupName
-
-        ? {
-
-            ...group,
-
-            accounts: group.accounts.map((currentAccount) =>
-
-              currentAccount.id === account.id
-
-                ? { ...currentAccount, archived: false, archivedAt: undefined }
-
-                : currentAccount
-
-            )
-
-          }
-
-        : group
-
+    const nextData = restoreArchivedAccountToGroup(
+      { groups: assetGroups, accounts, history },
+      account.id,
+      targetGroup.id,
+      restoredAt,
+      createId('history')
     );
 
-    const nextHistory = [
+    if (!nextData) {
+      return false;
+    }
 
-      createHistoryRecord(
-
-        '重新启用',
-
-        account,
-
-        groupName,
-
-        account.amount,
-
-        account.amount,
-
-        restoredAt
-
-      ),
-
-      ...history
-
-    ];
-
-
-
-    updateAppData({ groups: nextGroups, history: nextHistory });
+    updateAppData(nextData);
 
     return true;
 
   };
 
 
+
+  const restoreAccount = (
+    groupId: string,
+    account: Account,
+    source: ArchivedRestoreSource = 'account-detail'
+  ) => {
+    const restoreGroup = getArchivedAccountRestoreGroup({ groupId }, assetGroups);
+
+    if (!restoreGroup) {
+      setPendingArchivedRestore({ accountId: account.id, source });
+      return false;
+    }
+
+    return performRestoreAccountToGroup(account, restoreGroup);
+  };
+
+
+
+  const cancelPendingArchivedRestore = () => {
+    setPendingArchivedRestore(null);
+  };
+
+
+
+  const choosePendingArchivedRestoreGroup = (groupId: string) => {
+    if (!pendingArchivedRestore) {
+      return;
+    }
+
+    const account = accounts.find(
+      (currentAccount) => currentAccount.id === pendingArchivedRestore.accountId
+    );
+    const targetGroup = assetGroups.find((group) => group.id === groupId);
+
+    if (!account || !targetGroup) {
+      setPendingArchivedRestore(null);
+      return;
+    }
+
+    if (performRestoreAccountToGroup(account, targetGroup)) {
+      const { source } = pendingArchivedRestore;
+
+      setPendingArchivedRestore(null);
+      completeArchivedRestoreSource(source);
+    }
+  };
+
+
+
+  const clearDeletedAssetGroupUiState = (groupId: string, groupName: string) => {
+    clearGroupLongPress();
+    groupPointerInteractionRef.current = null;
+    groupDoubleClickCandidateRef.current = null;
+    suppressNextGroupClick(250);
+    setIsGroupEditMode(false);
+    setDraggingGroupId('');
+    setGroupDropIndicator(null);
+    setExpandedGroupIds((currentGroupIds) =>
+      currentGroupIds.filter((currentGroupId) => currentGroupId !== groupId)
+    );
+
+    if (selectedGroupDetailId === groupId) {
+      setSelectedGroupDetailId('');
+    }
+
+    if (selectedAccount?.groupId === groupId) {
+      setSelectedAccount(null);
+      setIsAccountChartsOpen(false);
+      setExpandedDetailDates([]);
+      setIsAccountActionMenuOpen(false);
+      setIsDangerActionsOpen(false);
+    }
+
+    if (editingAccount?.groupId === groupId) {
+      closeEditor();
+    }
+
+    if (editingAccountInfo?.groupId === groupId) {
+      closeAccountInfoEditor();
+    }
+
+    if (flashNoteAccount?.groupId === groupId) {
+      setFlashNoteAccount(null);
+      resetFlashNoteDraft(false);
+    }
+
+    if (accountTypeEditor?.mode === 'edit' && accountTypeEditor.groupId === groupId) {
+      closeAccountTypeEditor();
+    }
+
+    setNewAccountGroupId((currentGroupId) => (currentGroupId === groupId ? '' : currentGroupId));
+    setNewAccountTypeInput((currentInput) => {
+      const shouldClearCurrentInput =
+        newAccountGroupId === groupId ||
+        (!newAccountGroupId &&
+          normalizeTypeSearchText(currentInput) === normalizeTypeSearchText(groupName));
+
+      return shouldClearCurrentInput ? '' : currentInput;
+    });
+    setNewAccountError('');
+    setRollupAccountAssignments((currentAssignments) => {
+      let changed = false;
+      const nextAssignments: Record<string, RollupAccountAssignment | null> = {};
+
+      Object.entries(currentAssignments).forEach(([keyword, assignment]) => {
+        if (assignment?.groupId === groupId) {
+          changed = true;
+          return;
+        }
+
+        nextAssignments[keyword] = assignment;
+      });
+
+      return changed ? nextAssignments : currentAssignments;
+    });
+  };
+
+  const deleteAssetGroup = (groupId: string) => {
+    const group = assetGroups.find((currentGroup) => currentGroup.id === groupId);
+
+    if (!group || !canDeleteAssetGroup(groupId, accounts)) {
+      return;
+    }
+
+    const nextData = deleteAssetGroupFromAppData({ groups: assetGroups, accounts, history }, groupId);
+
+    if (nextData.groups.length === assetGroups.length) {
+      return;
+    }
+
+    updateAppData(nextData);
+    clearDeletedAssetGroupUiState(group.id, group.name);
+  };
 
   const getHistoryTypeLabel = (type: HistoryType) => (type === '归档' ? '已归档' : type);
 
@@ -18061,6 +18040,7 @@ function App() {
   );
 
   const firstGroupName = groups[0]?.name ?? '';
+  const firstGroupId = groups[0]?.id ?? '';
 
   const hasAddAccountUnsavedChanges = Boolean(
 
@@ -18074,7 +18054,7 @@ function App() {
 
         newAccountTypeInput !== firstGroupName ||
 
-        newAccountGroupName !== firstGroupName)
+        newAccountGroupId !== firstGroupId)
 
   );
 
@@ -18410,7 +18390,7 @@ function App() {
 
 
 
-    if (selectedGroupDetailName) {
+    if (selectedGroupDetailId) {
 
       return closeGroupDetailPage;
 
@@ -18524,7 +18504,7 @@ function App() {
 
         if (previousMainPageKey === 'home') {
 
-          setExpandedGroupNames([]);
+          setExpandedGroupIds([]);
 
         }
 
@@ -19375,11 +19355,11 @@ function App() {
     return (
       <AccountActionsPanel
         isArchived={selectedAccountIsArchived}
-        onEditBalance={() => openEditor(selectedAccount.groupName, selectedAccountEntry, 'set')}
-        onEditAccount={() => openAccountInfoEditor(selectedAccount.groupName, selectedAccountEntry)}
+        onEditBalance={() => openEditor(selectedAccount.groupId, selectedAccountEntry, 'set')}
+        onEditAccount={() => openAccountInfoEditor(selectedAccount.groupId, selectedAccountEntry)}
         onRestoreAccount={
           selectedAccountIsArchived
-            ? () => restoreAccount(selectedAccount.groupName, selectedAccountEntry)
+            ? () => restoreAccount(selectedAccount.groupId, selectedAccountEntry, 'account-detail')
             : undefined
         }
         onOpenDangerActions={openDangerActions}
@@ -19434,8 +19414,8 @@ function App() {
     return (
       <AccountDangerActionsPanel
         isArchived={selectedAccountIsArchived}
-        onArchiveAccount={() => archiveAccount(selectedAccount.groupName, selectedAccountEntry)}
-        onDeleteAccount={() => deleteAccount(selectedAccount.groupName, selectedAccountEntry)}
+        onArchiveAccount={() => archiveAccount(selectedAccount.groupId, selectedAccountEntry)}
+        onDeleteAccount={() => deleteAccount(selectedAccount.groupId, selectedAccountEntry)}
         onBackToAccountDetail={closeDangerActions}
       />
     );
@@ -19841,7 +19821,7 @@ function App() {
 
                 updateLocalCategoryDetailChartSettings(
 
-                  selectedGroupDetail.name,
+                  selectedGroupDetail.id,
 
                   (currentSettings) => ({
 
@@ -19877,7 +19857,7 @@ function App() {
 
                 updateLocalCategoryDetailChartSettings(
 
-                  selectedGroupDetail.name,
+                  selectedGroupDetail.id,
 
                   (currentSettings) => ({
 
@@ -22093,7 +22073,7 @@ function App() {
         ) : selectedAccount && selectedAccountEntry ? (
 
           <AccountDetailPanel
-            groupName={selectedAccount.groupName}
+            groupName={selectedGroup?.name ?? selectedAccount.groupName ?? ''}
             account={selectedAccountEntry}
             currentAmount={selectedAccountEntry.amount}
             historyRecords={selectedAccountHistory}
@@ -22426,7 +22406,13 @@ function App() {
 
               {groupTotals.map((group) => {
 
-                const expanded = expandedGroupNames.includes(group.name);
+                const expanded = expandedGroupIds.includes(group.id);
+                const canDeleteGroup = canDeleteAssetGroup(group.id, accounts);
+
+                const groupDropPosition =
+                  groupDropIndicator?.groupId === group.id && draggingGroupId !== group.id
+                    ? groupDropIndicator.position
+                    : null;
 
                 const legendColor =
 
@@ -22438,17 +22424,26 @@ function App() {
 
                   <section
 
-                    key={group.name}
+                    key={group.id}
+                    className={[
+                      'account-type-entry',
+                      groupDropPosition ? `account-type-entry--drop-${groupDropPosition}` : ''
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
 
                     data-account-type-entry="true"
+                    data-account-type-drop-indicator={groupDropPosition ?? undefined}
 
                     draggable={isGroupEditMode}
 
-                    onDragStart={(event) => handleGroupDragStart(event, group.name)}
+                    onDragStart={(event) => handleGroupDragStart(event, group.id)}
 
-                    onDragOver={(event) => handleGroupDragOver(event, group.name)}
+                    onDragOver={(event) => handleGroupDragOver(event, group.id)}
 
-                    onDrop={(event) => handleGroupDrop(event, group.name)}
+                    onDragLeave={(event) => handleGroupDragLeave(event, group.id)}
+
+                    onDrop={(event) => handleGroupDrop(event, group.id)}
 
                     onDragEnd={handleGroupDragEnd}
 
@@ -22462,7 +22457,7 @@ function App() {
 
                       overflow: 'hidden',
 
-                      opacity: draggingGroupName === group.name ? 0.54 : 1,
+                      opacity: draggingGroupId === group.id ? 0.54 : 1,
 
                       transition: 'opacity 0.16s ease, box-shadow 0.16s ease',
 
@@ -22480,7 +22475,7 @@ function App() {
 
                       type="button"
 
-                      onPointerDown={(event) => startGroupPointerInteraction(event, group.name)}
+                      onPointerDown={(event) => startGroupPointerInteraction(event, group.id)}
 
                       onPointerMove={moveGroupPointerInteraction}
 
@@ -22490,7 +22485,7 @@ function App() {
 
                       onPointerCancel={cancelGroupPointerInteraction}
 
-                      onClick={() => handleGroupClick(group.name)}
+                      onClick={() => handleGroupClick(group.id)}
 
                       style={{
 
@@ -22550,70 +22545,6 @@ function App() {
 
                       </div>
 
-                      {isGroupEditMode ? (
-
-                        <span
-
-                          aria-hidden="true"
-
-                          style={{
-
-                            position: 'absolute',
-
-                            top: '50%',
-
-                            left: '50%',
-
-                            display: 'grid',
-
-                            gap: 6,
-
-                            color:
-
-                              draggingGroupName === group.name
-
-                                ? 'var(--nf-sort-icon-active-color)'
-
-                                : 'var(--nf-sort-icon-color)',
-
-                            pointerEvents: 'none',
-
-                            transform: 'translate(-50%, -50%)'
-
-                          }}
-
-                        >
-
-                          <span
-
-                            style={{
-
-                              display: 'grid',
-
-                              placeItems: 'center',
-
-                              width: 28,
-
-                              height: 28,
-
-                              borderRadius: 'var(--radius-control)',
-
-                              background: 'var(--surface-bg)',
-
-                              boxShadow: 'var(--shadow-popover)'
-
-                            }}
-
-                          >
-
-                            <NfSvgIcon svg={NfSortIcon} className="account-sort-icon" decorative />
-
-                          </span>
-
-                        </span>
-
-                      ) : null}
-
                       <div style={{ textAlign: 'right', opacity: isGroupEditMode ? 0.62 : 1 }}>
 
                         <strong style={{ display: 'block', fontSize: '1.06rem' }}>
@@ -22641,6 +22572,45 @@ function App() {
                       </div>
 
                     </button>
+
+                    {isGroupEditMode ? (
+                      <div className="account-type-entry-actions" data-interactive>
+                        <button
+                          type="button"
+                          className={[
+                            'account-type-action-button',
+                            'account-type-action-button--sort',
+                            draggingGroupId === group.id ? 'is-active' : ''
+                          ]
+                            .filter(Boolean)
+                            .join(' ')}
+                          aria-label={`拖拽排序 ${group.name}`}
+                          title="拖拽排序"
+                          data-interactive
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <NfSvgIcon svg={NfSortIcon} className="account-sort-icon" decorative />
+                        </button>
+                        <button
+                          type="button"
+                          className="account-type-action-button account-type-action-button--delete"
+                          aria-label={`删除账户类型 ${group.name}`}
+                          title={canDeleteGroup ? '删除账户类型' : '请先归档或删除未归档账户'}
+                          data-interactive
+                          disabled={!canDeleteGroup}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            deleteAssetGroup(group.id);
+                          }}
+                        >
+                          <NfSvgIcon
+                            svg={NfWindowCloseIcon}
+                            className="account-type-delete-icon"
+                            decorative
+                          />
+                        </button>
+                      </div>
+                    ) : null}
 
 
 
@@ -22678,7 +22648,7 @@ function App() {
 
                               type="button"
 
-                              onClick={() => openAccountDetail(group.name, account)}
+                              onClick={() => openAccountDetail(group.id, account)}
 
                               style={{
 
@@ -23055,7 +23025,7 @@ function App() {
 
                       type="button"
 
-                      onClick={() => openAccountDetail(account.groupName, account)}
+                      onClick={() => openAccountDetail(account.groupId, account)}
 
                       style={{
 
@@ -23107,7 +23077,8 @@ function App() {
 
                         >
 
-                          {account.groupName} · {formatMoney(account.amount)}
+                          {account.groupName ? `${account.groupName} · ` : null}
+                          {formatMoney(account.amount)}
 
                         </span>
 
@@ -23143,7 +23114,7 @@ function App() {
 
                       type="button"
 
-                      onClick={() => restoreAccount(account.groupName, account)}
+                      onClick={() => restoreAccount(account.groupId, account, 'archived-accounts-list')}
 
                       style={{
 
@@ -23761,7 +23732,7 @@ function App() {
 
       {editingAccount && currentAccount ? (
         <AccountAmountEditorDialog
-          title={`${currentGroup?.name ?? editingAccount.groupName} - ${currentAccount.name}`}
+          title={`${currentGroup?.name ?? editingAccount.groupName ?? ''} - ${currentAccount.name}`}
           editMode={editMode}
           draftAmount={draftAmount}
           setAmountDatePicker={renderAccountOperationDatePicker({
@@ -23780,7 +23751,7 @@ function App() {
           isAdjustAmountInvalid={isAdjustAmountInvalid}
           currentAmountLabel={formatMoney(currentAccount.amount)}
           nextAdjustedAmountLabel={formatMoney(
-            toStoredGroupAmount(editingAccount.groupName, nextAdjustedEditableAmount)
+            toStoredGroupAmount(editingAccount.groupId, nextAdjustedEditableAmount)
           )}
           signedAdjustAmountLabel={signedAdjustAmountLabel}
           signedAdjustAmountColor={
@@ -23871,11 +23842,22 @@ function App() {
           getArchivedAtLabel={getArchivedAccountArchivedAtLabel}
           formatMoney={formatMoney}
           onRestore={(account) => {
-            if (restoreAccount(account.groupName, account)) {
+            if (restoreAccount(account.groupId, account, 'account-restore-dialog')) {
               closeAddAccount();
             }
           }}
           onCancel={requestCloseAddAccount}
+        />
+
+      ) : null}
+
+
+
+      {pendingArchivedRestore && pendingArchivedRestoreAccount ? (
+        <AccountRestoreTargetDialog
+          groups={archivedRestoreTargetGroups}
+          onChooseGroup={choosePendingArchivedRestoreGroup}
+          onCancel={cancelPendingArchivedRestore}
         />
 
       ) : null}

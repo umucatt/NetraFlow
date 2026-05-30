@@ -20,7 +20,7 @@ function AccountDangerActionsPanel({
       </div>
       <div className="right-panel-stack">
       {!isArchived ? (
-        <RightPanelActionButton label="归档账户" tone="danger" onClick={onArchiveAccount} />
+        <RightPanelActionButton label="归档账户" onClick={onArchiveAccount} />
       ) : null}
       <RightPanelActionButton label="删除账户" tone="danger" onClick={onDeleteAccount} />
       <RightPanelActionButton label="返回账户明细" onClick={onBackToAccountDetail} />

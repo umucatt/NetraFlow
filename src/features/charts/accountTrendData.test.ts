@@ -26,7 +26,8 @@ const createAccount = (overrides: Partial<Account> = {}): Account => ({
   name: 'Cash',
   amount: 300,
   createdAt: atNoon('2026-04-20'),
-  ...overrides
+  ...overrides,
+  groupId: overrides.groupId ?? 'group-assets'
 });
 
 const createRecord = (overrides: Partial<HistoryRecord>): HistoryRecord => ({

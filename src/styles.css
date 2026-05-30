@@ -1552,6 +1552,18 @@ textarea::placeholder {
   white-space: nowrap;
 }
 
+.account-restore-target-dialog {
+  width: min(520px, 100%);
+}
+
+.account-restore-target-picker {
+  min-height: 32px;
+}
+
+.account-restore-target-chip {
+  justify-content: center;
+}
+
 .history-panel-title {
   margin: 0;
   color: var(--text-main);
@@ -2407,6 +2419,117 @@ textarea::placeholder {
   border-radius: 3px;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 18%, transparent);
   pointer-events: none;
+}
+
+.account-type-entry {
+  position: relative;
+}
+
+.account-type-entry::before,
+.account-type-entry::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  left: 14px;
+  right: 14px;
+  height: 2px;
+  border-radius: 999px;
+  background: transparent;
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    background-color 120ms ease;
+}
+
+.account-type-entry::before {
+  top: 0;
+}
+
+.account-type-entry::after {
+  bottom: 0;
+}
+
+.account-type-entry--drop-before::before,
+.account-type-entry--drop-after::after {
+  background: color-mix(in srgb, var(--accent-border) 68%, transparent);
+  opacity: 1;
+}
+
+.account-type-entry-actions {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transform: translate(-50%, -50%);
+}
+
+.account-type-action-button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-control);
+  padding: 0;
+  background: var(--surface-bg);
+  color: var(--nf-sort-icon-color);
+  box-shadow: var(--shadow-popover);
+  cursor: grab;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.account-type-action-button:not(:disabled):hover,
+.account-type-action-button:not(:disabled):focus-visible {
+  border-color: var(--border-medium);
+  background: var(--surface-strong);
+  color: var(--nf-sort-icon-active-color);
+}
+
+.account-type-action-button:focus-visible {
+  outline: 2px solid var(--accent-border);
+  outline-offset: 2px;
+}
+
+.account-type-action-button--sort.is-active,
+.account-type-action-button--sort:active {
+  color: var(--nf-sort-icon-active-color);
+  cursor: grabbing;
+}
+
+.account-type-action-button--delete {
+  border-color: var(--danger-border);
+  color: var(--danger-text);
+  cursor: pointer;
+}
+
+.account-type-action-button--delete:not(:disabled):hover,
+.account-type-action-button--delete:not(:disabled):focus-visible {
+  border-color: var(--danger-border-strong);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.account-type-action-button:disabled {
+  border-color: var(--border-soft);
+  color: var(--text-subtle);
+  cursor: not-allowed;
+  opacity: 0.46;
+  box-shadow: none;
+}
+
+.account-type-delete-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .reset-confirmation-code {

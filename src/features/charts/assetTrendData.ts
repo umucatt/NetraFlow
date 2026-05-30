@@ -9,7 +9,7 @@ import {
   isPositiveNature,
   toStoredAmountByNature
 } from '../../app/accountNature';
-import type { AccountTypeNature, AssetGroup, HistoryRecord } from '../../app/types';
+import type { AccountTypeNature, AssetGroupWithAccounts, HistoryRecord } from '../../app/types';
 import {
   getChartRangeDateKeys,
   type ChartPointKind,
@@ -34,7 +34,7 @@ type ChartAccountState = {
   amount: number;
 };
 
-const createCurrentChartState = (groups: AssetGroup[]) => {
+const createCurrentChartState = (groups: AssetGroupWithAccounts[]) => {
   const state = new Map<string, ChartAccountState>();
 
   groups.forEach((group) => {
@@ -58,7 +58,7 @@ const createCurrentChartState = (groups: AssetGroup[]) => {
   return state;
 };
 
-const getChartGroupMeta = (groups: AssetGroup[], groupName: string) => {
+const getChartGroupMeta = (groups: AssetGroupWithAccounts[], groupName: string) => {
   const group = groups.find((currentGroup) => currentGroup.name === groupName);
 
   return {
@@ -69,7 +69,7 @@ const getChartGroupMeta = (groups: AssetGroup[], groupName: string) => {
 
 const setChartStateAmount = (
   state: Map<string, ChartAccountState>,
-  groups: AssetGroup[],
+  groups: AssetGroupWithAccounts[],
   record: HistoryRecord,
   amount: number | null
 ) => {
@@ -89,7 +89,7 @@ const setChartStateAmount = (
 
 const rollbackHistoryRecordForTrend = (
   state: Map<string, ChartAccountState>,
-  groups: AssetGroup[],
+  groups: AssetGroupWithAccounts[],
   record: HistoryRecord
 ) => {
   if (record.type === '新增') {
@@ -140,7 +140,7 @@ const getAssetTrendChangeDateKeys = (history: HistoryRecord[]) =>
   ).sort((left, right) => getDateTimestamp(left) - getDateTimestamp(right));
 
 export const deriveAssetTrendPoints = (
-  groups: AssetGroup[],
+  groups: AssetGroupWithAccounts[],
   history: HistoryRecord[],
   settings: AssetTrendSettings
 ): TrendChartPoint[] => {
