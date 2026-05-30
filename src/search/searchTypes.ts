@@ -2,6 +2,7 @@ export type AccountTypeNature = 'asset' | 'receivable' | 'liability';
 
 export type Account = {
   id: string;
+  groupId: string;
   name: string;
   amount: number;
   createdAt: string;
@@ -11,10 +12,14 @@ export type Account = {
 };
 
 export type AssetGroup = {
+  id: string;
   name: string;
   nature: AccountTypeNature;
   includeInStats: boolean;
   sortOrder: number;
+};
+
+export type AssetGroupWithAccounts = AssetGroup & {
   accounts: Account[];
 };
 
@@ -93,7 +98,7 @@ export type SearchNavigationTarget =
   | {
       category: 'account';
       key: string;
-      groupName: string;
+      groupId: string;
       accountId: string;
       isWeakRelated?: boolean;
     }
@@ -121,7 +126,7 @@ export type SearchNavigationTarget =
 export type SearchNavigationTargetInput =
   | {
       category: 'account';
-      groupName: string;
+      groupId: string;
       accountId: string;
       isWeakRelated?: boolean;
     }
@@ -311,7 +316,7 @@ export type BaseSearchResult = {
 
 export type AccountSearchResult = BaseSearchResult & {
   category: 'account';
-  group: AssetGroup;
+  group: AssetGroupWithAccounts;
   account: Account;
   mark: string;
 };
@@ -345,7 +350,7 @@ export type SearchCategoryScoreMap = Record<SearchResultCategory, number>;
 
 export type SearchIndexedData = {
   accounts: Array<{
-    group: AssetGroup;
+    group: AssetGroupWithAccounts;
     account: Account;
     candidate: SearchCandidate;
     title: string;

@@ -10,6 +10,7 @@ export type RollupImportAccountOption = AccountMarkAccount & {
 };
 
 export type RollupImportAccountGroup = {
+  id: string;
   name: string;
   activeAccounts: RollupImportAccountOption[];
 };
@@ -76,7 +77,7 @@ function RollupAccountAssignmentList({
             }
 
             return (
-              <div key={group.name} className="rollup-account-chip-group">
+              <div key={group.id} className="rollup-account-chip-group">
                 <span>{group.name}</span>
                 <div>
                   {accounts.map((account) => {

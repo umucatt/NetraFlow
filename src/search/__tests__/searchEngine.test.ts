@@ -23,7 +23,7 @@ import {
 } from '../searchState';
 import type {
   AccountTypeNature,
-  AssetGroup,
+  AssetGroupWithAccounts,
   BackupMethod,
   BackupRecord,
   HistoryRecord,
@@ -73,8 +73,9 @@ const formatSignedMoney = (amount: number | null) => {
 const formatDate = (value: string) => value.slice(0, 10);
 const MODIFY_HISTORY_TYPE: HistoryType = '\u4fee\u6539';
 
-const groups: AssetGroup[] = [
+const groups: AssetGroupWithAccounts[] = [
   {
+    id: 'g-cash',
     name: '现金',
     nature: 'asset',
     includeInStats: true,
@@ -82,12 +83,14 @@ const groups: AssetGroup[] = [
     accounts: [
       {
         id: 'cash',
+        groupId: 'g-cash',
         name: '现金',
         amount: 200,
         createdAt: '2026-05-19T09:00:00.000Z'
       },
       {
         id: 'cash-reserve',
+        groupId: 'g-cash',
         name: '现金备用',
         amount: 260,
         createdAt: '2026-05-18T09:00:00.000Z',
@@ -96,6 +99,7 @@ const groups: AssetGroup[] = [
     ]
   },
   {
+    id: 'g-liquid',
     name: '流动资金',
     nature: 'asset',
     includeInStats: true,
@@ -103,6 +107,7 @@ const groups: AssetGroup[] = [
     accounts: [
       {
         id: 'ccb-card',
+        groupId: 'g-liquid',
         name: '建设银行储蓄卡',
         amount: 999.99,
         createdAt: '2026-05-10T09:00:00.000Z',
@@ -111,6 +116,7 @@ const groups: AssetGroup[] = [
     ]
   },
   {
+    id: 'g-credit',
     name: '信用',
     nature: 'liability',
     includeInStats: true,
@@ -118,6 +124,7 @@ const groups: AssetGroup[] = [
     accounts: [
       {
         id: 'credit-card',
+        groupId: 'g-credit',
         name: '信用卡',
         amount: -200,
         createdAt: '2026-05-01T09:00:00.000Z'
@@ -374,7 +381,7 @@ const settingsItems: SettingsSearchItem[] = [
 ];
 
 const createSearchIndexFor = (
-  sourceGroups: AssetGroup[] = groups,
+  sourceGroups: AssetGroupWithAccounts[] = groups,
   sourceHistoryRecords: HistoryRecord[] = historyRecords,
   sourceSnapshots: BackupRecord[] = snapshots,
   sourceSettingsItems: SettingsSearchItem[] = settingsItems
@@ -436,8 +443,9 @@ test('default categories and unified all-result stream include settings', () => 
 });
 
 test('plain settings words keep stronger real-domain results near the top boundary', () => {
-  const plainGroups: AssetGroup[] = [
+  const plainGroups: AssetGroupWithAccounts[] = [
     {
+      id: 'g-plain',
       name: '普通词账户组',
       nature: 'asset',
       includeInStats: true,
@@ -445,6 +453,7 @@ test('plain settings words keep stronger real-domain results near the top bounda
       accounts: [
         {
           id: 'plain-account',
+          groupId: 'g-plain',
           name: '账户现金',
           amount: 800,
           createdAt: '2026-05-10T09:00:00.000Z'
@@ -886,11 +895,11 @@ test('loading-more state preserves category and selection until the user chooses
 
   state = searchStateReducer(state, { type: 'open' });
   state = searchStateReducer(state, { type: 'select-category', category: 'account', lock: true });
-  state = searchStateReducer(state, { type: 'focus-item', itemId: 'search-result:account:现金:cash' });
+  state = searchStateReducer(state, { type: 'focus-item', itemId: 'search-result:account:g-cash:cash' });
   state = searchStateReducer(state, { type: 'load-more-results', minimum: 145 });
 
   assert.equal(state.selectedCategory, 'account');
-  assert.equal(state.focusedResultId, 'search-result:account:现金:cash');
+  assert.equal(state.focusedResultId, 'search-result:account:g-cash:cash');
   assert.equal(state.resultLimit >= 145, true);
 });
 
@@ -978,7 +987,8 @@ test('mock-data pressure stays inside the search budget', () => {
 test('large-data pressure covers mixed data and continuous input', () => {
   const createPressureIndex = (historyCount: number) => {
     const pressureNatures: AccountTypeNature[] = ['asset', 'receivable', 'liability'];
-    const pressureGroups: AssetGroup[] = Array.from({ length: 40 }, (_, groupIndex) => ({
+    const pressureGroups: AssetGroupWithAccounts[] = Array.from({ length: 40 }, (_, groupIndex) => ({
+      id: `g-pressure-${groupIndex}`,
       name:
         groupIndex % 3 === 0
           ? `现金组${groupIndex}`
@@ -990,6 +1000,7 @@ test('large-data pressure covers mixed data and continuous input', () => {
       sortOrder: groupIndex,
       accounts: Array.from({ length: 10 }, (_, accountIndex) => ({
         id: `pressure-account-${groupIndex}-${accountIndex}`,
+        groupId: `g-pressure-${groupIndex}`,
         name: `${
           groupIndex % 3 === 0 ? '现金' : groupIndex % 3 === 1 ? '信用卡' : '基金'
         }账户${groupIndex}-${accountIndex}`,

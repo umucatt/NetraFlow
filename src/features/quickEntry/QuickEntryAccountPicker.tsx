@@ -1,11 +1,13 @@
 export type QuickEntryAccountOption = {
   id: string;
   name: string;
+  groupId: string;
   groupName: string;
   archived?: boolean;
 };
 
 export type QuickEntryAccountGroup = {
+  id: string;
   name: string;
   accounts: QuickEntryAccountOption[];
 };
@@ -13,7 +15,7 @@ export type QuickEntryAccountGroup = {
 type QuickEntryAccountPickerProps = {
   groups: QuickEntryAccountGroup[];
   selectedAccountId?: string;
-  onChooseAccount: (groupName: string, accountId: string) => void;
+  onChooseAccount: (groupId: string, accountId: string) => void;
 };
 
 function QuickEntryAccountPicker({
@@ -36,7 +38,7 @@ function QuickEntryAccountPicker({
 
           return (
             <div
-              key={group.name}
+              key={group.id}
               className="flash-note-account-group quick-single-entry-account-group"
             >
               <span>{group.name}</span>
@@ -49,7 +51,7 @@ function QuickEntryAccountPicker({
                       key={account.id}
                       type="button"
                       className={`flash-note-account-chip${isSelected ? ' is-selected' : ''}`}
-                      onClick={() => onChooseAccount(group.name, account.id)}
+                      onClick={() => onChooseAccount(group.id, account.id)}
                     >
                       <span>{account.name}</span>
                     </button>

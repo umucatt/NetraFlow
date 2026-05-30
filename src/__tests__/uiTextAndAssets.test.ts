@@ -1004,6 +1004,55 @@ test('account add and restore page copy uses archived metadata without extra tit
   assert.equal(stylesSource.includes('.account-restore-card__restore-button'), true);
 });
 
+test('deleted original account category restore uses an explicit unselected category chooser', () => {
+  const appSource = readProjectFile('src/App.tsx');
+  const accountDataSource = readProjectFile('src/app/accountData.ts');
+  const accountEditorSource = readProjectFile('src/features/account/AccountEditorDialog.tsx');
+  const targetDialogSource = accountEditorSource.slice(
+    accountEditorSource.indexOf('function AccountRestoreTargetDialog'),
+    accountEditorSource.indexOf('type AccountCreateDialogProps')
+  );
+  const restoreLogicSource = appSource.slice(
+    appSource.indexOf('const completeArchivedRestoreSource'),
+    appSource.indexOf('const clearDeletedAssetGroupUiState')
+  );
+  const archivedAccountsSource = accountDataSource.slice(
+    accountDataSource.indexOf('export const getArchivedAccountEntries'),
+    accountDataSource.indexOf('export const restoreArchivedAccountToGroup')
+  );
+
+  assert.equal(
+    targetDialogSource.includes('原账户类别已删除，请选择恢复到哪个账户类别'),
+    true
+  );
+  assert.equal(targetDialogSource.includes('quick-single-entry-account-picker'), true);
+  assert.equal(targetDialogSource.includes('groups.map((group)'), true);
+  assert.equal(targetDialogSource.includes('is-selected'), false);
+  assert.equal(targetDialogSource.includes('新建账户类型'), false);
+  assert.equal(targetDialogSource.includes('NfActionAddIcon'), false);
+  assert.equal(targetDialogSource.includes('accountTypeGhostText'), false);
+  assert.equal(appSource.includes('<AccountRestoreTargetDialog'), true);
+  assert.equal(restoreLogicSource.includes('getArchivedAccountRestoreGroup({ groupId }, assetGroups)'), true);
+  assert.equal(restoreLogicSource.includes('setPendingArchivedRestore({ accountId: account.id, source })'), true);
+  assert.equal(restoreLogicSource.includes('restoreArchivedAccountToGroup('), true);
+  assert.equal(restoreLogicSource.includes('targetGroup.id'), true);
+  assert.equal(restoreLogicSource.includes('completeArchivedRestoreSource(source)'), true);
+  assert.equal(appSource.includes('getArchivedAccountEntries(groups, accounts, history)'), true);
+  assert.equal(archivedAccountsSource.includes('archivedAccountsWithCurrentGroup'), true);
+  assert.equal(
+    archivedAccountsSource.includes(
+      '.filter((account) => account.archived && !archivedAccountIdsWithCurrentGroup.has(account.id))'
+    ),
+    true
+  );
+  [
+    "restoreAccount(archivedMatch.groupId, archivedMatch, 'same-name-account')",
+    "restoreAccount(selectedAccount.groupId, selectedAccountEntry, 'account-detail')",
+    "restoreAccount(account.groupId, account, 'archived-accounts-list')",
+    "restoreAccount(account.groupId, account, 'account-restore-dialog')"
+  ].forEach((expectedSource) => assert.equal(appSource.includes(expectedSource), true));
+});
+
 test('quick entry picker and example account aliases use current title and mark rules', () => {
   const appSource = readProjectFile('src/App.tsx');
   const stylesSource = readProjectFile('src/styles.css');
@@ -1116,6 +1165,9 @@ test('account detail operation copy and editor previews stay visually scoped', (
   assert.equal(dangerActionsSource.includes('RightPanelSection'), false);
   assert.equal(dangerActionsSource.includes('归档后可在账户新增 / 恢复中重新启用'), false);
   assert.equal(dangerActionsSource.includes('删除后不可恢复'), false);
+  assert.equal(dangerActionsSource.includes('<RightPanelActionButton label="归档账户" tone="danger"'), false);
+  assert.equal(dangerActionsSource.includes('<RightPanelActionButton label="归档账户" onClick={onArchiveAccount} />'), true);
+  assert.equal(dangerActionsSource.includes('<RightPanelActionButton label="删除账户" tone="danger"'), true);
   assert.equal(amountEditorSource.includes('<p className="eyebrow"'), false);
   assert.equal(accountInfoEditorSource.includes('<p className="eyebrow"'), false);
   assert.equal(accountInfoEditorSource.includes('account-alias-preview__name'), false);
@@ -1142,7 +1194,7 @@ test('page coverage scroll reset stays scoped away from view and form state', ()
   assert.equal(appSource.includes('rightActionPanelRef.current?.scrollTo({ top: 0 });'), true);
   assert.equal(appSource.includes("target.category === 'settings' && target.blockId"), true);
   assert.equal(appSource.includes('skipNextMainScrollResetRef.current = true;'), true);
-  assert.equal(appSource.includes('setExpandedGroupNames((currentNames) =>'), true);
+  assert.equal(appSource.includes('setExpandedGroupIds((current'), true);
   assert.equal(scrollEffectsSource.includes("setDraftAmount('')"), false);
   assert.equal(scrollEffectsSource.includes("setAccountNameDraft('')"), false);
   assert.equal(scrollEffectsSource.includes("setRollupPasteText('')"), false);
@@ -1474,4 +1526,109 @@ test('local responsive tightening stays scoped to home stat, page titles, and ri
   assert.equal(stylesSource.includes('--chart-page-title-size'), true);
   assert.equal(stylesSource.includes('--right-panel-title-size'), true);
   assert.equal(stylesSource.includes('--right-panel-label-size'), true);
+});
+
+test('home account type edit mode exposes centered sort and delete actions', () => {
+  const appSource = readProjectFile('src/App.tsx');
+  const stylesSource = readProjectFile('src/styles.css');
+  const entryStart = appSource.indexOf('data-account-type-entry="true"');
+  const entrySource = appSource.slice(
+    entryStart,
+    appSource.indexOf('{expanded ? (', entryStart)
+  );
+  const longPressSource = appSource.slice(
+    appSource.indexOf('const startGroupPointerInteraction'),
+    appSource.indexOf('const openCreateAccountType')
+  );
+
+  assert.equal(longPressSource.includes('interaction.longPressTriggered = true'), true);
+  assert.equal(longPressSource.includes('setExpandedGroupIds([])'), true);
+  assert.equal(
+    longPressSource.indexOf('setExpandedGroupIds([])') <
+      longPressSource.indexOf('setIsGroupEditMode(true)'),
+    true
+  );
+  assert.equal(longPressSource.includes('setIsGroupEditMode(true)'), true);
+  assert.equal(entrySource.includes('className="account-type-entry-actions"'), true);
+  assert.equal(entrySource.includes('account-type-action-button--sort'), true);
+  assert.equal(entrySource.includes('account-type-action-button--delete'), true);
+  assert.equal(entrySource.includes('NfSortIcon'), true);
+  assert.equal(entrySource.includes('NfWindowCloseIcon'), true);
+  assert.equal(entrySource.includes('data-interactive'), true);
+  assert.equal(entrySource.includes('disabled={!canDeleteGroup}'), true);
+  assert.equal(entrySource.includes('deleteAssetGroup(group.id)'), true);
+  assert.equal(entrySource.includes('canDeleteAssetGroup(group.id, accounts)'), true);
+  assert.equal(entrySource.indexOf('</button>') < entrySource.indexOf('account-type-entry-actions'), true);
+  assert.equal(entrySource.includes('draggable={isGroupEditMode}'), true);
+  assert.equal(entrySource.includes('handleGroupDragStart(event, group.id)'), true);
+  assert.equal(entrySource.includes('handleGroupDragOver(event, group.id)'), true);
+  assert.equal(entrySource.includes('handleGroupDragLeave(event, group.id)'), true);
+  assert.equal(entrySource.includes('handleGroupDrop(event, group.id)'), true);
+  assert.equal(entrySource.includes('onDragEnd={handleGroupDragEnd}'), true);
+  assert.equal(entrySource.includes('data-account-type-drop-indicator'), true);
+  assert.equal(entrySource.includes('account-type-entry--drop-${groupDropPosition}'), true);
+  assert.equal(appSource.includes('const getGroupDropPosition'), true);
+  assert.equal(appSource.includes('setGroupDropIndicator({ groupId, position })'), true);
+  assert.equal(appSource.includes('setGroupDropIndicator(null)'), true);
+  assert.match(
+    stylesSource,
+    /\.account-type-entry-actions\s*\{[^}]*position: absolute;[^}]*top: 50%;[^}]*left: 50%;[^}]*justify-content: center;[^}]*transform: translate\(-50%, -50%\);[^}]*\}/s
+  );
+  assert.match(
+    stylesSource,
+    /\.account-type-entry--drop-before::before,[\s\S]*?\.account-type-entry--drop-after::after\s*\{[^}]*background: color-mix\(in srgb, var\(--accent-border\) 68%, transparent\);[^}]*opacity: 1;[^}]*\}/s
+  );
+});
+
+test('asset group delete action uses danger styling and clears dangling group ui state', () => {
+  const appSource = readProjectFile('src/App.tsx');
+  const stylesSource = readProjectFile('src/styles.css');
+  const cleanupSource = appSource.slice(
+    appSource.indexOf('const clearDeletedAssetGroupUiState'),
+    appSource.indexOf('const deleteAssetGroup')
+  );
+  const deleteSource = appSource.slice(
+    appSource.indexOf('const deleteAssetGroup'),
+    appSource.indexOf('const getHistoryTypeLabel')
+  );
+  const updateAppDataSource = appSource.slice(
+    appSource.indexOf('const updateAppData'),
+    appSource.indexOf('const updateAssetChartSettings')
+  );
+
+  assert.match(
+    stylesSource,
+    /\.account-type-action-button--delete\s*\{[^}]*border-color: var\(--danger-border\);[^}]*color: var\(--danger-text\);[^}]*cursor: pointer;[^}]*\}/s
+  );
+  assert.match(
+    stylesSource,
+    /\.account-type-action-button--delete:not\(:disabled\):hover,[\s\S]*?\.account-type-action-button--delete:not\(:disabled\):focus-visible\s*\{[^}]*border-color: var\(--danger-border-strong\);[^}]*background: var\(--danger-bg\);[^}]*color: var\(--danger-text\);[^}]*\}/s
+  );
+  assert.match(
+    stylesSource,
+    /\.account-type-action-button:disabled\s*\{[^}]*color: var\(--text-subtle\);[^}]*cursor: not-allowed;[^}]*opacity: 0\.46;[^}]*\}/s
+  );
+  assert.equal(deleteSource.includes('canDeleteAssetGroup(groupId, accounts)'), true);
+  assert.equal(
+    deleteSource.includes('deleteAssetGroupFromAppData({ groups: assetGroups, accounts, history }, groupId)'),
+    true
+  );
+  assert.equal(deleteSource.includes('updateAppData(nextData)'), true);
+  assert.equal(deleteSource.includes('saveAppData'), false);
+  assert.equal(updateAppDataSource.includes('if (!isExampleMode)'), true);
+  assert.equal(updateAppDataSource.includes('saveAppData(normalizedData)'), true);
+  [
+    'setExpandedGroupIds',
+    "setSelectedGroupDetailId('')",
+    'setSelectedAccount(null)',
+    'setIsAccountChartsOpen(false)',
+    'closeEditor()',
+    'closeAccountInfoEditor()',
+    'setFlashNoteAccount(null)',
+    'closeAccountTypeEditor()',
+    'setNewAccountGroupId',
+    'setNewAccountTypeInput',
+    'normalizeTypeSearchText(currentInput) === normalizeTypeSearchText(groupName)',
+    'setRollupAccountAssignments'
+  ].forEach((expectedSource) => assert.equal(cleanupSource.includes(expectedSource), true));
 });

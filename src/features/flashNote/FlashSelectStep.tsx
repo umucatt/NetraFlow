@@ -37,7 +37,7 @@ type FlashSelectStepProps = {
   endDate: string;
   getCell: (dateValue: string) => FlashCell;
   getCalendarDays: (monthDate: Date) => Date[];
-  onChooseAccount: (groupName: string, accountId: string) => void;
+  onChooseAccount: (groupId: string, accountId: string) => void;
   onModeChange: (mode: FlashInputMode) => void;
   onSelectionModeChange: (mode: FlashSelectionMode) => void;
   onDateRuleApply: (rule: FlashDateRule) => void;
@@ -169,7 +169,7 @@ export function FlashSelectStep({
           <span className="flash-note-setup-panel__label">账户选择</span>
           <div className="flash-note-account-picker" aria-label="选择闪记账户">
             {accountGroups.map((group) => (
-              <div key={group.name} className="flash-note-account-group">
+              <div key={group.id} className="flash-note-account-group">
                 <span>{group.name}</span>
                 <div>
                   {group.accounts.map((account) => (
@@ -177,7 +177,7 @@ export function FlashSelectStep({
                       key={account.id}
                       type="button"
                       className={`flash-note-account-chip${selectedAccountId === account.id ? ' is-selected' : ''}`}
-                      onClick={() => onChooseAccount(group.name, account.id)}
+                      onClick={() => onChooseAccount(group.id, account.id)}
                     >
                       <span>{account.name}</span>
                     </button>

@@ -49,7 +49,7 @@ export const getSearchTargetPresentation = (
 
 export const getSearchTargetKey = (target: SearchNavigationTargetInput) => {
   if (target.category === 'account') {
-    return `account:${target.groupName}:${target.accountId}`;
+    return `account:${target.groupId}:${target.accountId}`;
   }
 
   if (target.category === 'history') {
@@ -64,15 +64,15 @@ export const getSearchTargetKey = (target: SearchNavigationTargetInput) => {
 };
 
 export const createAccountSearchTarget = (
-  groupName: string,
+  groupId: string,
   accountId: string,
   isWeakRelated = false
 ): SearchNavigationTarget => ({
   category: 'account',
-  groupName,
+  groupId,
   accountId,
   isWeakRelated,
-  key: getSearchTargetKey({ category: 'account', groupName, accountId })
+  key: getSearchTargetKey({ category: 'account', groupId, accountId })
 });
 
 export const createHistorySearchTarget = (

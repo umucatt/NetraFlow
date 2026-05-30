@@ -10,7 +10,8 @@ import {
   validateExampleHistoryConsistency,
   type ExampleTemplateId
 } from '../exampleData';
-import type { Account, AssetGroup, HistoryRecord } from '../search/searchTypes';
+import { deriveGroupsWithAccounts, hasPersistedGroupAccounts } from '../app/accountData';
+import type { Account, AssetGroup, HistoryRecord } from '../app/types';
 
 const withSeededRandom = <T,>(seed: number, run: () => T) => {
   const originalRandom = Math.random;
@@ -29,8 +30,10 @@ const withSeededRandom = <T,>(seed: number, run: () => T) => {
   }
 };
 
-const getAccounts = (groups: AssetGroup[]) =>
-  groups.flatMap((group) => group.accounts.map((account) => ({ group, account })));
+const getAccounts = (groups: AssetGroup[], accounts: Account[]) =>
+  deriveGroupsWithAccounts(groups, accounts).flatMap((group) =>
+    group.accounts.map((account) => ({ group, account }))
+  );
 
 const getAccountRecords = (history: HistoryRecord[], account: Account) =>
   history
@@ -48,7 +51,7 @@ test('example templates generate valid account and history data for every tier',
   generatedExamples.forEach(({ templateId, seed }) => {
     const template = EXAMPLE_TEMPLATES.find((item) => item.id === templateId);
     const data = withSeededRandom(seed, () => createExampleData(templateId));
-    const accounts = getAccounts(data.appData.groups);
+    const accounts = getAccounts(data.appData.groups, data.appData.accounts);
 
     assert.ok(template);
     assert.ok(accounts.length >= template.accountRange[0]);
@@ -59,12 +62,27 @@ test('example templates generate valid account and history data for every tier',
   });
 });
 
+test('example templates use top-level accounts without persisted nested groups', () => {
+  generatedExamples.forEach(({ templateId, seed }) => {
+    const data = withSeededRandom(seed, () => createExampleData(templateId));
+
+    assert.equal(hasPersistedGroupAccounts(data.appData.groups), false);
+    assert.equal(data.appData.accounts.length > 0, true);
+    assert.equal(
+      data.appData.accounts.every((account) =>
+        data.appData.groups.some((group) => group.id === account.groupId)
+      ),
+      true
+    );
+  });
+});
+
 test('example account lifecycle records keep add, archive, restore, and modify order valid', () => {
   generatedExamples.forEach(({ templateId, seed }) => {
     const data = withSeededRandom(seed, () => createExampleData(templateId));
-    const now = Date.now();
+    const now = new Date().getTime();
 
-    getAccounts(data.appData.groups).forEach(({ account }) => {
+    getAccounts(data.appData.groups, data.appData.accounts).forEach(({ account }) => {
       const records = getAccountRecords(data.appData.history, account);
       const addRecords = records.filter((record) => record.type === '新增');
 
@@ -117,7 +135,7 @@ test('example account names avoid mechanical and test-style names', () => {
   generatedExamples.forEach(({ templateId, seed }) => {
     const data = withSeededRandom(seed, () => createExampleData(templateId));
 
-    getAccounts(data.appData.groups).forEach(({ account }) => {
+    getAccounts(data.appData.groups, data.appData.accounts).forEach(({ account }) => {
       assert.equal(isExampleAccountNameAllowed(account.name), true, `${templateId}:${account.name}`);
       assert.doesNotMatch(account.name, /^第[一二三四五六七八九十]+/);
       assert.doesNotMatch(account.name, /^account\s*\d+/i);

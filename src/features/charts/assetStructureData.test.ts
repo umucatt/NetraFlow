@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { Account, AccountTypeNature, AssetGroup, HistoryRecord } from '../../app/types';
+import type { Account, AccountTypeNature, AssetGroupWithAccounts, HistoryRecord } from '../../app/types';
 import { NETRAFLOW_CHART_PALETTE } from '../../chartLogic';
 import {
   deriveAssetStructureData,
@@ -14,8 +14,9 @@ const HISTORY_TYPE = {
   create: '\u65b0\u589e' as HistoryRecord['type']
 };
 
-const account = (id: string, amount: number, archived = false): Account => ({
+const account = (id: string, amount: number, archived = false, groupId = 'group-test'): Account => ({
   id,
+  groupId,
   name: id,
   amount,
   createdAt: '2026-05-01T12:00:00',
@@ -26,13 +27,14 @@ const group = (
   name: string,
   nature: AccountTypeNature,
   amount: number,
-  overrides: Partial<AssetGroup> = {}
-): AssetGroup => ({
+  overrides: Partial<AssetGroupWithAccounts> = {}
+): AssetGroupWithAccounts => ({
+  id: `group-${name}`,
   name,
   nature,
   includeInStats: true,
   sortOrder: 0,
-  accounts: [account(`${name}-account`, amount)],
+  accounts: [account(`${name}-account`, amount, false, `group-${name}`)],
   ...overrides
 });
 

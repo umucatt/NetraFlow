@@ -5,7 +5,7 @@ import {
   getHistoryDateKey,
   getHistoryTimestamp
 } from '../../app/dateUtils';
-import type { AccountTypeNature, AssetGroup, HistoryRecord } from '../../app/types';
+import type { AccountTypeNature, AssetGroupWithAccounts, HistoryRecord } from '../../app/types';
 import {
   buildDisplayChartItems,
   getChartRangeDateKeys,
@@ -42,7 +42,7 @@ const getTrendChangeDateKeys = (history: HistoryRecord[]) =>
     )
   ).sort((left, right) => getDateTimestamp(left) - getDateTimestamp(right));
 
-const createCurrentGroupDetailState = (group: AssetGroup) => {
+const createCurrentGroupDetailState = (group: AssetGroupWithAccounts) => {
   const state = new Map<string, { label: string; amount: number }>();
 
   group.accounts.forEach((account) => {
@@ -61,7 +61,7 @@ const createCurrentGroupDetailState = (group: AssetGroup) => {
 
 const setGroupDetailStateAmount = (
   state: Map<string, { label: string; amount: number }>,
-  group: AssetGroup,
+  group: AssetGroupWithAccounts,
   record: HistoryRecord,
   amount: number | null
 ) => {
@@ -78,7 +78,7 @@ const setGroupDetailStateAmount = (
 
 const rollbackGroupDetailRecordForTrend = (
   state: Map<string, { label: string; amount: number }>,
-  group: AssetGroup,
+  group: AssetGroupWithAccounts,
   record: HistoryRecord
 ) => {
   if (record.type === '新增') {
@@ -100,7 +100,7 @@ const rollbackGroupDetailRecordForTrend = (
 };
 
 const getGroupDetailStateAtDate = (
-  group: AssetGroup,
+  group: AssetGroupWithAccounts,
   currentState: Map<string, { label: string; amount: number }>,
   recordsByTimeDesc: Array<{ record: HistoryRecord; timestamp: number; index: number }>,
   date: string
@@ -118,7 +118,7 @@ const getGroupDetailStateAtDate = (
 };
 
 export const deriveGroupDetailTrendData = (
-  group: AssetGroup,
+  group: AssetGroupWithAccounts,
   history: HistoryRecord[],
   settings: GroupDetailTrendSettings,
   colorAssignmentMode: ChartColorAssignmentMode

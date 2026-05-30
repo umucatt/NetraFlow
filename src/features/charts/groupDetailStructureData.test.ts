@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { Account, AccountTypeNature, AssetGroup, HistoryRecord } from '../../app/types';
+import type { Account, AccountTypeNature, AssetGroupWithAccounts, HistoryRecord } from '../../app/types';
 import { NETRAFLOW_CHART_PALETTE } from '../../chartLogic';
 import {
   deriveGroupDetailStructureData,
@@ -20,6 +20,7 @@ const account = (
   overrides: Partial<Account> = {}
 ): Account => ({
   id,
+  groupId: overrides.groupId ?? 'group-test',
   name: overrides.name ?? id,
   amount,
   createdAt: overrides.createdAt ?? '2026-05-01T12:00:00',
@@ -32,8 +33,9 @@ const group = (
   name: string,
   nature: AccountTypeNature,
   accounts: Account[],
-  overrides: Partial<AssetGroup> = {}
-): AssetGroup => ({
+  overrides: Partial<AssetGroupWithAccounts> = {}
+): AssetGroupWithAccounts => ({
+  id: `group-${name}`,
   name,
   nature,
   includeInStats: true,

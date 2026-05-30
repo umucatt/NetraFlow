@@ -32,6 +32,7 @@ export type FlashAccountOption = {
 };
 
 export type FlashAccountGroupOption = {
+  id: string;
   name: string;
   accounts: FlashAccountOption[];
 };

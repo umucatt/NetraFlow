@@ -1,6 +1,6 @@
 import type {
   AccountSearchResult,
-  AssetGroup,
+  AssetGroupWithAccounts,
   BackupRecord,
   CreateSearchIndexOptions,
   GlobalSearchOutput,
@@ -202,7 +202,7 @@ const getHistoryBalanceDisplayText = (
 const getHistoryAccountLookupKey = (groupName: string, accountName: string) =>
   `${groupName}\u0000${accountName}`;
 
-const createHistoryBalanceSignLookup = (groups: AssetGroup[]): HistoryBalanceSignLookup => {
+const createHistoryBalanceSignLookup = (groups: AssetGroupWithAccounts[]): HistoryBalanceSignLookup => {
   const accountIds = new Set<string>();
   const accountNames = new Set<string>();
 
@@ -329,7 +329,7 @@ const getPrimaryMatch = (
 };
 
 export const createGlobalSearchIndex = (
-  groups: AssetGroup[],
+  groups: AssetGroupWithAccounts[],
   historyRecords: HistoryRecord[],
   snapshots: BackupRecord[],
   options: CreateSearchIndexOptions
@@ -604,7 +604,7 @@ const runGlobalSearchCore = (
         category: 'account',
         group: item.group,
         account: item.account,
-        target: createAccountSearchTarget(item.group.name, item.account.id),
+        target: createAccountSearchTarget(item.group.id, item.account.id),
         title: display.title,
         subtitle: display.subtitle,
         value: display.value,
