@@ -1,4 +1,5 @@
 import type { ChangeEvent, RefObject } from 'react';
+import { EXAMPLE_DATA_SETTINGS_BLOCK_ID } from '../../app/exampleModeNavigation';
 import type { ExampleTemplateDefinition, ExampleTemplateId } from '../../exampleData';
 import SettingsSectionFrame from './SettingsSectionFrame';
 
@@ -67,6 +68,7 @@ function BackupSettingsPanel({
       </SettingsSectionFrame>
 
       <SettingsSectionFrame
+        id={EXAMPLE_DATA_SETTINGS_BLOCK_ID}
         title="示例数据"
         description={isExampleMode ? '正处于示例模式中' : '未处于示例模式中'}
       >

@@ -1,74 +1,27 @@
 !include LogicLib.nsh
+!include nsDialogs.nsh
 !define NETRAFLOW_PRODUCT_NAME "NetraFlow"
 !define NETRAFLOW_APP_ID "com.netraflow.app"
 !define NETRAFLOW_INSTALL_DIR_NAME "NetraFlow"
+!define NETRAFLOW_USERDATA_DIR_NAME "userdata"
+!define NETRAFLOW_RUNTIME_DIR_NAME "runtime"
+!define NETRAFLOW_LOGS_DIR_NAME "logs"
 !undef APP_FILENAME
 !define APP_FILENAME "${NETRAFLOW_INSTALL_DIR_NAME}"
 
 !ifndef BUILD_UNINSTALLER
-  Var NetraFlowWindowsDir
-  Var NetraFlowSystemDrive
-  Var NetraFlowPreferredDrive
-  Var NetraFlowDriveLetter
-  Var NetraFlowDriveLetters
-  Var NetraFlowDriveIndex
-  Var NetraFlowSelectedDir
-  Var NetraFlowSelectedTail
+  !macro customInstallMode
+    StrCpy $hasPerMachineInstallation "0"
+    StrCpy $hasPerUserInstallation "1"
+    !insertmacro setInstallModePerUser
+    Call NetraFlowApplyDefaultInstallDir
+    Abort
+  !macroend
 
-  Function NetraFlowFindDefaultInstallDir
-    ReadEnvStr $NetraFlowWindowsDir "WINDIR"
-    StrCpy $NetraFlowSystemDrive $NetraFlowWindowsDir 1
-    StrCpy $NetraFlowPreferredDrive ""
-    StrCpy $NetraFlowDriveLetters "DEFGHIJKLMNOPQRSTUVWXYZ"
-    StrCpy $NetraFlowDriveIndex 0
-
-    ${Do}
-      StrCpy $NetraFlowDriveLetter $NetraFlowDriveLetters 1 $NetraFlowDriveIndex
-
-      ${If} $NetraFlowDriveLetter == ""
-        ${Break}
-      ${EndIf}
-
-      System::Call 'kernel32::GetDriveType(t "$NetraFlowDriveLetter:\") i .r0'
-
-      ${If} $0 == 3
-      ${AndIf} $NetraFlowDriveLetter != $NetraFlowSystemDrive
-        StrCpy $NetraFlowPreferredDrive $NetraFlowDriveLetter
-        ${Break}
-      ${EndIf}
-
-      IntOp $NetraFlowDriveIndex $NetraFlowDriveIndex + 1
-    ${Loop}
-
-    ${If} $NetraFlowPreferredDrive == ""
-      StrCpy $NetraFlowPreferredDrive $NetraFlowSystemDrive
-    ${EndIf}
-
-    StrCpy $INSTDIR "$NetraFlowPreferredDrive:\${NETRAFLOW_INSTALL_DIR_NAME}"
-  FunctionEnd
-
-  Function NetraFlowNormalizeInstallDir
-    StrCpy $NetraFlowSelectedDir $INSTDIR
-
-    ${If} $NetraFlowSelectedDir == ""
-      Call NetraFlowFindDefaultInstallDir
-      Return
-    ${EndIf}
-
-    StrCpy $NetraFlowSelectedTail $NetraFlowSelectedDir "" -1
-
-    ${If} $NetraFlowSelectedTail == "\"
-      StrCpy $NetraFlowSelectedDir $NetraFlowSelectedDir -1
-    ${EndIf}
-
-    StrCpy $NetraFlowSelectedTail $NetraFlowSelectedDir 10 -10
-
-    ${If} $NetraFlowSelectedTail == "\${NETRAFLOW_INSTALL_DIR_NAME}"
-      StrCpy $INSTDIR "$NetraFlowSelectedDir"
-    ${Else}
-      StrCpy $INSTDIR "$NetraFlowSelectedDir\${NETRAFLOW_INSTALL_DIR_NAME}"
-    ${EndIf}
-  FunctionEnd
+  !define MUI_PAGE_HEADER_TEXT "选定安装位置"
+  !define MUI_PAGE_HEADER_SUBTEXT "选择 NetraFlow 的安装文件夹"
+  !define MUI_DIRECTORYPAGE_TEXT_TOP "可使用默认位置，也可选择其他文件夹"
+  !define MUI_DIRECTORYPAGE_TEXT_DESTINATION "目标文件夹"
 
   Function NetraFlowApplyDefaultInstallDir
     StrCpy $0 "$CMDLINE"
@@ -90,59 +43,63 @@
     Call NetraFlowFindDefaultInstallDir
   FunctionEnd
 
-  Function .onVerifyInstDir
-    Call NetraFlowNormalizeInstallDir
+  Function NetraFlowFindDefaultInstallDir
+    ReadEnvStr $1 "SystemDrive"
+    StrCpy $1 $1 1
+    StrCpy $0 "DEFGHIJKLMNOPQRSTUVWXYZABC"
+
+    ${For} $2 0 25
+      StrCpy $3 $0 1 $2
+
+      ${If} $3 != $1
+        StrCpy $4 "$3:\"
+        System::Call 'kernel32::GetDriveTypeW(w "$4") i .r5'
+
+        ${If} $5 == 3
+          StrCpy $INSTDIR "$4${NETRAFLOW_INSTALL_DIR_NAME}"
+          Return
+        ${EndIf}
+      ${EndIf}
+    ${Next}
+
+    StrCpy $INSTDIR "$LOCALAPPDATA\Programs\${NETRAFLOW_INSTALL_DIR_NAME}"
   FunctionEnd
 !else
-  Var NetraFlowUsersRoot
-  Var NetraFlowUserSearchHandle
-  Var NetraFlowUserEntry
-  Var NetraFlowUserPath
+  Var NetraFlowDeleteLocalUserData
+  Var NetraFlowDeleteLocalUserDataCheckbox
 !endif
 
-!macro NetraFlowRemoveUserRuntimeData USER_ROOT
-  RMDir /r "${USER_ROOT}\AppData\Roaming\${NETRAFLOW_PRODUCT_NAME}"
-  RMDir /r "${USER_ROOT}\AppData\Roaming\netraflow"
-  RMDir /r "${USER_ROOT}\AppData\Local\${NETRAFLOW_PRODUCT_NAME}"
-  RMDir /r "${USER_ROOT}\AppData\Local\netraflow"
-  RMDir /r "${USER_ROOT}\AppData\Local\netraflow-updater"
-  RMDir /r "${USER_ROOT}\AppData\Local\Programs\${NETRAFLOW_PRODUCT_NAME}"
-  Delete "${USER_ROOT}\Desktop\${NETRAFLOW_PRODUCT_NAME}.lnk"
-  Delete "${USER_ROOT}\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\${NETRAFLOW_PRODUCT_NAME}.lnk"
-  Delete "${USER_ROOT}\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\${NETRAFLOW_PRODUCT_NAME}.lnk"
+!macro NetraFlowRemoveLegacyProfileDirs
+  RMDir /r "$APPDATA\${NETRAFLOW_PRODUCT_NAME}"
+  RMDir /r "$APPDATA\netraflow"
+  RMDir /r "$LOCALAPPDATA\${NETRAFLOW_PRODUCT_NAME}"
+  RMDir /r "$LOCALAPPDATA\netraflow"
+!macroend
+
+!macro NetraFlowRemoveInstallDirIfAllowed
+  ${If} $NetraFlowDeleteLocalUserData == "1"
+    RMDir "$INSTDIR"
+  ${ElseIfNot} ${FileExists} "$INSTDIR\${NETRAFLOW_USERDATA_DIR_NAME}\*.*"
+    RMDir "$INSTDIR"
+  ${EndIf}
 !macroend
 
 !macro NetraFlowCleanupRegistryRoots
   DeleteRegKey HKCU "Software\${NETRAFLOW_PRODUCT_NAME}"
-  DeleteRegKey HKLM "Software\${NETRAFLOW_PRODUCT_NAME}"
   DeleteRegKey HKCU "Software\netraflow"
-  DeleteRegKey HKLM "Software\netraflow"
   DeleteRegKey HKCU "Software\${NETRAFLOW_APP_ID}"
-  DeleteRegKey HKLM "Software\${NETRAFLOW_APP_ID}"
   DeleteRegKey HKCU "Software\${APP_GUID}"
-  DeleteRegKey HKLM "Software\${APP_GUID}"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\App Paths\${NETRAFLOW_PRODUCT_NAME}.exe"
-  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\App Paths\${NETRAFLOW_PRODUCT_NAME}.exe"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${NETRAFLOW_PRODUCT_NAME}"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${NETRAFLOW_APP_ID}"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_GUID}"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTALL_APP_KEY}"
-  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${NETRAFLOW_PRODUCT_NAME}"
-  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${NETRAFLOW_APP_ID}"
-  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_GUID}"
-  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTALL_APP_KEY}"
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${NETRAFLOW_PRODUCT_NAME}"
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "netraflow"
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${NETRAFLOW_APP_ID}"
-  DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "${NETRAFLOW_PRODUCT_NAME}"
-  DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "netraflow"
-  DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "${NETRAFLOW_APP_ID}"
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "${NETRAFLOW_PRODUCT_NAME}"
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "netraflow"
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "${NETRAFLOW_APP_ID}"
-  DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "${NETRAFLOW_PRODUCT_NAME}"
-  DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "netraflow"
-  DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "${NETRAFLOW_APP_ID}"
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FeatureUsage\AppSwitched" "$INSTDIR\${NETRAFLOW_PRODUCT_NAME}.exe"
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FeatureUsage\ShowJumpView" "$INSTDIR\${NETRAFLOW_PRODUCT_NAME}.exe"
   DeleteRegValue HKCU "Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache" "$INSTDIR\${NETRAFLOW_PRODUCT_NAME}.exe"
@@ -151,82 +108,67 @@
 !macroend
 
 !ifdef BUILD_UNINSTALLER
-  Function un.NetraFlowRemoveKnownUserDataDirs
+  Function un.NetraFlowRemoveInstallResidues
     SetShellVarContext current
-    RMDir /r "$APPDATA\${NETRAFLOW_PRODUCT_NAME}"
-    RMDir /r "$APPDATA\netraflow"
-    RMDir /r "$LOCALAPPDATA\${NETRAFLOW_PRODUCT_NAME}"
-    RMDir /r "$LOCALAPPDATA\netraflow"
+    !insertmacro NetraFlowRemoveLegacyProfileDirs
     RMDir /r "$LOCALAPPDATA\netraflow-updater"
-    RMDir /r "$LOCALAPPDATA\Programs\${NETRAFLOW_PRODUCT_NAME}"
+    RMDir /r "$TEMP\${NETRAFLOW_PRODUCT_NAME}"
     Delete "$DESKTOP\${NETRAFLOW_PRODUCT_NAME}.lnk"
     Delete "$SMPROGRAMS\${NETRAFLOW_PRODUCT_NAME}.lnk"
     Delete "$APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\${NETRAFLOW_PRODUCT_NAME}.lnk"
-    SetShellVarContext all
-
-    ReadEnvStr $NetraFlowUsersRoot "SystemDrive"
-
-    ${If} $NetraFlowUsersRoot == ""
-      StrCpy $NetraFlowUsersRoot "C:"
-    ${EndIf}
-
-    StrCpy $NetraFlowUsersRoot "$NetraFlowUsersRoot\Users"
-
-    IfFileExists "$NetraFlowUsersRoot\*.*" 0 done
-    ClearErrors
-    FindFirst $NetraFlowUserSearchHandle $NetraFlowUserEntry "$NetraFlowUsersRoot\*"
-
-    ${If} ${Errors}
-      Goto done
-    ${EndIf}
-
-    ${Do}
-      ${If} $NetraFlowUserEntry != "."
-      ${AndIf} $NetraFlowUserEntry != ".."
-        StrCpy $NetraFlowUserPath "$NetraFlowUsersRoot\$NetraFlowUserEntry"
-
-        IfFileExists "$NetraFlowUserPath\*.*" 0 next
-        !insertmacro NetraFlowRemoveUserRuntimeData "$NetraFlowUserPath"
-      ${EndIf}
-
-      next:
-      ClearErrors
-      FindNext $NetraFlowUserSearchHandle $NetraFlowUserEntry
-
-      ${If} ${Errors}
-        ${Break}
-      ${EndIf}
-    ${Loop}
-
-    FindClose $NetraFlowUserSearchHandle
-
-    done:
+    !ifdef APP_INSTALLER_STORE_FILE
+      Delete "$LOCALAPPDATA\${APP_INSTALLER_STORE_FILE}"
+    !endif
+    !ifdef APP_PACKAGE_STORE_FILE
+      Delete "$LOCALAPPDATA\${APP_PACKAGE_STORE_FILE}"
+    !endif
   FunctionEnd
 !endif
 
 !macro NetraFlowCleanupInstallRoots
-  Call un.NetraFlowRemoveKnownUserDataDirs
-  RMDir /r "$APPDATA\${NETRAFLOW_PRODUCT_NAME}"
-  RMDir /r "$APPDATA\netraflow"
-  RMDir /r "$LOCALAPPDATA\${NETRAFLOW_PRODUCT_NAME}"
-  RMDir /r "$LOCALAPPDATA\netraflow"
-  RMDir /r "$INSTDIR\userData"
-  RMDir /r "$LOCALAPPDATA\netraflow-updater"
-  RMDir /r "$LOCALAPPDATA\Programs\${NETRAFLOW_PRODUCT_NAME}"
-  Delete "$DESKTOP\${NETRAFLOW_PRODUCT_NAME}.lnk"
-  Delete "$SMPROGRAMS\${NETRAFLOW_PRODUCT_NAME}.lnk"
-  Delete "$APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\${NETRAFLOW_PRODUCT_NAME}.lnk"
-  SetRegView 64
+  ${IfNot} ${isUpdated}
+    Call un.NetraFlowRemoveInstallResidues
+    RMDir /r "$INSTDIR\${NETRAFLOW_RUNTIME_DIR_NAME}"
+
+    ${If} $NetraFlowDeleteLocalUserData == "1"
+      RMDir /r "$INSTDIR\${NETRAFLOW_USERDATA_DIR_NAME}"
+    ${EndIf}
+
+    !insertmacro NetraFlowRemoveInstallDirIfAllowed
+  ${EndIf}
   !insertmacro NetraFlowCleanupRegistryRoots
-  SetRegView 32
-  !insertmacro NetraFlowCleanupRegistryRoots
-  SetRegView lastused
-  RMDir /r "$INSTDIR"
 !macroend
 
 !ifndef BUILD_UNINSTALLER
   !macro customInit
     Call NetraFlowApplyDefaultInstallDir
+  !macroend
+
+  Function .onVerifyInstDir
+    StrLen $3 $INSTDIR
+    StrCpy $1 $INSTDIR 1 1
+
+    ${If} $3 == 2
+    ${AndIf} $1 == ":"
+      StrCpy $0 $INSTDIR 1
+      StrCpy $4 "$0:\"
+      StrCpy $INSTDIR "$4${NETRAFLOW_INSTALL_DIR_NAME}"
+      Return
+    ${EndIf}
+
+    StrCpy $2 $INSTDIR 1 2
+
+    ${If} $3 == 3
+    ${AndIf} $1 == ":"
+    ${AndIf} $2 == "\"
+      StrCpy $4 $INSTDIR 3
+      StrCpy $INSTDIR "$4${NETRAFLOW_INSTALL_DIR_NAME}"
+    ${EndIf}
+  FunctionEnd
+
+  !macro customInstall
+    CreateDirectory "$INSTDIR\${NETRAFLOW_USERDATA_DIR_NAME}"
+    CreateDirectory "$INSTDIR\${NETRAFLOW_RUNTIME_DIR_NAME}"
   !macroend
 
   !macro customFinishPage
@@ -239,7 +181,6 @@
       CreateShortCut "$DESKTOP\${NETRAFLOW_PRODUCT_NAME}.lnk" "$appExe" "" "$appExe" 0 "" "" "${APP_DESCRIPTION}"
       ClearErrors
       WinShell::SetLnkAUMI "$DESKTOP\${NETRAFLOW_PRODUCT_NAME}.lnk" "${NETRAFLOW_APP_ID}"
-      SetShellVarContext all
     FunctionEnd
 
     !define MUI_FINISHPAGE_RUN
@@ -252,6 +193,90 @@
     !define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
     !insertmacro MUI_PAGE_FINISH
   !macroend
+!endif
+
+!ifdef BUILD_UNINSTALLER
+  !macro customUnInit
+    StrCpy $NetraFlowDeleteLocalUserData "1"
+  !macroend
+
+  !macro customUnWelcomePage
+    UninstPage custom un.NetraFlowDeleteLocalUserDataPage un.NetraFlowDeleteLocalUserDataPageLeave
+  !macroend
+
+  Function un.NetraFlowDeleteLocalUserDataPage
+    nsDialogs::Create 1018
+    Pop $0
+
+    ${If} $0 == error
+      Abort
+    ${EndIf}
+
+    ${NSD_CreateLabel} 0u 0u 100% 14u "卸载选项"
+    Pop $0
+
+    ${NSD_CreateLabel} 0u 22u 100% 16u "选择是否同时删除 NetraFlow 的本地用户数据"
+    Pop $0
+
+    ${NSD_CreateLabel} 0u 44u 100% 16u "取消勾选将保留账户、历史记录和用户设置"
+    Pop $0
+
+    ${NSD_CreateCheckbox} 0u 76u 100% 14u "删除本地用户数据"
+    Pop $NetraFlowDeleteLocalUserDataCheckbox
+
+    ${If} $NetraFlowDeleteLocalUserData == "1"
+      ${NSD_Check} $NetraFlowDeleteLocalUserDataCheckbox
+    ${EndIf}
+
+    nsDialogs::Show
+  FunctionEnd
+
+  Function un.NetraFlowDeleteLocalUserDataPageLeave
+    ${NSD_GetState} $NetraFlowDeleteLocalUserDataCheckbox $0
+
+    ${If} $0 == ${BST_CHECKED}
+      StrCpy $NetraFlowDeleteLocalUserData "1"
+    ${Else}
+      StrCpy $NetraFlowDeleteLocalUserData "0"
+    ${EndIf}
+  FunctionEnd
+
+  !macro customRemoveFiles
+    SetOutPath $TEMP
+    Delete "$INSTDIR\${NETRAFLOW_PRODUCT_NAME}.exe"
+    Delete "$INSTDIR\chrome_100_percent.pak"
+    Delete "$INSTDIR\chrome_200_percent.pak"
+    Delete "$INSTDIR\d3dcompiler_47.dll"
+    Delete "$INSTDIR\dxcompiler.dll"
+    Delete "$INSTDIR\dxil.dll"
+    Delete "$INSTDIR\ffmpeg.dll"
+    Delete "$INSTDIR\icudtl.dat"
+    Delete "$INSTDIR\libEGL.dll"
+    Delete "$INSTDIR\libGLESv2.dll"
+    Delete "$INSTDIR\LICENSE"
+    Delete "$INSTDIR\LICENSE.electron.txt"
+    Delete "$INSTDIR\LICENSES.chromium.html"
+    Delete "$INSTDIR\resources.pak"
+    Delete "$INSTDIR\snapshot_blob.bin"
+    Delete "$INSTDIR\v8_context_snapshot.bin"
+    Delete "$INSTDIR\version"
+    Delete "$INSTDIR\vk_swiftshader.dll"
+    Delete "$INSTDIR\vk_swiftshader_icd.json"
+    Delete "$INSTDIR\vulkan-1.dll"
+    Delete "$INSTDIR\installer.exe"
+    Delete "$INSTDIR\installerIcon.ico"
+    Delete "$INSTDIR\uninstallerIcon.ico"
+    Delete "$INSTDIR\${UNINSTALL_FILENAME}"
+    RMDir /r "$INSTDIR\resources"
+    RMDir /r "$INSTDIR\locales"
+    RMDir /r "$INSTDIR\licenses"
+    RMDir /r "$INSTDIR\${NETRAFLOW_LOGS_DIR_NAME}"
+    !insertmacro NetraFlowRemoveInstallDirIfAllowed
+  !macroend
+
+  Function un.onUninstSuccess
+    !insertmacro NetraFlowRemoveInstallDirIfAllowed
+  FunctionEnd
 !endif
 
 !macro customUnInstall

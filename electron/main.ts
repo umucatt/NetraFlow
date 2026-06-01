@@ -1,12 +1,51 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import fs from 'node:fs/promises';
-import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
+import {
+  appendFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync
+} from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const APP_NAME = 'NetraFlow';
+const LEGACY_PORTABLE_USER_DATA_DIR_NAME = 'userData';
+const LEGACY_LOCAL_STORAGE_DIR_NAME = 'Local Storage';
+const USERDATA_DIR_NAME = 'userdata';
+const RUNTIME_DIR_NAME = 'runtime';
+const LOGS_DIR_NAME = 'logs';
+const NF_STORAGE_FILE_NAME = 'storage.json';
+const NF_STORAGE_WHITELIST_KEYS = [
+  'asset-overview-groups',
+  'asset-overview-accounts',
+  'asset-overview-history',
+  'lastBackupAt',
+  'lastBackupHistoryCount',
+  'backupRecords',
+  'autoBackupSettings',
+  'assetChartSettings',
+  'netraflowGlobalSettings',
+  'netraflowFirstWelcomeState',
+  'netraflowRollupImportHashes',
+  'netraflow_backup_before_migration',
+  'accounts',
+  'accountTypes',
+  'historyRecords',
+  'archivedAccounts',
+  'deletedRecords'
+] as const;
+const USER_DATA_JSON_STORAGE_KEYS = new Set([
+  'asset-overview-groups',
+  'asset-overview-accounts',
+  'asset-overview-history',
+  'backupRecords'
+]);
 const BILIBILI_PROFILE_URL = 'https://space.bilibili.com/1738773145';
 const GITHUB_RELEASES_URL = 'https://github.com/umucatt/NetraFlow/releases';
 const ALLOWED_GITHUB_RELEASES_HOSTS = new Set(['github.com', 'www.github.com']);
@@ -25,9 +64,293 @@ const isPortableBuild = () =>
     existsSync(path.join(process.resourcesPath, 'app', 'portable.flag')) ||
     existsSync(path.join(process.resourcesPath, 'portable.flag')));
 
-if (isPortableBuild()) {
-  app.setPath('userData', path.join(path.dirname(process.execPath), 'userData'));
-}
+const getLegacyPortableUserDataPath = () =>
+  path.join(path.dirname(process.execPath), LEGACY_PORTABLE_USER_DATA_DIR_NAME);
+
+const isSamePath = (left: string, right: string) =>
+  path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase();
+
+const isNfStorageKey = (key: string) =>
+  (NF_STORAGE_WHITELIST_KEYS as readonly string[]).includes(key);
+
+const getPackagedInstallRootPath = () => path.dirname(process.execPath);
+
+const getPortableRootPath = () => path.dirname(process.execPath);
+
+const getAppInstallRootPath = () => {
+  if (!app.isPackaged) {
+    return path.join(app.getPath('appData'), APP_NAME);
+  }
+
+  return isPortableBuild() ? getPortableRootPath() : getPackagedInstallRootPath();
+};
+
+const getNfUserDataRootPath = () => {
+  const overridePath = process.env.NETRAFLOW_USERDATA_ROOT;
+
+  if (overridePath) {
+    return path.resolve(overridePath);
+  }
+
+  return path.join(getAppInstallRootPath(), USERDATA_DIR_NAME);
+};
+
+const getNfRuntimeRootPath = () => {
+  const overridePath = process.env.NETRAFLOW_RUNTIME_ROOT;
+
+  if (overridePath) {
+    return path.resolve(overridePath);
+  }
+
+  return path.join(getAppInstallRootPath(), RUNTIME_DIR_NAME);
+};
+
+const getNfStorageDirectoryPath = () => getNfUserDataRootPath();
+
+const getNfStorageFilePath = () =>
+  path.join(getNfStorageDirectoryPath(), NF_STORAGE_FILE_NAME);
+
+const getNfRuntimeUserDataPath = () => getNfRuntimeRootPath();
+
+const getNfLogsPath = () => path.join(getNfRuntimeUserDataPath(), LOGS_DIR_NAME);
+
+const valueContainsExampleData = (value: unknown): boolean => {
+  if (typeof value === 'string') {
+    return value.startsWith('example-');
+  }
+
+  if (Array.isArray(value)) {
+    return value.some(valueContainsExampleData);
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    return Object.values(value).some(valueContainsExampleData);
+  }
+
+  return false;
+};
+
+const isExampleStorageEntry = (key: string, value: string) => {
+  if (!USER_DATA_JSON_STORAGE_KEYS.has(key)) {
+    return false;
+  }
+
+  try {
+    return valueContainsExampleData(JSON.parse(value));
+  } catch {
+    return false;
+  }
+};
+
+const sanitizeNfStorageItems = (value: unknown) => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.entries(value).reduce<Record<string, string>>((items, [key, itemValue]) => {
+    if (isNfStorageKey(key) && typeof itemValue === 'string') {
+      items[key] = itemValue;
+    }
+
+    return items;
+  }, {});
+};
+
+const readNfStorageItems = () => {
+  const storageFilePath = getNfStorageFilePath();
+
+  if (!existsSync(storageFilePath)) {
+    return {};
+  }
+
+  try {
+    return sanitizeNfStorageItems(JSON.parse(readFileSync(storageFilePath, 'utf8')));
+  } catch (error) {
+    console.warn('[NetraFlow storage] Failed to read storage file.', error);
+    return {};
+  }
+};
+
+const writeNfStorageItems = (items: Record<string, string>) => {
+  const storageFilePath = getNfStorageFilePath();
+  const storageDirectoryPath = path.dirname(storageFilePath);
+  const tempStorageFilePath = `${storageFilePath}.tmp`;
+
+  mkdirSync(storageDirectoryPath, { recursive: true });
+  writeFileSync(
+    tempStorageFilePath,
+    `${JSON.stringify(sanitizeNfStorageItems(items), null, 2)}\n`,
+    'utf8'
+  );
+  renameSync(tempStorageFilePath, storageFilePath);
+};
+
+const getSortedNfStorageKeys = () => {
+  const items = readNfStorageItems();
+
+  return NF_STORAGE_WHITELIST_KEYS.filter((key) => Object.hasOwn(items, key));
+};
+
+const migrateLegacyItemsToNfStorage = (legacyItems: unknown) => {
+  const currentItems = readNfStorageItems();
+  const migratedKeys: string[] = [];
+  const skippedExistingKeys: string[] = [];
+  const skippedNonWhitelistKeys: string[] = [];
+  const skippedExampleKeys: string[] = [];
+
+  if (typeof legacyItems !== 'object' || legacyItems === null || Array.isArray(legacyItems)) {
+    return { migratedKeys, skippedExistingKeys, skippedNonWhitelistKeys, skippedExampleKeys };
+  }
+
+  const nextItems = { ...currentItems };
+
+  Object.entries(legacyItems).forEach(([key, value]) => {
+    if (!isNfStorageKey(key)) {
+      skippedNonWhitelistKeys.push(key);
+      return;
+    }
+
+    if (typeof value !== 'string') {
+      return;
+    }
+
+    if (Object.hasOwn(currentItems, key)) {
+      skippedExistingKeys.push(key);
+      return;
+    }
+
+    if (isExampleStorageEntry(key, value)) {
+      skippedExampleKeys.push(key);
+      return;
+    }
+
+    nextItems[key] = value;
+    migratedKeys.push(key);
+  });
+
+  if (migratedKeys.length > 0) {
+    writeNfStorageItems(nextItems);
+  }
+
+  return { migratedKeys, skippedExistingKeys, skippedNonWhitelistKeys, skippedExampleKeys };
+};
+
+const registerNfStorageHandlers = () => {
+  ipcMain.on('nf-storage:get-item', (event, key: unknown) => {
+    event.returnValue = typeof key === 'string' && isNfStorageKey(key)
+      ? readNfStorageItems()[key] ?? null
+      : null;
+  });
+
+  ipcMain.on('nf-storage:set-item', (event, key: unknown, value: unknown) => {
+    if (typeof key === 'string' && isNfStorageKey(key) && typeof value === 'string') {
+      const items = readNfStorageItems();
+      items[key] = value;
+      writeNfStorageItems(items);
+    }
+
+    event.returnValue = null;
+  });
+
+  ipcMain.on('nf-storage:remove-item', (event, key: unknown) => {
+    if (typeof key === 'string' && isNfStorageKey(key)) {
+      const items = readNfStorageItems();
+
+      if (Object.hasOwn(items, key)) {
+        delete items[key];
+        writeNfStorageItems(items);
+      }
+    }
+
+    event.returnValue = null;
+  });
+
+  ipcMain.on('nf-storage:key', (event, index: unknown) => {
+    event.returnValue =
+      typeof index === 'number' && Number.isInteger(index) && index >= 0
+        ? getSortedNfStorageKeys()[index] ?? null
+        : null;
+  });
+
+  ipcMain.on('nf-storage:length', (event) => {
+    event.returnValue = getSortedNfStorageKeys().length;
+  });
+
+  ipcMain.on('nf-storage:get-all-items', (event) => {
+    event.returnValue = readNfStorageItems();
+  });
+
+  ipcMain.on('nf-storage:migrate-legacy-items', (event, legacyItems: unknown) => {
+    event.returnValue = migrateLegacyItemsToNfStorage(legacyItems);
+  });
+};
+
+const hasLegacyLocalStorageEntry = (directoryPath: string) =>
+  existsSync(path.join(directoryPath, LEGACY_LOCAL_STORAGE_DIR_NAME));
+
+const copyLegacyLocalStorageEntry = (sourcePath: string, targetPath: string) => {
+  const sourceEntryPath = path.join(sourcePath, LEGACY_LOCAL_STORAGE_DIR_NAME);
+  const targetEntryPath = path.join(targetPath, LEGACY_LOCAL_STORAGE_DIR_NAME);
+
+  if (!existsSync(sourceEntryPath) || existsSync(targetEntryPath)) {
+    return false;
+  }
+
+  try {
+    mkdirSync(targetPath, { recursive: true });
+    cpSync(sourceEntryPath, targetEntryPath, {
+      recursive: true,
+      force: false
+    });
+
+    return true;
+  } catch (error) {
+    console.warn('Failed to stage legacy NetraFlow localStorage for migration.', {
+      sourcePath,
+      targetPath,
+      error
+    });
+    return false;
+  }
+};
+
+const stageLegacyLocalStorageIfNeeded = (runtimeUserDataPath: string) => {
+  if (hasLegacyLocalStorageEntry(runtimeUserDataPath)) {
+    return;
+  }
+
+  const legacyUserDataPaths = [
+    path.join(app.getPath('appData'), APP_NAME),
+    path.join(app.getPath('appData'), APP_NAME.toLowerCase()),
+    getLegacyPortableUserDataPath()
+  ];
+
+  for (const legacyUserDataPath of legacyUserDataPaths) {
+    if (
+      isSamePath(legacyUserDataPath, runtimeUserDataPath) ||
+      !existsSync(legacyUserDataPath) ||
+      !copyLegacyLocalStorageEntry(legacyUserDataPath, runtimeUserDataPath)
+    ) {
+      continue;
+    }
+
+    break;
+  }
+};
+
+const configureRuntimeUserDataPath = () => {
+  const runtimeUserDataPath = getNfRuntimeUserDataPath();
+  const logsPath = getNfLogsPath();
+
+  stageLegacyLocalStorageIfNeeded(runtimeUserDataPath);
+  mkdirSync(runtimeUserDataPath, { recursive: true });
+  mkdirSync(logsPath, { recursive: true });
+  app.setPath('userData', runtimeUserDataPath);
+  app.setAppLogsPath(logsPath);
+};
+
+configureRuntimeUserDataPath();
+registerNfStorageHandlers();
 
 const writePackagedMainLog = (message: string, details: Record<string, unknown> = {}) => {
   if (!app.isPackaged) {
@@ -35,7 +358,7 @@ const writePackagedMainLog = (message: string, details: Record<string, unknown> 
   }
 
   try {
-    const logPath = path.join(app.getPath('userData'), 'logs', 'main.log');
+    const logPath = path.join(app.getPath('logs'), 'main.log');
     const timestamp = new Date().toISOString();
     const payload = Object.entries(details)
       .map(([key, value]) => `${key}: ${String(value)}`)

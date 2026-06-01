@@ -45,6 +45,12 @@ import {
   toDateInputValue
 } from './app/dateUtils';
 import {
+  EXAMPLE_DATA_SETTINGS_BLOCK_ID,
+  EXAMPLE_DATA_SETTINGS_ID,
+  EXAMPLE_DATA_SETTINGS_SECTION,
+  getExampleModeBadgeSettingsNavigation
+} from './app/exampleModeNavigation';
+import {
   isPositiveNature,
   toStoredAmountByNature
 } from './app/accountNature';
@@ -69,6 +75,10 @@ import {
   USER_SETTINGS_FILE_TYPE,
   USER_SETTINGS_FILE_VERSION
 } from './app/storageKeys';
+import {
+  migrateLegacyLocalStorageToNfStorage,
+  nfStorage
+} from './app/nfStorage';
 import {
   canDeleteAssetGroup,
   cloneAppData,
@@ -1368,7 +1378,7 @@ const GLOBAL_SETTINGS_SEARCH_ITEMS = [
 
   {
 
-    id: 'backup-example-data',
+    id: EXAMPLE_DATA_SETTINGS_ID,
 
     title: '示例数据',
 
@@ -1376,7 +1386,9 @@ const GLOBAL_SETTINGS_SEARCH_ITEMS = [
 
     description: '进入示例模式、切换示例模板、退出示例模式',
 
-    section: 'backup',
+    section: EXAMPLE_DATA_SETTINGS_SECTION,
+
+    blockId: EXAMPLE_DATA_SETTINGS_BLOCK_ID,
 
     keywords: ['示例数据', '进入示例模式', '切换示例模板', '退出示例模式', '示例模板'],
 
@@ -1848,6 +1860,8 @@ const FIRST_WELCOME_FOOTPRINT_STORAGE_KEYS = [
 
 ] as const;
 
+migrateLegacyLocalStorageToNfStorage();
+
 
 
 const FIRST_WELCOME_STORY_ROUTES: Array<{
@@ -2142,21 +2156,21 @@ const getNullableNumberField = (
 
 
 
-const getLocalStorageKeyList = () =>
+const getNfStorageKeyList = () =>
 
-  Array.from({ length: window.localStorage.length }, (_, index) =>
+  Array.from({ length: nfStorage.length }, (_, index) =>
 
-    window.localStorage.key(index)
+    nfStorage.key(index)
 
   ).filter((key): key is string => typeof key === 'string');
 
 
 
-const getLocalStorageSnapshot = () =>
+const getNfStorageSnapshot = () =>
 
-  getLocalStorageKeyList().reduce<Record<string, string | null>>((snapshot, key) => {
+  getNfStorageKeyList().reduce<Record<string, string | null>>((snapshot, key) => {
 
-    snapshot[key] = window.localStorage.getItem(key);
+    snapshot[key] = nfStorage.getItem(key);
 
 
 
@@ -2170,7 +2184,7 @@ const saveBackupBeforeMigration = (reason: string) => {
 
   try {
 
-    if (window.localStorage.getItem(MIGRATION_BACKUP_STORAGE_KEY) !== null) {
+    if (nfStorage.getItem(MIGRATION_BACKUP_STORAGE_KEY) !== null) {
 
       return;
 
@@ -2178,7 +2192,7 @@ const saveBackupBeforeMigration = (reason: string) => {
 
 
 
-    window.localStorage.setItem(
+    nfStorage.setItem(
 
       MIGRATION_BACKUP_STORAGE_KEY,
 
@@ -2188,9 +2202,9 @@ const saveBackupBeforeMigration = (reason: string) => {
 
         reason,
 
-        keys: getLocalStorageKeyList(),
+        keys: getNfStorageKeyList(),
 
-        data: getLocalStorageSnapshot()
+        data: getNfStorageSnapshot()
 
       })
 
@@ -2208,7 +2222,7 @@ const saveBackupBeforeMigration = (reason: string) => {
 
 const readStorageJson = (key: string) => {
 
-  const raw = window.localStorage.getItem(key);
+  const raw = nfStorage.getItem(key);
 
 
 
@@ -2226,7 +2240,7 @@ const readStorageJson = (key: string) => {
 
   } catch (error) {
 
-    console.warn(`[NetraFlow storage] Failed to parse localStorage key "${key}".`, error);
+    console.warn(`[NetraFlow storage] Failed to parse storage key "${key}".`, error);
 
 
 
@@ -2430,7 +2444,7 @@ const loadBackupRecords = () => {
 
 const saveBackupRecords = (records: BackupRecord[]) => {
 
-  window.localStorage.setItem(
+  nfStorage.setItem(
 
     BACKUP_RECORDS_STORAGE_KEY,
 
@@ -2480,7 +2494,7 @@ const hasBackupRecordMissingIncrementCount = () => {
 
 const loadLastBackupAt = () => {
 
-  const value = window.localStorage.getItem(LAST_BACKUP_STORAGE_KEY);
+  const value = nfStorage.getItem(LAST_BACKUP_STORAGE_KEY);
 
 
 
@@ -2492,7 +2506,7 @@ const loadLastBackupAt = () => {
 
 const saveLastBackupAt = (time: string) => {
 
-  window.localStorage.setItem(LAST_BACKUP_STORAGE_KEY, time);
+  nfStorage.setItem(LAST_BACKUP_STORAGE_KEY, time);
 
 };
 
@@ -2550,7 +2564,7 @@ const loadLastBackupHistoryCount = (currentHistoryCount: number) => {
 
 const saveLastBackupHistoryCount = (count: number) => {
 
-  window.localStorage.setItem(
+  nfStorage.setItem(
 
     LAST_BACKUP_HISTORY_COUNT_STORAGE_KEY,
 
@@ -2616,7 +2630,7 @@ const loadAutoBackupSettings = () => {
 
 const saveAutoBackupSettings = (settings: AutoBackupSettings) => {
 
-  window.localStorage.setItem(
+  nfStorage.setItem(
 
     AUTO_BACKUP_SETTINGS_STORAGE_KEY,
 
@@ -3012,7 +3026,7 @@ const loadAssetChartSettings = () => {
 
 const saveAssetChartSettings = (settings: AssetChartSettings) => {
 
-  window.localStorage.setItem(
+  nfStorage.setItem(
 
     CHART_SETTINGS_STORAGE_KEY,
 
@@ -3220,7 +3234,7 @@ const loadGlobalSettings = () => {
 
 const saveGlobalSettings = (settings: GlobalSettings) => {
 
-  window.localStorage.setItem(
+  nfStorage.setItem(
 
     GLOBAL_SETTINGS_STORAGE_KEY,
 
@@ -3256,7 +3270,7 @@ const normalizeFirstWelcomeState = (value: unknown): FirstWelcomeState => {
 
 const hasExistingFirstWelcomeFootprint = () =>
 
-  FIRST_WELCOME_FOOTPRINT_STORAGE_KEYS.some((key) => window.localStorage.getItem(key) !== null);
+  FIRST_WELCOME_FOOTPRINT_STORAGE_KEYS.some((key) => nfStorage.getItem(key) !== null);
 
 
 
@@ -3286,7 +3300,7 @@ const loadFirstWelcomeState = (): FirstWelcomeState => {
 
 const saveFirstWelcomeState = (state: FirstWelcomeState) => {
 
-  window.localStorage.setItem(
+  nfStorage.setItem(
 
     FIRST_WELCOME_STORAGE_KEY,
 
@@ -4224,7 +4238,7 @@ const hasPossiblyStoredHistoryRecords = () =>
 
     LEGACY_DELETED_RECORDS_STORAGE_KEY
 
-  ].some((key) => storedValueLooksNonEmpty(window.localStorage.getItem(key)));
+  ].some((key) => storedValueLooksNonEmpty(nfStorage.getItem(key)));
 
 
 
@@ -4254,12 +4268,12 @@ const saveAppData = (
 
 ) => {
 
-  window.localStorage.setItem(
+  nfStorage.setItem(
     GROUPS_STORAGE_KEY,
     JSON.stringify(stripRuntimeAccountsFromGroups(groups))
   );
 
-  window.localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
+  nfStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
 
 
 
@@ -4285,7 +4299,7 @@ const saveAppData = (
 
 
 
-  window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+  nfStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
 
 };
 
@@ -4299,17 +4313,17 @@ const cloneBackupRecords = (records: BackupRecord[]) =>
 
 const saveEmptyAssetData = () => {
 
-  window.localStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify([]));
+  nfStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify([]));
 
-  window.localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify([]));
+  nfStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify([]));
 
-  window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify([]));
+  nfStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify([]));
 
-  window.localStorage.setItem(BACKUP_RECORDS_STORAGE_KEY, JSON.stringify([]));
+  nfStorage.setItem(BACKUP_RECORDS_STORAGE_KEY, JSON.stringify([]));
 
-  window.localStorage.removeItem(LAST_BACKUP_STORAGE_KEY);
+  nfStorage.removeItem(LAST_BACKUP_STORAGE_KEY);
 
-  window.localStorage.setItem(LAST_BACKUP_HISTORY_COUNT_STORAGE_KEY, JSON.stringify(0));
+  nfStorage.setItem(LAST_BACKUP_HISTORY_COUNT_STORAGE_KEY, JSON.stringify(0));
 
   [
 
@@ -4323,7 +4337,7 @@ const saveEmptyAssetData = () => {
 
     LEGACY_DELETED_RECORDS_STORAGE_KEY
 
-  ].forEach((key) => window.localStorage.removeItem(key));
+  ].forEach((key) => nfStorage.removeItem(key));
 
 };
 
@@ -4333,7 +4347,7 @@ const loadRollupImportHashes = () => {
 
   try {
 
-    const rawValue = window.localStorage.getItem(ROLLUP_IMPORT_HASHES_STORAGE_KEY);
+    const rawValue = nfStorage.getItem(ROLLUP_IMPORT_HASHES_STORAGE_KEY);
 
     const parsedValue = rawValue ? JSON.parse(rawValue) : [];
 
@@ -4357,7 +4371,7 @@ const loadRollupImportHashes = () => {
 
 const saveRollupImportHashes = (hashes: string[]) => {
 
-  window.localStorage.setItem(
+  nfStorage.setItem(
 
     ROLLUP_IMPORT_HASHES_STORAGE_KEY,
 
@@ -8217,7 +8231,7 @@ function App() {
 
     } else {
 
-      window.localStorage.removeItem(LAST_BACKUP_STORAGE_KEY);
+      nfStorage.removeItem(LAST_BACKUP_STORAGE_KEY);
 
     }
 
@@ -13577,9 +13591,33 @@ function App() {
 
 
 
-  const openGlobalSettings = () => {
+  const scrollGlobalSettingsTargetIntoView = (
+    blockId?: string,
+    block: ScrollLogicalPosition = 'start'
+  ) => {
+    window.setTimeout(() => {
+      const targetElement = blockId ? document.getElementById(blockId) : null;
+
+      if (targetElement) {
+        targetElement.scrollIntoView({ block, behavior: 'smooth' });
+        return;
+      }
+
+      mainContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 0);
+  };
+
+  const openGlobalSettingsView = (
+    section: GlobalSettingsSection = 'appearance',
+    blockId?: string,
+    scrollBlock: ScrollLogicalPosition = 'start'
+  ) => {
 
     dispatchSearchState({ type: 'clear-navigation' });
+
+    if (blockId) {
+      skipNextMainScrollResetRef.current = true;
+    }
 
     exitGroupEditMode();
 
@@ -13633,15 +13671,31 @@ function App() {
 
     setIsTotalChartsOpen(false);
 
-    setGlobalSettingsSection('appearance');
+    setGlobalSettingsSection(section);
 
     setIsGlobalSettingsOpen(true);
 
-    window.setTimeout(() => {
+    scrollGlobalSettingsTargetIntoView(blockId, scrollBlock);
 
-      mainContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
-    }, 0);
+  const openGlobalSettings = () => {
+
+    openGlobalSettingsView();
+
+  };
+
+  const openExampleDataSettingsFromHome = () => {
+
+    const navigation = getExampleModeBadgeSettingsNavigation(isExampleMode);
+
+    if (!navigation) {
+
+      return;
+
+    }
+
+    openGlobalSettingsView(navigation.settingsSection, navigation.blockId, navigation.scrollBlock);
 
   };
 
@@ -15345,29 +15399,7 @@ function App() {
 
       setIsGlobalSettingsOpen(true);
 
-      window.setTimeout(() => {
-
-        const targetElement = target.blockId
-
-          ? document.getElementById(target.blockId)
-
-          : null;
-
-
-
-        if (targetElement) {
-
-          targetElement.scrollIntoView({ block: 'start', behavior: 'smooth' });
-
-          return;
-
-        }
-
-
-
-        mainContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-
-      }, 0);
+      scrollGlobalSettingsTargetIntoView(target.blockId);
 
       return;
 
@@ -21242,7 +21274,16 @@ function App() {
 
       '',
 
-      isExampleMode ? <div className="home-example-mode-badge">示例模式</div> : null
+      isExampleMode ? (
+        <button
+          type="button"
+          className="home-example-mode-badge"
+          aria-label="打开示例数据设置"
+          onClick={openExampleDataSettingsFromHome}
+        >
+          示例模式
+        </button>
+      ) : null
 
     );
 

@@ -6,6 +6,7 @@ export type SettingsOption = {
 };
 
 export type SettingsSectionFrameProps = {
+  id?: string;
   title: ReactNode;
   description?: ReactNode;
   children: ReactNode;
@@ -18,6 +19,7 @@ const getSegmentedControlStyle = (optionCount: number): CSSProperties =>
   ({ '--segmented-option-count': optionCount } as CSSProperties);
 
 function SettingsSectionFrame({
+  id,
   title,
   description,
   children,
@@ -27,6 +29,7 @@ function SettingsSectionFrame({
 }: SettingsSectionFrameProps) {
   return (
     <section
+      id={id}
       className={`global-settings-field${className ? ` ${className}` : ''}`}
       aria-disabled={ariaDisabled ? 'true' : undefined}
     >

@@ -42,5 +42,24 @@ const electronAPI = {
   }
 };
 
+const netraflowStorage = {
+  getItem: (key: string) => ipcRenderer.sendSync('nf-storage:get-item', key) as string | null,
+  setItem: (key: string, value: string) =>
+    ipcRenderer.sendSync('nf-storage:set-item', key, value) as void,
+  removeItem: (key: string) => ipcRenderer.sendSync('nf-storage:remove-item', key) as void,
+  key: (index: number) => ipcRenderer.sendSync('nf-storage:key', index) as string | null,
+  length: () => ipcRenderer.sendSync('nf-storage:length') as number,
+  getAllItems: () =>
+    ipcRenderer.sendSync('nf-storage:get-all-items') as Record<string, string>,
+  migrateLegacyItems: (items: Record<string, string>) =>
+    ipcRenderer.sendSync('nf-storage:migrate-legacy-items', items) as {
+      migratedKeys: string[];
+      skippedExistingKeys: string[];
+      skippedNonWhitelistKeys: string[];
+      skippedExampleKeys: string[];
+    }
+};
+
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
 contextBridge.exposeInMainWorld('electronWindow', electronAPI);
+contextBridge.exposeInMainWorld('netraflowStorage', netraflowStorage);

@@ -28,6 +28,23 @@ type ElectronWindowApi = {
   onMaximizedChange: (listener: (isMaximized: boolean) => void) => () => void;
 };
 
+type NfStorageMigrationResult = {
+  migratedKeys: string[];
+  skippedExistingKeys: string[];
+  skippedNonWhitelistKeys: string[];
+  skippedExampleKeys: string[];
+};
+
+type NfStorageBridge = {
+  getItem: (key: string) => string | null;
+  setItem: (key: string, value: string) => void;
+  removeItem: (key: string) => void;
+  key: (index: number) => string | null;
+  length: () => number;
+  getAllItems: () => Record<string, string>;
+  migrateLegacyItems: (items: Record<string, string>) => NfStorageMigrationResult;
+};
+
 interface Window {
   appInfo?: {
     name: string;
@@ -35,4 +52,5 @@ interface Window {
   };
   electronAPI: ElectronWindowApi;
   electronWindow?: ElectronWindowApi;
+  netraflowStorage?: NfStorageBridge;
 }

@@ -16,7 +16,9 @@
         };
 
         try {
-          var storedSettings = window.localStorage.getItem('netraflowGlobalSettings');
+          var storedSettings = window.netraflowStorage
+            ? window.netraflowStorage.getItem('netraflowGlobalSettings')
+            : null;
           var parsedSettings = storedSettings ? JSON.parse(storedSettings) : null;
 
           if (

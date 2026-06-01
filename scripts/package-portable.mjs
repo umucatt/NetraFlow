@@ -1,46 +1,46 @@
-import { execFileSync } from 'node:child_process';
 import {
   cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
   readdirSync,
-  renameSync,
   rmSync,
+  statSync,
   writeFileSync
 } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { deflateRawSync } from 'node:zlib';
+import { Arch, Platform, build } from 'electron-builder';
+import { patchExecutableResources } from './patch-executable-resources.mjs';
+import { prepareVersionedReleaseDir } from './release-utils.mjs';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const packageJson = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
 const productName = packageJson.productName ?? 'NetraFlow';
-const appName = packageJson.name ?? 'netraflow';
 const version = packageJson.version ?? '0.0.0';
 const bundleName = `${productName}_${version}`;
-const outputRoot = path.join(rootDir, 'release', 'portable');
-const portableRootDir = path.join(outputRoot, bundleName);
-const zipPath = path.join(outputRoot, `${bundleName}_Portable.zip`);
+let folderName = '';
+let outputRoot = '';
+let portableRootDir = '';
+let zipPath = '';
 const electronDistDir = path.join(rootDir, 'node_modules', 'electron', 'dist');
-const electronExePath = path.join(portableRootDir, 'electron.exe');
-const appExePath = path.join(portableRootDir, `${productName}.exe`);
-const resourcesDir = path.join(portableRootDir, 'resources');
-const appDir = path.join(resourcesDir, 'app');
+let appExePath = '';
+let resourcesDir = '';
+let appDir = '';
+let stagingOutputDir = '';
+let packagedAppDir = '';
 const builtMainPath = path.join(rootDir, 'dist-electron', 'main.js');
 const iconPath = path.join(rootDir, 'public', 'icons', 'netraflow.ico');
-const powershell = path.join(
-  process.env.SystemRoot ?? 'C:\\Windows',
-  'System32',
-  'WindowsPowerShell',
-  'v1.0',
-  'powershell.exe'
-);
 const notoLicenseFiles = [
   'LICENSE.NotoSansCJK.txt',
   'LICENSE.NotoSansSymbols2.txt'
 ];
 const runtimeDataEntryNames = new Set([
   'userData',
+  'userdata',
+  'runtime',
+  'logs',
   'Local Storage',
   'IndexedDB',
   'Cache',
@@ -132,45 +132,6 @@ const assertPackagedMainLoader = (mainPath) => {
   }
 };
 
-const findRcedit = () => {
-  const candidates = [
-    path.join(rootDir, 'node_modules', 'electron-winstaller', 'vendor', 'rcedit.exe')
-  ];
-  const found = candidates.find((candidate) => existsSync(candidate));
-
-  if (!found) {
-    throw new Error('rcedit.exe was not found in node_modules/electron-winstaller/vendor.');
-  }
-
-  return found;
-};
-
-const patchExecutableMetadata = (exePath) => {
-  execFileSync(findRcedit(), [
-    exePath,
-    '--set-icon',
-    iconPath,
-    '--set-version-string',
-    'FileDescription',
-    productName,
-    '--set-version-string',
-    'ProductName',
-    productName,
-    '--set-version-string',
-    'InternalName',
-    productName,
-    '--set-version-string',
-    'OriginalFilename',
-    `${productName}.exe`,
-    '--set-file-version',
-    version,
-    '--set-product-version',
-    version
-  ], {
-    stdio: 'inherit'
-  });
-};
-
 const copyNotoLicenses = () => {
   const targetLicenseDir = path.join(portableRootDir, 'licenses');
 
@@ -205,20 +166,194 @@ const assertPortableBundle = () => {
   assertNoForbiddenPortableEntries(portableRootDir);
 };
 
-const psQuote = (value) => `'${value.replaceAll("'", "''")}'`;
+const makeCrc32Table = () => {
+  const table = new Uint32Array(256);
+
+  for (let index = 0; index < table.length; index += 1) {
+    let value = index;
+
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    }
+
+    table[index] = value >>> 0;
+  }
+
+  return table;
+};
+
+const crc32Table = makeCrc32Table();
+
+const crc32 = (buffer) => {
+  let value = 0xffffffff;
+
+  for (const byte of buffer) {
+    value = crc32Table[(value ^ byte) & 0xff] ^ (value >>> 8);
+  }
+
+  return (value ^ 0xffffffff) >>> 0;
+};
+
+const getZipDateParts = (date) => {
+  const year = Math.max(1980, Math.min(2107, date.getFullYear()));
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const seconds = Math.floor(date.getSeconds() / 2);
+
+  return {
+    dosDate: ((year - 1980) << 9) | (month << 5) | day,
+    dosTime: (hours << 11) | (minutes << 5) | seconds
+  };
+};
+
+const collectZipEntries = (entryPath, basePath) => {
+  const stats = statSync(entryPath);
+  const entryName = path.relative(basePath, entryPath).replaceAll(path.sep, '/');
+
+  if (stats.isDirectory()) {
+    const directoryEntryName = `${entryName}/`;
+    const children = readdirSync(entryPath)
+      .sort((left, right) => left.localeCompare(right))
+      .flatMap((entry) => collectZipEntries(path.join(entryPath, entry), basePath));
+
+    return [
+      {
+        entryName: directoryEntryName,
+        sourcePath: entryPath,
+        stats,
+        isDirectory: true
+      },
+      ...children
+    ];
+  }
+
+  if (!stats.isFile()) {
+    return [];
+  }
+
+  return [
+    {
+      entryName,
+      sourcePath: entryPath,
+      stats,
+      isDirectory: false
+    }
+  ];
+};
+
+const writeUInt32LE = (buffer, value, offset) => {
+  buffer.writeUInt32LE(value >>> 0, offset);
+};
+
+const createZipFromDirectory = (sourceDirectory, targetZipPath, basePath) => {
+  const archiveParts = [];
+  const centralDirectoryParts = [];
+  let offset = 0;
+
+  for (const entry of collectZipEntries(sourceDirectory, basePath)) {
+    const fileNameBuffer = Buffer.from(entry.entryName, 'utf8');
+    const sourceBuffer = entry.isDirectory ? Buffer.alloc(0) : readFileSync(entry.sourcePath);
+    const compressedBuffer = entry.isDirectory ? sourceBuffer : deflateRawSync(sourceBuffer);
+    const useDeflate = !entry.isDirectory && compressedBuffer.length < sourceBuffer.length;
+    const dataBuffer = useDeflate ? compressedBuffer : sourceBuffer;
+    const compressionMethod = useDeflate ? 8 : 0;
+    const checksum = crc32(sourceBuffer);
+    const { dosDate, dosTime } = getZipDateParts(entry.stats.mtime);
+    const flags = 0x0800;
+    const localHeader = Buffer.alloc(30 + fileNameBuffer.length);
+    const localHeaderOffset = offset;
+
+    writeUInt32LE(localHeader, 0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(flags, 6);
+    localHeader.writeUInt16LE(compressionMethod, 8);
+    localHeader.writeUInt16LE(dosTime, 10);
+    localHeader.writeUInt16LE(dosDate, 12);
+    writeUInt32LE(localHeader, checksum, 14);
+    writeUInt32LE(localHeader, dataBuffer.length, 18);
+    writeUInt32LE(localHeader, sourceBuffer.length, 22);
+    localHeader.writeUInt16LE(fileNameBuffer.length, 26);
+    localHeader.writeUInt16LE(0, 28);
+    fileNameBuffer.copy(localHeader, 30);
+
+    archiveParts.push(localHeader, dataBuffer);
+    offset += localHeader.length + dataBuffer.length;
+
+    const centralHeader = Buffer.alloc(46 + fileNameBuffer.length);
+    writeUInt32LE(centralHeader, 0x02014b50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(flags, 8);
+    centralHeader.writeUInt16LE(compressionMethod, 10);
+    centralHeader.writeUInt16LE(dosTime, 12);
+    centralHeader.writeUInt16LE(dosDate, 14);
+    writeUInt32LE(centralHeader, checksum, 16);
+    writeUInt32LE(centralHeader, dataBuffer.length, 20);
+    writeUInt32LE(centralHeader, sourceBuffer.length, 24);
+    centralHeader.writeUInt16LE(fileNameBuffer.length, 28);
+    centralHeader.writeUInt16LE(0, 30);
+    centralHeader.writeUInt16LE(0, 32);
+    centralHeader.writeUInt16LE(0, 34);
+    centralHeader.writeUInt16LE(0, 36);
+    writeUInt32LE(centralHeader, entry.isDirectory ? 0x10 : 0, 38);
+    writeUInt32LE(centralHeader, localHeaderOffset, 42);
+    fileNameBuffer.copy(centralHeader, 46);
+    centralDirectoryParts.push(centralHeader);
+  }
+
+  const centralDirectory = Buffer.concat(centralDirectoryParts);
+  const centralDirectoryOffset = offset;
+  const entryCount = centralDirectoryParts.length;
+
+  if (entryCount > 0xffff) {
+    throw new Error(`Portable zip has too many entries: ${entryCount}`);
+  }
+
+  const endOfCentralDirectory = Buffer.alloc(22);
+  writeUInt32LE(endOfCentralDirectory, 0x06054b50, 0);
+  endOfCentralDirectory.writeUInt16LE(0, 4);
+  endOfCentralDirectory.writeUInt16LE(0, 6);
+  endOfCentralDirectory.writeUInt16LE(entryCount, 8);
+  endOfCentralDirectory.writeUInt16LE(entryCount, 10);
+  writeUInt32LE(endOfCentralDirectory, centralDirectory.length, 12);
+  writeUInt32LE(endOfCentralDirectory, centralDirectoryOffset, 16);
+  endOfCentralDirectory.writeUInt16LE(0, 20);
+
+  writeFileSync(targetZipPath, Buffer.concat([...archiveParts, centralDirectory, endOfCentralDirectory]));
+};
 
 const compressPortableBundle = () => {
   rmSync(zipPath, { force: true });
-  execFileSync(powershell, [
-    '-NoProfile',
-    '-Command',
-    `Compress-Archive -LiteralPath ${psQuote(portableRootDir)} -DestinationPath ${psQuote(zipPath)} -Force`
-  ], {
-    stdio: 'inherit'
-  });
+  createZipFromDirectory(portableRootDir, zipPath, outputRoot);
 
   if (!existsSync(zipPath)) {
     throw new Error(`Portable zip was not created: ${zipPath}`);
+  }
+};
+
+const buildPortableAppSource = async () => {
+  process.env.CSC_IDENTITY_AUTO_DISCOVERY = 'false';
+  process.env.ELECTRON_BUILDER_DISABLE_BUILD_CACHE = 'true';
+
+  rmSync(stagingOutputDir, { recursive: true, force: true });
+
+  await build({
+    projectDir: rootDir,
+    targets: Platform.WINDOWS.createTarget(['dir'], Arch.x64),
+    publish: 'never',
+    config: {
+      directories: {
+        output: stagingOutputDir
+      }
+    }
+  });
+
+  packagedAppDir = path.join(stagingOutputDir, 'win-unpacked');
+
+  if (!existsSync(path.join(packagedAppDir, `${productName}.exe`))) {
+    throw new Error(`Portable app source was not created: ${packagedAppDir}`);
   }
 };
 
@@ -231,7 +366,6 @@ for (const requiredPath of [
   builtMainPath,
   electronDistDir,
   iconPath,
-  powershell,
   ...notoLicenseFiles.map((fileName) => path.join(rootDir, 'build', 'licenses', fileName))
 ]) {
   if (!existsSync(requiredPath)) {
@@ -240,39 +374,27 @@ for (const requiredPath of [
 }
 
 assertPackagedMainLoader(builtMainPath);
+({ folderName, outputDir: outputRoot } = prepareVersionedReleaseDir('portable', version));
+portableRootDir = path.join(outputRoot, bundleName);
+zipPath = path.join(outputRoot, `${bundleName}_Portable.zip`);
+appExePath = path.join(portableRootDir, `${productName}.exe`);
+resourcesDir = path.join(portableRootDir, 'resources');
+appDir = path.join(resourcesDir, 'app');
+stagingOutputDir = path.join(outputRoot, '.win-unpacked-source');
 rmSync(portableRootDir, { recursive: true, force: true });
 rmSync(zipPath, { force: true });
-mkdirSync(outputRoot, { recursive: true });
-cpSync(electronDistDir, portableRootDir, { recursive: true });
-rmSync(path.join(resourcesDir, 'default_app.asar'), { force: true });
-rmSync(appDir, { recursive: true, force: true });
-mkdirSync(appDir, { recursive: true });
-cpSync(path.join(rootDir, 'dist'), path.join(appDir, 'dist'), { recursive: true });
-cpSync(path.join(rootDir, 'dist-electron'), path.join(appDir, 'dist-electron'), { recursive: true });
-cpSync(path.join(rootDir, 'public'), path.join(appDir, 'public'), { recursive: true });
+await buildPortableAppSource();
+cpSync(packagedAppDir, portableRootDir, { recursive: true });
+rmSync(stagingOutputDir, { recursive: true, force: true });
 writeFileSync(path.join(appDir, 'portable.flag'), 'NETRAFLOW_PORTABLE=1\n', 'utf8');
-writeFileSync(
-  path.join(appDir, 'package.json'),
-  JSON.stringify(
-    {
-      name: appName,
-      productName,
-      version,
-      type: 'module',
-      main: 'dist-electron/main.js'
-    },
-    null,
-    2
-  )
-);
 removeRuntimeDataEntries(appDir);
 removeRuntimeDataEntries(portableRootDir);
 assertPackagedMainLoader(path.join(appDir, 'dist-electron', 'main.js'));
-renameSync(electronExePath, appExePath);
-patchExecutableMetadata(appExePath);
+patchExecutableResources(appExePath, { iconPath, productName, version });
 copyElectronLicenses();
 copyNotoLicenses();
 assertPortableBundle();
 compressPortableBundle();
 console.log(`Created ${portableRootDir}`);
 console.log(`Created ${zipPath}`);
+console.log(`Portable release folder ${folderName}`);
