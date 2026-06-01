@@ -904,13 +904,31 @@ textarea::placeholder {
 
 .home-example-mode-badge {
   justify-self: end;
+  border: 0;
   border-radius: var(--radius-chip);
   padding: 3px 9px;
   background: var(--surface-muted);
   color: var(--text-muted);
+  font: inherit;
   font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.2;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    outline-color 160ms ease;
+}
+
+.home-example-mode-badge:hover,
+.home-example-mode-badge:focus-visible {
+  background: color-mix(in srgb, var(--surface-muted) 72%, var(--surface-bg));
+  color: var(--text-secondary);
+}
+
+.home-example-mode-badge:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 2px;
 }
 
 .right-panel-action--primary {
