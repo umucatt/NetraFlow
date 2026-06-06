@@ -468,21 +468,30 @@ export const createGlobalSearchIndex = (
   })),
   settings: (options.settingsItems ?? []).map((item, index) => {
     const isSectionItem = item.id === item.section;
-    const keywordWeight = isSectionItem ? 0.66 : 0.75;
-    const pinyinWeight = isSectionItem ? 0.32 : 0.4;
+    const sectionTitle = item.sectionTitle ?? item.group;
+    const summary = item.summary ?? item.description;
+    const value = item.blockTitle ? `${sectionTitle} / ${item.blockTitle}` : sectionTitle;
+    const titleWeight = isSectionItem ? 0.82 : 0.7;
+    const sectionWeight = isSectionItem ? 0.68 : 0.62;
+    const keywordWeight = isSectionItem ? 0.54 : 0.58;
+    const summaryWeight = isSectionItem ? 0.34 : 0.38;
+    const pinyinWeight = isSectionItem ? 0.3 : 0.36;
 
     return {
       item,
       title: item.title,
-      subtitle: `${item.group} · ${item.description}`,
-      value: item.group,
+      subtitle: `${sectionTitle} · ${item.description}`,
+      value,
       index,
       candidate: {
         textFields: [
-          createIndexedTextField(item.title, 'name', 0.95),
-          createIndexedTextField(item.group, 'name', 0.9),
+          createIndexedTextField(item.title, 'name', titleWeight),
+          createIndexedTextField(sectionTitle, 'detail', sectionWeight),
+          createIndexedTextField(item.blockTitle, 'detail', 0.52),
           createIndexedTextField(item.keywords?.join(' '), 'detail', keywordWeight),
-          createIndexedTextField(item.description, 'weak', 0.5),
+          createIndexedTextField(item.weakKeywords?.join(' '), 'weak', 0.24),
+          createIndexedTextField(item.description, 'weak', 0.34),
+          createIndexedTextField(summary, 'weak', summaryWeight),
           createIndexedTextField(item.pinyinKeywords?.join(' '), 'weak', pinyinWeight, 'pinyin-full'),
           createIndexedTextField(item.pinyinInitials?.join(' '), 'weak', pinyinWeight, 'pinyin-initials')
         ],
@@ -507,7 +516,6 @@ const makeScoredResults = <TInput, TResult extends GlobalSearchResult>(
     scored: SearchScoredCandidate
   ) => TResult | null,
   getCandidate: (input: TInput) => SearchCandidate,
-  termCount: number,
   category: SearchResultCategory,
   searchLogicMode: SearchLogicMode,
   terms: Parameters<typeof scoreSearchCandidate>[0]
@@ -618,7 +626,6 @@ const runGlobalSearchCore = (
       };
     },
     (item) => item.candidate,
-    termCount,
     'account',
     searchLogicMode,
     intent.terms
@@ -657,7 +664,6 @@ const runGlobalSearchCore = (
       };
     },
     (item) => item.candidate,
-    termCount,
     'history',
     searchLogicMode,
     intent.terms
@@ -690,7 +696,6 @@ const runGlobalSearchCore = (
       };
     },
     (item) => item.candidate,
-    termCount,
     'snapshot',
     searchLogicMode,
     intent.terms
@@ -721,7 +726,6 @@ const runGlobalSearchCore = (
       };
     },
     (item) => item.candidate,
-    termCount,
     'settings',
     searchLogicMode,
     intent.terms
@@ -788,14 +792,4 @@ export const runGlobalSearch = (
   query: string,
   options: RunSearchOptions = {}
 ): GlobalSearchOutput =>
-  measureSearchExecution(
-    {
-      query,
-      totalCandidates:
-        index.totals.account +
-        index.totals.history +
-        index.totals.snapshot +
-        index.totals.settings
-    },
-    () => runGlobalSearchCore(index, query, options)
-  );
+  measureSearchExecution(() => runGlobalSearchCore(index, query, options));

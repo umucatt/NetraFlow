@@ -2,15 +2,12 @@ import type {
   RollupAccountAssignment,
   RollupImportRecord
 } from '../../rollupImportLogic';
-import RollupAccountAssignmentList, {
-  type RollupImportAccountGroup,
-  type RollupImportAccountMatch
-} from './RollupAccountAssignmentList';
-
-export type RollupImportRecordGroup = {
-  keyword: string;
-  records: RollupImportRecord[];
-};
+import RollupAccountAssignmentList from './RollupAccountAssignmentList';
+import type {
+  RollupImportAccountGroup,
+  RollupImportAccountMatch,
+  RollupImportRecordGroup
+} from './rollupImportTypes';
 
 type RollupRecordGroupListProps = {
   groups: RollupImportRecordGroup[];

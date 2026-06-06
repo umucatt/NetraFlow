@@ -44,6 +44,7 @@ function SettingsSectionFrame({
 }
 
 export type SettingsSegmentedControlProps = {
+  id?: string;
   label: string;
   options: SettingsOption[];
   currentValue: string;
@@ -54,6 +55,7 @@ export type SettingsSegmentedControlProps = {
 };
 
 export function SettingsSegmentedControl({
+  id,
   label,
   options,
   currentValue,
@@ -67,7 +69,12 @@ export function SettingsSegmentedControl({
     statusLabel === undefined ? (isEnabled ? null : '稍后开放') : statusLabel;
 
   return (
-    <SettingsSectionFrame title={label} description={resolvedStatusLabel} className={className}>
+    <SettingsSectionFrame
+      id={id}
+      title={label}
+      description={resolvedStatusLabel}
+      className={className}
+    >
       <div
         className="segmented-control global-settings-segmented"
         style={getSegmentedControlStyle(options.length)}
@@ -123,6 +130,20 @@ export function SettingsControlRow({
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+export type SettingsActionRowProps = {
+  label: string;
+  children: ReactNode;
+};
+
+export function SettingsActionRow({ label, children }: SettingsActionRowProps) {
+  return (
+    <div className="global-settings-control-row">
+      <span className="global-settings-control-label">{label}</span>
+      <div className="global-settings-action-cell">{children}</div>
     </div>
   );
 }

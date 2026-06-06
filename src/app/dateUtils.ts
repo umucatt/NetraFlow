@@ -113,20 +113,26 @@ export const formatDateRangeDisplay = (startDate: string, endDate: string) => {
 export const parseDateToken = (token: string) => {
   const trimmedToken = token.trim();
 
-  if (!/^\d{4}$|^\d{6}$/.test(trimmedToken)) {
+  if (!/^\d{4}$|^\d{6}$|^\d{8}$/.test(trimmedToken)) {
     return null;
   }
 
   const year =
-    trimmedToken.length === 6
+    trimmedToken.length === 8
+      ? Number(trimmedToken.slice(0, 4))
+      : trimmedToken.length === 6
       ? 2000 + Number(trimmedToken.slice(0, 2))
       : new Date().getFullYear();
   const month =
-    trimmedToken.length === 6
+    trimmedToken.length === 8
+      ? Number(trimmedToken.slice(4, 6))
+      : trimmedToken.length === 6
       ? Number(trimmedToken.slice(2, 4))
       : Number(trimmedToken.slice(0, 2));
   const day =
-    trimmedToken.length === 6
+    trimmedToken.length === 8
+      ? Number(trimmedToken.slice(6, 8))
+      : trimmedToken.length === 6
       ? Number(trimmedToken.slice(4, 6))
       : Number(trimmedToken.slice(2, 4));
   const parsedDate = new Date(year, month - 1, day);
@@ -142,7 +148,7 @@ export const parseDateToken = (token: string) => {
   return {
     value: toDateInputValue(parsedDate),
     year,
-    hasExplicitYear: trimmedToken.length === 6
+    hasExplicitYear: trimmedToken.length === 6 || trimmedToken.length === 8
   };
 };
 
@@ -154,7 +160,7 @@ export const getHistoryRangeTokens = (value: string) => {
     return explicitDateTokens.map((dateValue) => dateValue.replace(/\D/g, '').slice(2));
   }
 
-  return normalizedValue.match(/\d{4,6}/g) ?? [];
+  return normalizedValue.match(/\d{8}|\d{6}|\d{4}/g) ?? [];
 };
 
 export const parseHistoryRangeInput = (value: string) => {

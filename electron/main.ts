@@ -49,6 +49,7 @@ const USER_DATA_JSON_STORAGE_KEYS = new Set([
 const BILIBILI_PROFILE_URL = 'https://space.bilibili.com/1738773145';
 const GITHUB_RELEASES_URL = 'https://github.com/umucatt/NetraFlow/releases';
 const ALLOWED_GITHUB_RELEASES_HOSTS = new Set(['github.com', 'www.github.com']);
+const JSON_INTEGRITY_ALGORITHM = 'SHA-256';
 let mainWindow: BrowserWindow | null = null;
 let pendingRendererLock = process.argv.includes('--lock');
 
@@ -523,7 +524,128 @@ ipcMain.handle('dialog:select-directory', async (event) => {
   return result.canceled ? '' : result.filePaths[0] ?? '';
 });
 
-ipcMain.handle('backup:write-file', async (_event, request: unknown) => {
+const bytesToHex = (bytes: ArrayBuffer) =>
+  Array.from(new Uint8Array(bytes))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+
+const sha256Hex = async (text: string) => {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error('SHA-256 crypto is unavailable.');
+  }
+
+  const digest = await globalThis.crypto.subtle.digest(
+    JSON_INTEGRITY_ALGORITHM,
+    new TextEncoder().encode(text)
+  );
+
+  return bytesToHex(digest);
+};
+
+const isJsonObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const getIntegrityContentKey = (value: Record<string, unknown>) => {
+  const hasPayload = Object.hasOwn(value, 'payload');
+  const hasEncrypted = Object.hasOwn(value, 'encrypted');
+
+  if (hasPayload && hasEncrypted) {
+    return null;
+  }
+
+  if (hasPayload) {
+    return 'payload';
+  }
+
+  if (hasEncrypted) {
+    return 'encrypted';
+  }
+
+  return undefined;
+};
+
+const verifyJsonWriteContent = async (content: string) => {
+  const parsed = JSON.parse(content) as unknown;
+  const minifiedText = JSON.stringify(parsed);
+
+  if (content !== minifiedText) {
+    throw new Error('JSON export payload must be minified.');
+  }
+
+  if (!isJsonObject(parsed)) {
+    throw new Error('JSON export payload must be an integrity wrapper.');
+  }
+
+  const contentKey = getIntegrityContentKey(parsed);
+
+  if (contentKey === null) {
+    throw new Error('JSON export wrapper cannot contain both payload and encrypted content.');
+  }
+
+  if (contentKey === undefined) {
+    throw new Error('JSON export wrapper is missing payload or encrypted content.');
+  }
+
+  const integrity = parsed.integrity;
+
+  if (!isJsonObject(integrity)) {
+    throw new Error('JSON export wrapper is missing integrity metadata.');
+  }
+
+  if (
+    integrity.algorithm !== JSON_INTEGRITY_ALGORITHM ||
+    typeof integrity.hash !== 'string' ||
+    integrity.hash.length === 0
+  ) {
+    throw new Error('JSON export wrapper has invalid integrity metadata.');
+  }
+
+  const actualHash = await sha256Hex(JSON.stringify(parsed[contentKey]));
+
+  if (actualHash !== integrity.hash) {
+    throw new Error('JSON export integrity check failed.');
+  }
+};
+
+const atomicWriteJsonFile = async (targetPath: string, content: string) => {
+  const targetDirectory = path.dirname(targetPath);
+  const targetFileName = path.basename(targetPath);
+  const tempPath = path.join(
+    targetDirectory,
+    `.${targetFileName}.tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
+  let tempFileCreated = false;
+
+  try {
+    await fs.mkdir(targetDirectory, { recursive: true });
+    await fs.writeFile(tempPath, content, { encoding: 'utf8', flag: 'wx' });
+    tempFileCreated = true;
+
+    const readBackContent = await fs.readFile(tempPath, 'utf8');
+    await verifyJsonWriteContent(readBackContent);
+    await fs.rename(tempPath, targetPath);
+    tempFileCreated = false;
+  } catch (error) {
+    if (tempFileCreated) {
+      try {
+        await fs.unlink(tempPath);
+      } catch (cleanupError) {
+        console.warn('[NetraFlow snapshot] Failed to delete temporary export file.', {
+          tempPath,
+          error: cleanupError
+        });
+      }
+    }
+
+    throw error;
+  }
+};
+
+const isAllowedJsonExportFileName = (fileName: string) =>
+  /^netraflow-(?:snapshot|backup)-\d{8}-\d{4}(?:\.encrypted)?\.json$/.test(fileName) ||
+  /^netraflow-settings-\d{8}-\d{6}\.netraflow-settings\.json$/.test(fileName);
+
+const handleJsonWriteFile = async (_event: Electron.IpcMainInvokeEvent, request: unknown) => {
   if (
     typeof request !== 'object' ||
     request === null ||
@@ -548,18 +670,20 @@ ipcMain.handle('backup:write-file', async (_event, request: unknown) => {
     throw new Error('Invalid snapshot write payload.');
   }
 
-  if (!/^netraflow-(?:snapshot|backup)-\d{8}-\d{4}(?:\.encrypted)?\.json$/.test(fileName)) {
-    throw new Error('Invalid snapshot file name.');
+  if (!isAllowedJsonExportFileName(fileName)) {
+    throw new Error('Invalid JSON export file name.');
   }
 
   const resolvedDirectory = path.resolve(directory);
   const targetPath = path.join(resolvedDirectory, path.basename(fileName));
 
-  await fs.mkdir(resolvedDirectory, { recursive: true });
-  await fs.writeFile(targetPath, content, 'utf8');
+  await atomicWriteJsonFile(targetPath, content);
 
   return { filePath: targetPath };
-});
+};
+
+ipcMain.handle('backup:write-file', handleJsonWriteFile);
+ipcMain.handle('json:write-file', handleJsonWriteFile);
 
 function createWindow() {
   const preloadPath = path.join(__dirname, 'preload.js');

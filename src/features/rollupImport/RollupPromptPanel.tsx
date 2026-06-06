@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 
-export type RollupPromptTab = 'explanation' | 'prompt';
+import type { RollupPromptTab } from './rollupImportTypes';
 
 type RollupPromptPanelProps = {
   promptTab: RollupPromptTab;

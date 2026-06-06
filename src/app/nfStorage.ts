@@ -17,16 +17,6 @@ export type NfStorageMigrationResult = {
   skippedExampleKeys: string[];
 };
 
-type NfStorageBridge = {
-  getItem: (key: string) => string | null;
-  setItem: (key: string, value: string) => void;
-  removeItem: (key: string) => void;
-  key: (index: number) => string | null;
-  length: () => number;
-  getAllItems: () => Record<string, string>;
-  migrateLegacyItems: (items: Record<string, string>) => NfStorageMigrationResult;
-};
-
 const USER_DATA_JSON_KEYS = new Set<string>([
   GROUPS_STORAGE_KEY,
   ACCOUNTS_STORAGE_KEY,

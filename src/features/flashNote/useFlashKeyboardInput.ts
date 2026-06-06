@@ -4,7 +4,6 @@ import type { FlashConfirmNavigationKey } from './flashNoteUtils';
 type FlashKeyboardStep = 'input' | 'confirm';
 
 export type FlashKeyboardAction =
-  | { type: 'escape' }
   | { type: 'ctrl-z' }
   | { type: 'enter' }
   | { type: 'backspace' }
@@ -22,7 +21,6 @@ type UseFlashKeyboardInputOptions = {
   onCtrlZ: () => void;
   onDelete: () => void;
   onMoveSelection?: (key: FlashConfirmNavigationKey) => void;
-  onEscape: () => void;
 };
 
 const isEditableElement = (target: EventTarget | null) => {
@@ -50,10 +48,6 @@ export const resolveFlashKeyboardAction = ({
   metaKey?: boolean;
   step: FlashKeyboardStep;
 }): FlashKeyboardAction | null => {
-  if (key === 'Escape') {
-    return { type: 'escape' };
-  }
-
   if ((ctrlKey || metaKey) && key.toLowerCase() === 'z') {
     return { type: 'ctrl-z' };
   }
@@ -91,7 +85,6 @@ export function useFlashKeyboardInput({
   onCtrlZ,
   onDelete,
   onMoveSelection,
-  onEscape
 }: UseFlashKeyboardInputOptions) {
   useEffect(() => {
     if (!enabled) {
@@ -100,6 +93,12 @@ export function useFlashKeyboardInput({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || isEditableElement(event.target)) {
+        return;
+      }
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
         return;
       }
 
@@ -117,9 +116,7 @@ export function useFlashKeyboardInput({
 
       event.preventDefault();
 
-      if (action.type === 'escape') {
-        onEscape();
-      } else if (action.type === 'ctrl-z') {
+      if (action.type === 'ctrl-z') {
         onCtrlZ();
       } else if (action.type === 'enter') {
         onEnter();
@@ -146,7 +143,6 @@ export function useFlashKeyboardInput({
     onCtrlZ,
     onDelete,
     onEnter,
-    onEscape,
     onInputCharacter,
     onMoveSelection,
     step

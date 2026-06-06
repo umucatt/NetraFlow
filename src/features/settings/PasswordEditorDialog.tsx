@@ -55,7 +55,6 @@ function PasswordEditorDialog({
   return (
     <DialogShell
       as="form"
-      eyebrow="全局设置 / 安全"
       title={isEditingExistingPassword ? '修改登录密码' : '设置登录密码'}
       titleStyle={{ margin: '0 0 18px', fontSize: '1.35rem', lineHeight: 1.2 }}
       backdropClassName="layout-layer layout-layer--right"

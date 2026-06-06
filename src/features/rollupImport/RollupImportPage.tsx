@@ -1,35 +1,6 @@
-import type {
-  RollupAccountAssignment,
-  RollupImportRecord,
-  RollupImportReview,
-  RollupRiskLevel
-} from '../../rollupImportLogic';
-import type {
-  RollupImportAccountGroup,
-  RollupImportAccountMatch
-} from './RollupAccountAssignmentList';
-import RollupPromptPanel, {
-  type RollupPromptTab
-} from './RollupPromptPanel';
+import RollupPromptPanel from './RollupPromptPanel';
 import RollupReviewPanel from './RollupReviewPanel';
-import type { RollupImportRecordGroup } from './RollupRecordGroupList';
-
-type RollupImportPageProps = {
-  mode: 'prompt' | 'review';
-  promptTab: RollupPromptTab;
-  promptExplanation: string;
-  promptContent: string;
-  onPromptTabChange: (tab: RollupPromptTab) => void;
-  review: RollupImportReview | null;
-  recordGroups: RollupImportRecordGroup[];
-  accountGroups: RollupImportAccountGroup[];
-  accountAssignments: Record<string, RollupAccountAssignment | null>;
-  getAccountMatches: (keyword: string) => RollupImportAccountMatch[];
-  getRiskLabel: (riskLevel: RollupRiskLevel, lowRiskKind?: RollupImportReview['lowRiskKind']) => string;
-  formatRecordAmount: (record: RollupImportRecord) => string;
-  onSelectAccount: (keyword: string, accountId: string) => void;
-  onCreateAccount: (keyword: string) => void;
-};
+import type { RollupImportPageProps } from './rollupImportTypes';
 
 function RollupImportPage({
   mode,

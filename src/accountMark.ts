@@ -23,11 +23,14 @@ const takeChars = (value: string, maxChars: number) =>
 export const limitAccountAliasInput = (value: string) =>
   takeChars(value, ACCOUNT_MARK_MAX_CHARS);
 
+export const getEffectiveAccountAbbreviation = (input: string) =>
+  limitAccountAliasInput(input.trim());
+
 export const getAutomaticAccountMark = (accountName: string) =>
   takeChars(accountName.trim(), AUTO_ACCOUNT_MARK_CHARS) || '?';
 
 export const getAccountDisplayMark = (account: AccountMarkAccount) => {
-  const customMark = limitAccountAliasInput(account.alias?.trim() ?? '');
+  const customMark = getEffectiveAccountAbbreviation(account.alias ?? '');
 
   return customMark || getAutomaticAccountMark(account.name);
 };
@@ -61,7 +64,7 @@ export const getAccountMarkLayout = (mark: string): AccountMarkLayout => {
 };
 
 export const getAccountMarkDisplay = (account: AccountMarkAccount): AccountMarkDisplay => {
-  const customMark = limitAccountAliasInput(account.alias?.trim() ?? '');
+  const customMark = getEffectiveAccountAbbreviation(account.alias ?? '');
   const text = customMark || getAutomaticAccountMark(account.name);
 
   return {

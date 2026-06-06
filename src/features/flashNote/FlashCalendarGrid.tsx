@@ -8,9 +8,7 @@ type FlashCalendarGridMode = 'input' | 'confirm';
 type FlashCalendarGridProps = {
   mode: FlashCalendarGridMode;
   weeks: Date[][];
-  cells: Record<string, FlashCell>;
   getCell: (dateValue: string) => FlashCell;
-  trackDates: string[];
   currentDate?: string;
   nextDate?: string;
   confirmSelectedDate?: string;
@@ -22,7 +20,6 @@ export function FlashCalendarGrid({
   mode,
   weeks,
   getCell,
-  trackDates,
   currentDate = '',
   nextDate = '',
   confirmSelectedDate = '',

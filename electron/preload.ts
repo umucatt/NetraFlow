@@ -15,9 +15,11 @@ const electronAPI = {
     ipcRenderer.invoke('app:open-external-url', url) as Promise<void>,
   selectDirectory: () => ipcRenderer.invoke('dialog:select-directory') as Promise<string>,
   writeSnapshotFile: (payload: { directory: string; fileName: string; content: string }) =>
-    ipcRenderer.invoke('backup:write-file', payload) as Promise<{ filePath: string }>,
+    ipcRenderer.invoke('json:write-file', payload) as Promise<{ filePath: string }>,
   writeBackupFile: (payload: { directory: string; fileName: string; content: string }) =>
-    ipcRenderer.invoke('backup:write-file', payload) as Promise<{ filePath: string }>,
+    ipcRenderer.invoke('json:write-file', payload) as Promise<{ filePath: string }>,
+  writeJsonFile: (payload: { directory: string; fileName: string; content: string }) =>
+    ipcRenderer.invoke('json:write-file', payload) as Promise<{ filePath: string }>,
   onNetraFlowLock: (listener: () => void) => {
     const handleNetraFlowLock = () => {
       listener();

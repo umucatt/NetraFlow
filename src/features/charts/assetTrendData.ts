@@ -144,13 +144,12 @@ export const deriveAssetTrendPoints = (
   history: HistoryRecord[],
   settings: AssetTrendSettings
 ): TrendChartPoint[] => {
-  const includedGroupNames = new Set(
-    groups.filter((group) => group.includeInStats).map((group) => group.name)
+  const includedAccountIds = new Set(
+    groups
+      .filter((group) => group.includeInStats)
+      .flatMap((group) => group.accounts.map((account) => account.id))
   );
-  const relevantHistory = history.filter((record) => {
-    const meta = getChartGroupMeta(groups, record.groupName);
-    return meta.includeInStats || includedGroupNames.has(record.groupName);
-  });
+  const relevantHistory = history.filter((record) => includedAccountIds.has(record.accountId));
   const changeDateKeys = getAssetTrendChangeDateKeys(relevantHistory);
   const rangeDateKeys = getChartRangeDateKeys(settings.xAxisRange);
   const rangeStart = rangeDateKeys[0] ?? '';

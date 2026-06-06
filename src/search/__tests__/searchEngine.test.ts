@@ -301,17 +301,48 @@ const settingsItems: SettingsSearchItem[] = [
     id: 'search',
     title: '全局搜索',
     group: '全局设置',
-    description: '搜索逻辑、允许推断、只显示命中。',
+    description: '搜索范围、结果跳转与定位',
+    sectionTitle: '全局设置',
+    blockTitle: '全局搜索',
+    summary: '管理全局搜索的结果范围、打开定位和辅助匹配方式。',
+    previewItems: [
+      '可搜索账户、历史记录、快照与设置项',
+      '点击结果可打开对应页面并定位',
+      '可配合“允许推断”扩展匹配方式'
+    ],
     section: 'search',
-    keywords: ['搜索设置', '搜索逻辑', '允许推断', '关闭推断', '只显示命中'],
+    keywords: ['全局搜索', '搜索设置', '搜索范围', '结果跳转', '打开定位', '搜索入口'],
     pinyinKeywords: ['quan ju sou suo', 'sou suo'],
     pinyinInitials: ['qjss', 'ss']
+  },
+  {
+    id: 'search-inference',
+    title: '允许推断',
+    group: '全局搜索',
+    description: '拼音、首字母、错字和近似金额',
+    sectionTitle: '全局搜索',
+    blockTitle: '允许推断',
+    summary: '控制全局搜索是否启用辅助推断匹配。',
+    previewItems: [
+      '开启：包含拼音、首字母、错字与近似金额等推断匹配',
+      '关闭：仅显示字段中直接对应的命中结果',
+      '适合在结果过多时收窄搜索范围'
+    ],
+    section: 'search',
+    blockId: 'global-settings-search-logic',
+    keywords: ['允许推断', '推断', '推断匹配', '关闭推断', '拼音', '首字母', '错字', '近似金额', '模糊匹配'],
+    pinyinKeywords: ['yun xu tui duan', 'tui duan', 'pin yin', 'shou zi mu'],
+    pinyinInitials: ['yxtd', 'td', 'py', 'szm']
   },
   {
     id: 'charts',
     title: '图表设置',
     group: '全局设置',
-    description: '图表配色、资产结构显示、资产趋势显示。',
+    description: '图表配色、结构图和趋势图显示',
+    sectionTitle: '全局设置',
+    blockTitle: '图表设置',
+    summary: '调整资产图表的配色规则、结构图展示和趋势图显示方式。',
+    previewItems: ['控制首页缩略图表', '设置结构图和趋势图', '同步或锁定细分图表设置'],
     section: 'charts',
     keywords: ['图表', '图表显示', '图表配色', '资产结构显示', '资产趋势显示'],
     pinyinKeywords: ['tu biao', 'tu biao she zhi'],
@@ -321,7 +352,11 @@ const settingsItems: SettingsSearchItem[] = [
     id: 'appearance',
     title: '显示与界面',
     group: '全局设置',
-    description: '数字正负值显示、资产统计数值类型、页面主题与页面位置记忆。',
+    description: '外观、首页统计、主题和页面位置',
+    sectionTitle: '全局设置',
+    blockTitle: '显示与界面',
+    summary: '控制界面显示方式、首页资产统计口径、主题和页面位置记忆。',
+    previewItems: ['调整金额颜色', '设置首页资产统计', '控制页面主题'],
     section: 'appearance',
     keywords: ['显示与界面', '显示', '界面', '页面位置记忆', '页面位置'],
     pinyinKeywords: ['xian shi yu jie mian', 'ye mian wei zhi ji yi'],
@@ -331,7 +366,11 @@ const settingsItems: SettingsSearchItem[] = [
     id: 'appearance-page-position-memory',
     title: '页面位置记忆',
     group: '显示与界面',
-    description: '切换页面保留滚动位置和堆叠组状态。',
+    description: '页面切换时的滚动位置和堆叠状态',
+    sectionTitle: '显示与界面',
+    blockTitle: '页面位置记忆',
+    summary: '控制切换页面时是否保留滚动位置和堆叠组展开状态。',
+    previewItems: ['全局记忆保留页面位置', '覆盖后重置页面位置'],
     section: 'appearance',
     blockId: 'global-settings-page-position-memory',
     keywords: ['页面位置', '滚动位置', '堆叠组状态'],
@@ -342,9 +381,14 @@ const settingsItems: SettingsSearchItem[] = [
     id: 'backup',
     title: '数据与备份',
     group: '全局设置',
-    description: '用户配置文件、历史记录备份、快照。',
+    description: '配置文件、快照入口、示例数据和重置',
+    sectionTitle: '全局设置',
+    blockTitle: '数据与备份',
+    summary: '管理用户配置文件、历史记录备份入口、示例数据和本地数据重置。',
+    previewItems: ['导出或导入用户配置文件', '进入快照面板', '管理示例数据和重置操作'],
     section: 'backup',
-    keywords: ['数据', '备份', '快照', '快照设置'],
+    keywords: ['数据', '备份', '快照入口', '快照设置'],
+    weakKeywords: ['快照'],
     pinyinKeywords: ['shu ju', 'bei fen', 'kuai zhao'],
     pinyinInitials: ['sj', 'bf', 'kz']
   },
@@ -352,7 +396,11 @@ const settingsItems: SettingsSearchItem[] = [
     id: 'backup-history-snapshot',
     title: '历史记录备份',
     group: '数据与备份',
-    description: '快照、手动快照与自动快照设置。',
+    description: '打开快照面板并管理手动/自动快照',
+    sectionTitle: '数据与备份',
+    blockTitle: '历史记录备份',
+    summary: '从设置页进入快照面板，查看和管理手动导入导出与自动快照。',
+    previewItems: ['跳转到快照记录面板', '包含手动快照和自动快照设置', '用于备份历史记录数据'],
     section: 'backup',
     keywords: ['快照设置', '历史记录备份', '手动快照', '自动快照'],
     pinyinKeywords: ['kuai zhao she zhi'],
@@ -362,7 +410,11 @@ const settingsItems: SettingsSearchItem[] = [
     id: 'security',
     title: '安全',
     group: '全局设置',
-    description: '登录密码保护、自动锁定和快照加密。',
+    description: '登录保护、自动锁定和快照加密',
+    sectionTitle: '全局设置',
+    blockTitle: '安全',
+    summary: '管理登录密码保护、自动锁定时间和快照文件加密。',
+    previewItems: ['设置登录密码保护', '设置快照加密', '管理自动锁定'],
     section: 'security',
     keywords: ['安全', '安全设置', '登录密码保护', '快照加密'],
     pinyinKeywords: ['an quan', 'an quan she zhi'],
@@ -372,11 +424,29 @@ const settingsItems: SettingsSearchItem[] = [
     id: 'security-password-protection',
     title: '登录密码保护',
     group: '安全',
-    description: '设置登录密码与自动锁定时间。',
+    description: '登录密码和自动锁定时间',
+    sectionTitle: '安全',
+    blockTitle: '登录密码保护',
+    summary: '设置登录密码保护，并控制应用自动锁定时间。',
+    previewItems: ['开启或关闭登录密码保护', '设置或修改登录密码', '调整自动锁定时间'],
     section: 'security',
     keywords: ['安全设置', '登录密码', '自动锁定'],
     pinyinKeywords: ['deng lu mi ma', 'an quan she zhi'],
     pinyinInitials: ['dlmm', 'aqsz']
+  },
+  {
+    id: 'security-snapshot-encryption',
+    title: '快照加密',
+    group: '安全',
+    description: '加密手动导出和自动生成的快照文件',
+    sectionTitle: '安全',
+    blockTitle: '快照加密',
+    summary: '控制是否启用快照文件加密，并管理用于快照加密的密码。',
+    previewItems: ['启用或关闭快照加密', '设置或修改快照密码', '仅加密快照文件'],
+    section: 'security',
+    keywords: ['快照加密', '设置快照密码', '修改快照密码', '快照密码'],
+    pinyinKeywords: ['kuai zhao jia mi', 'kuai zhao mi ma'],
+    pinyinInitials: ['kzjm', 'kzmm']
   }
 ];
 
@@ -494,28 +564,38 @@ test('plain settings words keep stronger real-domain results near the top bounda
   ];
   const plainSettings: SettingsSearchItem[] = [
     {
-      id: 'search-accounts',
-      title: '搜索账户',
-      group: '全局搜索',
-      description: '账户名称可参与搜索。',
+      id: 'search',
+      title: '全局搜索',
+      group: '全局设置',
+      description: '搜索范围、结果跳转与定位',
+      sectionTitle: '全局设置',
+      blockTitle: '全局搜索',
+      summary: '管理全局搜索的结果范围、打开定位和辅助匹配方式。',
       section: 'search',
-      keywords: ['账户']
+      keywords: ['全局搜索', '搜索设置', '搜索范围']
     },
     {
-      id: 'search-history',
-      title: '搜索历史记录',
+      id: 'search-inference',
+      title: '允许推断',
       group: '全局搜索',
-      description: '历史记录日期和金额可参与搜索。',
+      description: '拼音、首字母、错字和近似金额',
+      sectionTitle: '全局搜索',
+      blockTitle: '允许推断',
+      summary: '控制全局搜索是否启用辅助推断匹配。',
       section: 'search',
-      keywords: ['日期', '金额']
+      keywords: ['允许推断', '推断', '拼音', '首字母', '近似金额']
     },
     {
       id: 'backup',
       title: '数据与备份',
       group: '全局设置',
-      description: '快照。',
+      description: '配置文件、快照入口、示例数据和重置',
+      sectionTitle: '全局设置',
+      blockTitle: '数据与备份',
+      summary: '管理用户配置文件、历史记录备份入口、示例数据和本地数据重置。',
       section: 'backup',
-      keywords: ['快照']
+      keywords: ['快照入口'],
+      weakKeywords: ['快照']
     }
   ];
   const plainIndex = createSearchIndexFor(
@@ -532,11 +612,70 @@ test('plain settings words keep stronger real-domain results near the top bounda
   assert.equal(plainSearch('账户').allResults[0]?.id, 'plain-account');
   assert.equal(plainSearch('金额').allResults[0]?.id, 'plain-amount-history');
   assert.equal(plainSearch('日期').allResults[0]?.id, 'plain-date-history');
-  assert.equal(snapshotIndex >= 0 && snapshotIndex <= 1, true);
+  assert.equal(snapshotIndex, 0);
+  assert.equal(plainSearch('账户').allResults.some((result) => result.id === 'search-accounts'), false);
+  assert.equal(plainSearch('快照').allResults.some((result) => result.id === 'search-snapshots'), false);
+});
+
+test('global search settings use focused setting entries and restrained entity wording', () => {
+  const forbiddenSettingTitles = ['搜索账户', '搜索快照', '搜索历史记录', '搜索设置项'];
+  const globalSearchIds = getSettingsResultIds('全局搜索');
+  const inferenceIds = getSettingsResultIds('允许推断');
+  const pinyinIds = getSettingsResultIds('拼音');
+  const initialsIds = getSettingsResultIds('首字母');
+  const accountOutput = search('账户');
+  const snapshotOutput = search('快照');
+  const snapshotIds = snapshotOutput.allResults.map((result) => result.id);
+
+  assert.equal(globalSearchIds.includes('search'), true);
+  assert.equal(globalSearchIds.includes('search-inference'), true);
+  assert.equal(inferenceIds[0], 'search-inference');
+  assert.equal(pinyinIds[0], 'search-inference');
+  assert.equal(initialsIds[0], 'search-inference');
+  assert.equal(accountOutput.allResults[0]?.category, 'account');
+  assert.equal(snapshotOutput.allResults[0]?.category, 'snapshot');
+  assert.equal(snapshotIds.includes('security-snapshot-encryption'), true);
+  assert.deepEqual(
+    [...accountOutput.settingsResults, ...snapshotOutput.settingsResults]
+      .map((result) => result.title)
+      .filter((title) => forbiddenSettingTitles.includes(title)),
+    []
+  );
+});
+
+test('settings result display fields separate location, summary, and preview copy', () => {
+  const globalSearch = search('全局搜索').settingsResults.find((result) => result.id === 'search');
+  const inference = search('允许推断').settingsResults.find(
+    (result) => result.id === 'search-inference'
+  );
+
+  assert.equal(globalSearch?.title, '全局搜索');
+  assert.equal(globalSearch?.subtitle, '全局设置 · 搜索范围、结果跳转与定位');
+  assert.equal(globalSearch?.value, '全局设置 / 全局搜索');
+  assert.equal(globalSearch?.item.summary, '管理全局搜索的结果范围、打开定位和辅助匹配方式。');
+  assert.deepEqual(globalSearch?.item.previewItems?.slice(0, 3), [
+    '可搜索账户、历史记录、快照与设置项',
+    '点击结果可打开对应页面并定位',
+    '可配合“允许推断”扩展匹配方式'
+  ]);
+  assert.equal(inference?.subtitle, '全局搜索 · 拼音、首字母、错字和近似金额');
+  assert.equal(inference?.target.category, 'settings');
+  assert.equal(
+    inference?.target.category === 'settings' ? inference.target.blockId : '',
+    'global-settings-search-logic'
+  );
+  assert.equal(inference?.item.previewItems?.includes(inference.item.summary ?? ''), false);
 });
 
 test('representative settings queries resolve concrete navigation targets', () => {
   const cases = [
+    { query: '全局搜索', settingsId: 'search', section: 'search' },
+    {
+      query: '允许推断',
+      settingsId: 'search-inference',
+      section: 'search',
+      blockId: 'global-settings-search-logic'
+    },
     {
       query: '页面位置',
       settingsId: 'appearance-page-position-memory',

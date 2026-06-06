@@ -18,9 +18,7 @@ export type GroupDetailStructureData = {
 export const getGroupDetailHistory = (group: AssetGroupWithAccounts, history: HistoryRecord[]) => {
   const currentAccountIds = new Set(group.accounts.map((account) => account.id));
 
-  return history.filter(
-    (record) => record.groupName === group.name || currentAccountIds.has(record.accountId)
-  );
+  return history.filter((record) => currentAccountIds.has(record.accountId));
 };
 
 export const getAccountColorRegistry = (group: AssetGroupWithAccounts, history: HistoryRecord[]) => {

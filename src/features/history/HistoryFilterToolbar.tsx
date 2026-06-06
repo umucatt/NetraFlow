@@ -2,6 +2,7 @@ import type { ChangeEvent, KeyboardEvent, ReactNode } from 'react';
 
 type HistoryFilterToolbarProps = {
   rangeInput: string;
+  rangeInputPlaceholder: string;
   isCalendarVisible: boolean;
   calendarContent?: ReactNode;
   onRangeInputChange: (value: string) => void;
@@ -16,6 +17,7 @@ type HistoryFilterToolbarProps = {
 
 export default function HistoryFilterToolbar({
   rangeInput,
+  rangeInputPlaceholder,
   isCalendarVisible,
   calendarContent,
   onRangeInputChange,
@@ -58,7 +60,7 @@ export default function HistoryFilterToolbar({
         <input
           type="text"
           inputMode="numeric"
-          placeholder="0325  0421    250325  260421"
+          placeholder={rangeInputPlaceholder}
           value={rangeInput}
           onFocus={onRangeInputFocus}
           onClick={onRangeInputClick}

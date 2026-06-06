@@ -498,9 +498,7 @@ export function AssetTrendChart({
                       }
                     }}
                   >
-                    <title>
-                      {points[index].date} · {series.label} {formatMoney(value)}
-                    </title>
+                    <title>{`${points[index].date} · ${series.label} ${formatMoney(value)}`}</title>
                   </circle>
                 );
               })}

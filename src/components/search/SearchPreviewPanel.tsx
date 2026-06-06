@@ -1,5 +1,10 @@
 import type { ReactNode } from 'react';
-import type { AssetGroup, GlobalSearchResult, HistoryRecord } from '../../search/searchTypes';
+import type {
+  AssetGroup,
+  GlobalSearchResult,
+  HistoryRecord,
+  SettingsSearchItem
+} from '../../search/searchTypes';
 import RightPanelActionButton from '../rightPanel/RightPanelActionButton';
 
 type SearchPreviewPanelProps = {
@@ -91,6 +96,18 @@ const getHistoryPreviewTypeModeLabel = (
   return `${result.record.type}-${mode}`;
 };
 
+const getSettingsPreviewLocation = (item: SettingsSearchItem) => {
+  const sectionTitle = item.sectionTitle ?? item.group;
+
+  return item.blockTitle ? `${sectionTitle} / ${item.blockTitle}` : sectionTitle;
+};
+
+const getSettingsPreviewSummary = (item: SettingsSearchItem) =>
+  item.summary ?? item.description;
+
+const getSettingsPreviewItems = (item: SettingsSearchItem) =>
+  (item.previewItems ?? []).slice(0, 3);
+
 function SearchPreviewPanel({
   hasQuery,
   focusedResult,
@@ -125,23 +142,7 @@ function SearchPreviewPanel({
       );
     }
 
-    if (result.category === 'settings') {
-      return <p>{result.subtitle}</p>;
-    }
-
     return null;
-  };
-
-  const renderSearchPreviewValue = (result: GlobalSearchResult) => {
-    if (
-      result.category === 'account' ||
-      result.category === 'history' ||
-      result.category === 'snapshot'
-    ) {
-      return null;
-    }
-
-    return <em>{result.value}</em>;
   };
 
   const renderSearchPreviewDetails = (result: GlobalSearchResult): ReactNode => {
@@ -181,6 +182,32 @@ function SearchPreviewPanel({
             <span>增量记录</span>
             <strong>{result.record.incrementCount}</strong>
           </div>
+        </div>
+      );
+    }
+
+    if (result.category === 'settings') {
+      const previewItems = getSettingsPreviewItems(result.item);
+
+      return (
+        <div className="search-preview-settings">
+          <div className="search-preview-details">
+            <div>
+              <span>所属位置</span>
+              <strong>{getSettingsPreviewLocation(result.item)}</strong>
+            </div>
+            <div className="search-preview-settings__summary">
+              <span>说明</span>
+              <p>{getSettingsPreviewSummary(result.item)}</p>
+            </div>
+          </div>
+          {previewItems.length > 0 ? (
+            <ul className="search-preview-settings__items">
+              {previewItems.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       );
     }
@@ -244,7 +271,6 @@ function SearchPreviewPanel({
             <span>{getSearchPreviewTypeLabel(focusedResult)}</span>
             <strong>{focusedResult.title}</strong>
             {renderSearchPreviewLead(focusedResult)}
-            {renderSearchPreviewValue(focusedResult)}
             {renderSearchPreviewDetails(focusedResult)}
           </article>
           <RightPanelActionButton

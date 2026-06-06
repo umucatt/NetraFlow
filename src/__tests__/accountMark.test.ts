@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   getAccountDisplayMark,
+  getEffectiveAccountAbbreviation,
   getAccountMarkDisplay,
   getAccountMarkLayout,
   getAccountMarkRows,
@@ -14,6 +15,13 @@ import {
 test('limits custom account abbreviations to four characters', () => {
   assert.equal(limitAccountAliasInput('储蓄卡工资'), '储蓄卡工');
   assert.equal(getAccountDisplayMark({ name: '储蓄卡', alias: '储蓄卡工资' }), '储蓄卡工');
+});
+
+test('normalizes effective account abbreviations without splitting code points', () => {
+  assert.equal(getEffectiveAccountAbbreviation(' zhongwen '), 'zhon');
+  assert.equal(getEffectiveAccountAbbreviation('中国银行账户'), '中国银行');
+  assert.equal(getEffectiveAccountAbbreviation('現金'), '現金');
+  assert.equal(getEffectiveAccountAbbreviation('💳💰abcd'), '💳💰ab');
 });
 
 test('uses the first two account name characters when custom abbreviation is empty', () => {

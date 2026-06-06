@@ -26,6 +26,9 @@ export type AssetStructureChartData = {
 
 export const getGroupColorRegistry = (groups: AssetGroupWithAccounts[], history: HistoryRecord[]) => {
   const registry = new Map<string, ChartColorItem>();
+  const accountIds = new Set(
+    groups.flatMap((group) => group.accounts.map((account) => account.id))
+  );
 
   groups.forEach((group, index) => {
     registry.set(group.name, {
@@ -37,6 +40,10 @@ export const getGroupColorRegistry = (groups: AssetGroupWithAccounts[], history:
   });
 
   history.forEach((record, index) => {
+    if (!accountIds.has(record.accountId)) {
+      return;
+    }
+
     const order = getHistoryOrder(record.time, Number.MAX_SAFE_INTEGER - index);
     const existing = registry.get(record.groupName);
 

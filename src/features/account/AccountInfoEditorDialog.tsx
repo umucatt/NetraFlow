@@ -22,7 +22,6 @@ type AccountInfoEditorDialogProps = {
   title: ReactNode;
   accountName: string;
   accountAlias: string;
-  accountAliasMaxLength: number;
   aliasPreview: ReactNode;
   error: string;
   onAccountNameChange: (value: string) => void;
@@ -35,7 +34,6 @@ function AccountInfoEditorDialog({
   title,
   accountName,
   accountAlias,
-  accountAliasMaxLength,
   aliasPreview,
   error,
   onAccountNameChange,
@@ -87,7 +85,6 @@ function AccountInfoEditorDialog({
         <input
           className="account-operation-input"
           type="text"
-          maxLength={accountAliasMaxLength}
           placeholder="留空时自动生成"
           value={accountAlias}
           onChange={(event) => onAccountAliasChange(event.target.value)}

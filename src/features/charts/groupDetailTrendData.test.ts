@@ -371,7 +371,7 @@ test('keeps history ordering behavior for unordered records, same-day records, a
   assert.equal(getValue(sameTimestampData, 'cash', '2026-05-09'), 200);
 });
 
-test('rolls modify, delete, null amount, and invalid-time records back without invalid totals', (t) => {
+test('rolls modify records back without invalid totals and skips missing deleted accounts', (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: FIXED_NOW });
   const modifyData = derive(
     group('Cash', 'asset', [account('cash', 280)]),
@@ -427,11 +427,12 @@ test('rolls modify, delete, null amount, and invalid-time records back without i
 
   assert.equal(getValue(modifyData, 'cash', '2026-05-11'), 200);
   assert.equal(getValue(modifyData, 'cash', '2026-05-12'), 280);
-  assert.equal(getValue(deleteData, 'cash', '2026-05-02'), 80);
-  assert.equal(getValue(deleteData, 'cash', '2026-05-03'), 0);
-  assert.equal(deleteData.dates.includes(''), false);
-  deleteData.totals.forEach((total) => {
-    assert.equal(Number.isFinite(total), true);
+  assert.deepEqual(deleteData, {
+    dates: [],
+    pointKinds: [],
+    series: [],
+    totals: [],
+    nature: 'asset'
   });
 });
 
@@ -589,7 +590,7 @@ test('collapses extra share-mode accounts into Other without exposing sourceIds'
   });
 });
 
-test('uses createdAt registry colors without reusing deleted earlier account colors', (t) => {
+test('uses createdAt registry colors without reserving colors for missing deleted accounts', (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: FIXED_NOW });
   const data = derive(
     group('Cash', 'asset', [
@@ -627,8 +628,49 @@ test('uses createdAt registry colors without reusing deleted earlier account col
     'createdAt'
   );
 
-  assert.equal(getSeries(data, 'active-a').color, NETRAFLOW_CHART_PALETTE[1]);
-  assert.equal(getSeries(data, 'active-b').color, NETRAFLOW_CHART_PALETTE[2]);
+  assert.equal(data.series.some((series) => series.id === 'deleted-first'), false);
+  assert.equal(getSeries(data, 'active-a').color, NETRAFLOW_CHART_PALETTE[0]);
+  assert.equal(getSeries(data, 'active-b').color, NETRAFLOW_CHART_PALETTE[1]);
+});
+
+test('does not generate a group detail trend series for missing old account ids', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: FIXED_NOW });
+  const data = derive(
+    group('Cash', 'asset', [account('active', 120)]),
+    [
+      historyRecord({
+        id: 'active-create',
+        accountId: 'active',
+        accountName: 'Active',
+        type: HISTORY_TYPE.create,
+        beforeAmount: null,
+        afterAmount: 100,
+        time: atNoon('2026-04-28')
+      }),
+      historyRecord({
+        id: 'active-modify',
+        accountId: 'active',
+        accountName: 'Active',
+        beforeAmount: 100,
+        afterAmount: 120,
+        time: atNoon('2026-05-02')
+      }),
+      historyRecord({
+        id: 'missing-old',
+        accountId: 'missing-old',
+        accountName: '已删除旧账户',
+        type: HISTORY_TYPE.create,
+        beforeAmount: null,
+        afterAmount: 999,
+        time: atNoon('2026-05-02')
+      })
+    ],
+    'share'
+  );
+
+  assert.equal(data.series.some((series) => series.id === 'missing-old'), false);
+  assert.equal(data.series.some((series) => series.label === '已删除旧账户'), false);
+  assert.equal(latestValue(data, 'active'), 120);
 });
 
 test('disables Other grouping when any current item is archived', (t) => {
