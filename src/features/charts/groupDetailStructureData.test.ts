@@ -140,7 +140,7 @@ test('keeps archived accounts in the createdAt color registry for stability', ()
   assert.equal(data.segments[0]?.color, NETRAFLOW_CHART_PALETTE[1]);
 });
 
-test('uses matching history only for registry order and createdAt color stability', () => {
+test('uses current-account history only for registry order and createdAt color stability', () => {
   const cash = group('Cash', 'asset', [
     account('active', 100, {
       createdAt: '2026-01-01T12:00:00'
@@ -176,12 +176,13 @@ test('uses matching history only for registry order and createdAt color stabilit
   const registryIds = getAccountColorRegistry(cash, history).map((item) => item.id);
   const data = deriveGroupDetailStructureData(cash, history, 'createdAt');
 
-  assert.deepEqual(relevantHistoryIds, ['deleted-in-group', 'current-account-old-group']);
-  assert.equal(registryIds.includes('deleted-old'), true);
+  assert.deepEqual(relevantHistoryIds, ['current-account-old-group']);
+  assert.equal(registryIds.includes('deleted-old'), false);
   assert.equal(registryIds.includes('unrelated'), false);
   assert.equal(data.total, 100);
   assert.equal(data.signedTotal, 100);
-  assert.equal(data.segments[0]?.color, NETRAFLOW_CHART_PALETTE[1]);
+  assert.equal(data.segments[0]?.color, NETRAFLOW_CHART_PALETTE[0]);
+  assert.equal(data.segments.some((segment) => segment.label === 'Deleted old'), false);
 });
 
 test('share mode sorts by amount then order, name, and id', () => {
@@ -210,6 +211,50 @@ test('share mode sorts by amount then order, name, and id', () => {
     data.segments.map((segment) => segment.id),
     ['large', 'history-first', 'label-alpha', 'id-a', 'id-b', 'name-zeta']
   );
+});
+
+test('does not generate account share items from missing old account history', () => {
+  const cash = group('Cash', 'asset', [account('active', 120)]);
+  const history = [
+    historyRecord({
+      id: 'missing-old',
+      accountId: 'missing-old',
+      groupName: 'Cash',
+      accountName: '已删除旧账户',
+      afterAmount: 999,
+      time: '2026-05-02T12:00:00'
+    })
+  ];
+  const data = deriveGroupDetailStructureData(cash, history, 'share');
+
+  assert.deepEqual(getGroupDetailHistory(cash, history), []);
+  assert.equal(getAccountColorRegistry(cash, history).some((item) => item.id === 'missing-old'), false);
+  assert.equal(data.segments.some((segment) => segment.label === '已删除旧账户'), false);
+  assert.deepEqual(
+    data.segments.map((segment) => [segment.id, segment.amount]),
+    [['active', 120]]
+  );
+});
+
+test('keeps archived accounts available to history-backed group detail trend semantics', () => {
+  const archived = account('archived-old', 50, { archived: true });
+  const cash = group('Cash', 'asset', [archived]);
+  const history = [
+    historyRecord({
+      id: 'archived-create',
+      accountId: archived.id,
+      groupName: 'Cash',
+      accountName: archived.name,
+      afterAmount: 50,
+      time: '2026-05-02T12:00:00'
+    })
+  ];
+
+  assert.deepEqual(
+    getGroupDetailHistory(cash, history).map((record) => record.id),
+    ['archived-create']
+  );
+  assert.equal(getAccountColorRegistry(cash, history).some((item) => item.id === archived.id), true);
 });
 
 test('share mode collapses extra accounts into Other with sourceIds', () => {

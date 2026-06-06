@@ -114,7 +114,7 @@ export function PieSegments({
         onMouseLeave={() => onSegmentHover?.(null)}
       >
         <title>
-          {getArchivedChartTooltipLabel(segment.label, segment.archived)} · {formatMoney(segment.amount)}
+          {`${getArchivedChartTooltipLabel(segment.label, segment.archived)} · ${formatMoney(segment.amount)}`}
         </title>
       </circle>
     );
@@ -140,7 +140,7 @@ export function PieSegments({
             onMouseLeave={() => onSegmentHover?.(null)}
           >
             <title>
-              {getArchivedChartTooltipLabel(segment.label, segment.archived)} · {formatMoney(segment.amount)}
+              {`${getArchivedChartTooltipLabel(segment.label, segment.archived)} · ${formatMoney(segment.amount)}`}
             </title>
           </path>
         );
@@ -178,7 +178,7 @@ function DonutSegments({
         onMouseLeave={() => onSegmentHover?.(null)}
       >
         <title>
-          {getArchivedChartTooltipLabel(segments[0].label, segments[0].archived)} · {formatMoney(segments[0].amount)}
+          {`${getArchivedChartTooltipLabel(segments[0].label, segments[0].archived)} · ${formatMoney(segments[0].amount)}`}
         </title>
       </circle>
     );
@@ -204,7 +204,7 @@ function DonutSegments({
             onMouseLeave={() => onSegmentHover?.(null)}
           >
             <title>
-              {getArchivedChartTooltipLabel(segment.label, segment.archived)} · {formatMoney(segment.amount)}
+              {`${getArchivedChartTooltipLabel(segment.label, segment.archived)} · ${formatMoney(segment.amount)}`}
             </title>
           </path>
         );
@@ -413,6 +413,54 @@ export function AssetStructureGraphic({
           {debtMultipleLabel}
         </span>
       ) : null}
+    </div>
+  );
+}
+
+export function AccountStructureGraphic({
+  segments,
+  total,
+  activeSegmentId,
+  onSegmentHover,
+  formatMoney,
+  emptyLabel = '暂无占比'
+}: {
+  segments: ChartSegment[];
+  total: number;
+  activeSegmentId?: string | null;
+  onSegmentHover?: (id: string | null) => void;
+  formatMoney: (amount: number | null, maximumFractionDigits?: number) => string;
+  emptyLabel?: string;
+}) {
+  return (
+    <div className="asset-structure-graphic asset-structure-graphic--account-share">
+      <svg viewBox="0 0 120 120" role="img">
+        <circle cx="60" cy="60" r="36" fill="var(--chart-center-bg)" />
+        <PieSegments
+          segments={segments}
+          total={total}
+          cx={60}
+          cy={60}
+          radius={34}
+          activeSegmentId={activeSegmentId}
+          onSegmentHover={onSegmentHover}
+          formatMoney={formatMoney}
+        />
+        {total <= 0 ? (
+          <text
+            x="60"
+            y="62"
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="var(--chart-axis-text)"
+            fontSize="8.5"
+            fontWeight="700"
+            className="chart-svg-text"
+          >
+            {emptyLabel}
+          </text>
+        ) : null}
+      </svg>
     </div>
   );
 }

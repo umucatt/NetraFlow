@@ -305,6 +305,40 @@ test('aggregates multiple accounts across positive and negative groups', (t) => 
   );
 });
 
+test('ignores missing account history while keeping existing account trend values', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: FIXED_NOW });
+  const points = deriveAssetTrendPoints(
+    [group('Assets', 'asset', [account('account-1', 200)])],
+    [
+      createRecord({
+        id: 'create-existing',
+        type: HISTORY_TYPE.create,
+        beforeAmount: null,
+        afterAmount: 100,
+        time: atNoon('2026-04-28')
+      }),
+      createRecord({
+        id: 'modify-existing',
+        beforeAmount: 100,
+        afterAmount: 200,
+        time: atNoon('2026-05-03')
+      }),
+      createRecord({
+        id: 'missing-old',
+        accountId: 'missing-old',
+        accountName: '已删除旧账户',
+        beforeAmount: null,
+        afterAmount: 999,
+        time: atNoon('2026-05-03')
+      })
+    ],
+    SETTINGS
+  );
+
+  assert.equal(getPoint(points, '2026-05-03').positive, 200);
+  assert.equal(getPoint(points, '2026-05-03').net, 200);
+});
+
 test('keeps asset trend output stable when history input is unordered', (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: FIXED_NOW });
   const groups = [group('Assets', 'asset', [account('account-1', 240)])];
@@ -417,7 +451,7 @@ test('uses beforeAmount when rolling modify records backward', (t) => {
   assert.equal(getPoint(points, '2026-05-12').positive, 280);
 });
 
-test('handles delete records and null amounts without invalid totals', (t) => {
+test('skips missing deleted account records instead of deriving trend points', (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: FIXED_NOW });
   const points = deriveAssetTrendPoints(
     [group('Assets', 'asset', [])],
@@ -447,13 +481,7 @@ test('handles delete records and null amounts without invalid totals', (t) => {
     SETTINGS
   );
 
-  assert.equal(getPoint(points, '2026-04-28').positive, 80);
-  assert.equal(getPoint(points, '2026-05-03').positive, 0);
-  points.forEach((point) => {
-    assert.equal(Number.isFinite(point.net), true);
-    assert.equal(Number.isFinite(point.positive), true);
-    assert.equal(Number.isFinite(point.negative), true);
-  });
+  assert.deepEqual(points, []);
 });
 
 test('honors date range boundaries while using after-range records as rollback context', (t) => {

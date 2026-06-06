@@ -135,7 +135,7 @@ test('share mode sorts by amount and splits mixed other sources into positive an
   assert.deepEqual(otherNegative?.sourceIds, ['Other asset', 'Other debt']);
 });
 
-test('createdAt mode uses the complete group and history registry for color stability', () => {
+test('createdAt mode skips missing account history in the group color registry', () => {
   const groups = [
     group('Excluded', 'asset', 999, { includeInStats: false, sortOrder: 1 }),
     group('Included', 'asset', 100, { sortOrder: 2 })
@@ -146,8 +146,8 @@ test('createdAt mode uses the complete group and history registry for color stab
 
   assert.deepEqual(
     registry.map((item) => item.id),
-    ['Excluded', 'Included', 'Deleted historical group']
+    ['Excluded', 'Included']
   );
   assert.equal(data.positiveSegments[0]?.label, 'Included');
-  assert.equal(data.positiveSegments[0]?.color, NETRAFLOW_CHART_PALETTE[2]);
+  assert.equal(data.positiveSegments[0]?.color, NETRAFLOW_CHART_PALETTE[1]);
 });

@@ -36,8 +36,17 @@ test('rejects ranges and invalid calendar dates', () => {
   assert.equal(parseAccountOperationDateInput('2026-02-30', 2026), null);
 });
 
-test('creates a date-only account operation timestamp at local noon', () => {
-  assert.match(toAccountOperationIsoTime('2026-05-06'), /^2026-05-06T|^2026-05-05T/);
+test('creates account operation timestamps with the selected date and write-time order', () => {
+  const writeTime = new Date(2026, 4, 20, 18, 34, 20, 321);
+  const timestamp = toAccountOperationIsoTime('2026-05-06', writeTime);
+  const nextTimestamp = toAccountOperationIsoTime('2026-05-06', writeTime, 1);
+  const timestampDate = new Date(timestamp);
+
+  assert.match(timestamp, /^2026-05-06T|^2026-05-05T/);
+  assert.equal(timestampDate.getHours(), 18);
+  assert.equal(timestampDate.getMinutes(), 34);
+  assert.equal(timestampDate.getSeconds(), 20);
+  assert.equal(new Date(nextTimestamp).getTime() - new Date(timestamp).getTime(), 1);
 });
 
 test('moves account operation calendar month by one month', () => {

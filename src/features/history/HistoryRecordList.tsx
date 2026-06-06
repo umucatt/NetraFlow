@@ -33,7 +33,13 @@ export type HistoryRecordListTone = {
   labelBackground: string;
 };
 
-type HistoryRecordGroup<TRecord extends HistoryRecordListRecord> = {
+export type HistoryRecordListGroupSummary<TRecord extends HistoryRecordListRecord> = {
+  beforeAmount: number | null;
+  afterAmount: number | null;
+  displayType: TRecord['type'];
+};
+
+export type HistoryRecordGroup<TRecord extends HistoryRecordListRecord> = {
   date: string;
   records: TRecord[];
 };
@@ -42,6 +48,8 @@ type HistoryRecordCardOptions = {
   nested?: boolean;
   timeLabel?: string;
   extraInfo?: string;
+  showNote?: boolean;
+  showSourceMarker?: boolean;
   interactive?: boolean;
   expanded?: boolean;
   highlighted?: boolean;
@@ -49,7 +57,7 @@ type HistoryRecordCardOptions = {
   children?: ReactNode;
 };
 
-type HistoryRecordListProps<TRecord extends HistoryRecordListRecord> = {
+export type HistoryRecordListProps<TRecord extends HistoryRecordListRecord> = {
   records?: TRecord[];
   groups?: Array<HistoryRecordGroup<TRecord>>;
   expandedDates?: string[];
@@ -59,6 +67,12 @@ type HistoryRecordListProps<TRecord extends HistoryRecordListRecord> = {
   getTypeLabel: (type: TRecord['type']) => string;
   getTone: (record: TRecord) => HistoryRecordListTone;
   getAmountChange: (record: TRecord) => HistoryRecordListChangeDisplay;
+  getGroupRecords?: (records: TRecord[]) => TRecord[];
+  getGroupDisplayRecords?: (records: TRecord[]) => TRecord[];
+  getGroupSummaryRecords?: (records: TRecord[]) => TRecord[];
+  getGroupSummary?: (
+    records: TRecord[]
+  ) => HistoryRecordListGroupSummary<TRecord> | null;
   formatAmount: (amount: number | null) => string;
   formatShortTime: (time: string) => string;
   renderFlashSourceIcon: (className: string) => ReactNode;
@@ -75,146 +89,98 @@ export default function HistoryRecordList<TRecord extends HistoryRecordListRecor
   getTypeLabel,
   getTone,
   getAmountChange,
+  getGroupRecords,
+  getGroupDisplayRecords,
+  getGroupSummaryRecords,
+  getGroupSummary,
   formatAmount,
   formatShortTime,
   renderFlashSourceIcon,
   onToggleDate
 }: HistoryRecordListProps<TRecord>) {
+  const getHistoryBadgeClass = (className: string, nested: boolean) =>
+    ['history-badge-base', className, nested ? 'history-badge-base--nested' : '']
+      .filter(Boolean)
+      .join(' ');
+
   const renderHistoryCardContent = (
     record: TRecord,
     tone: HistoryRecordListTone,
     change: HistoryRecordListChangeDisplay,
     options: Required<Pick<HistoryRecordCardOptions, 'nested' | 'timeLabel'>> &
-      Pick<HistoryRecordCardOptions, 'extraInfo'>
+      Pick<HistoryRecordCardOptions, 'extraInfo' | 'showNote' | 'showSourceMarker'>
   ) => {
-    const { nested, timeLabel, extraInfo } = options;
+    const { nested, timeLabel, extraInfo, showNote = true, showSourceMarker = true } = options;
+    const shouldShowNote = showNote && Boolean(record.note);
+    const source = showSourceMarker ? record.source : undefined;
 
     return (
-      <>
-        <div
+      <div className={`history-card-grid${nested ? ' history-card-grid--nested' : ''}`}>
+        <strong className="history-card-title history-card-title-row">
+          {record.groupName} - {record.accountName}
+        </strong>
+        <span
+          className={getHistoryBadgeClass(
+            'history-type-badge history-card-right-cell',
+            nested
+          )}
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            gap: 12,
-            alignItems: 'flex-start'
+            background: tone.labelBackground,
+            color: tone.text
           }}
         >
-          <strong
-            style={{
-              flex: 1,
-              minWidth: 0,
-              color: 'var(--text-main)',
-              fontSize: nested ? '0.94rem' : '1rem',
-              lineHeight: 1.35
-            }}
-          >
-            {record.groupName} - {record.accountName}
-          </strong>
-          <span
-            style={{
-              flex: '0 0 auto',
-              borderRadius: 'var(--radius-chip)',
-              padding: nested ? '3px 8px' : '4px 9px',
-              background: tone.labelBackground,
-              color: tone.text,
-              fontSize: nested ? '0.76rem' : '0.82rem',
-              fontWeight: 700,
-              lineHeight: 1
-            }}
-          >
-            {getTypeLabel(record.type)}
-          </span>
-        </div>
+          {getTypeLabel(record.type)}
+        </span>
 
-        <div
+        <span className="history-card-amount-flow history-card-amount-row">
+          {formatAmount(record.beforeAmount)} → {formatAmount(record.afterAmount)}
+        </span>
+        <strong
+          className={getHistoryBadgeClass(
+            `history-delta-badge history-delta-badge--${change.kind} history-card-right-cell`,
+            nested
+          )}
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr) auto',
-            gap: 12,
-            alignItems: 'center'
+            background: change.background,
+            color: change.color
           }}
         >
-          <span
-            style={{
-              minWidth: 0,
-              color: 'var(--text-secondary)',
-              fontSize: nested ? '0.92rem' : '0.98rem',
-              fontWeight: 600,
-              lineHeight: 1.4
-            }}
-          >
-            {formatAmount(record.beforeAmount)} → {formatAmount(record.afterAmount)}
-          </span>
-          <strong
-            style={{
-              justifySelf: 'end',
-              borderRadius: 'var(--radius-chip)',
-              padding: nested ? '4px 9px' : '5px 10px',
-              background: change.background,
-              color: change.color,
-              fontSize: nested ? '0.84rem' : '0.9rem',
-              lineHeight: 1,
-              whiteSpace: 'nowrap'
-            }}
-          >
-            {change.label}
-          </strong>
-        </div>
+          {change.label}
+        </strong>
 
-        {record.note ? (
-          <p
-            style={{
-              margin: 0,
-              color: 'var(--text-muted)',
-              fontSize: nested ? '0.78rem' : '0.84rem',
-              lineHeight: 1.35
-            }}
-          >
-            备注：{record.note}
-          </p>
-        ) : null}
-
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            gap: 12,
-            alignItems: 'center',
-            color: 'var(--text-muted)',
-            fontSize: nested ? '0.78rem' : '0.84rem',
-            lineHeight: 1.35
-          }}
-        >
-          <span>{timeLabel}</span>
-          <span className="history-card-source-row">
-            {extraInfo ? (
-              <span
-                style={{
-                  whiteSpace: 'nowrap',
-                  color: 'var(--text-secondary)',
-                  fontWeight: 600
-                }}
-              >
-                {extraInfo}
-              </span>
-            ) : null}
-            {record.source === 'flash-note'
-              ? renderFlashSourceIcon('history-flash-source')
-              : null}
-            {record.source === 'rollup' ? (
-              <NfSvgIcon
-                svg={NfRollupSourceWideIcon}
-                className="history-rollup-source"
-                title="汇总导入"
-                decorative
-              />
-            ) : null}
-            {!extraInfo && !record.source ? (
-              <span aria-hidden="true" style={{ minWidth: nested ? 44 : 60 }} />
-            ) : null}
-          </span>
-        </div>
-      </>
+        <span className="history-card-date-note history-card-date-row">
+          <span className="history-card-date">{timeLabel}</span>
+          {shouldShowNote ? (
+            <span className="history-card-note-inline">备注：{record.note}</span>
+          ) : null}
+        </span>
+        <span className="history-card-source-row history-card-right-cell">
+          {extraInfo ? (
+            <span className={getHistoryBadgeClass('history-count-badge', nested)}>
+              {extraInfo}
+            </span>
+          ) : null}
+          {source === 'flash-note'
+            ? renderFlashSourceIcon('history-flash-source')
+            : null}
+          {source === 'rollup' ? (
+            <NfSvgIcon
+              svg={NfRollupSourceWideIcon}
+              className="history-rollup-source"
+              title="汇总导入"
+              decorative
+            />
+          ) : null}
+          {showSourceMarker && !extraInfo && !source ? (
+            <span
+              aria-hidden="true"
+              className={`history-card-source-placeholder${
+                nested ? ' history-card-source-placeholder--nested' : ''
+              }`}
+            />
+          ) : null}
+        </span>
+      </div>
     );
   };
 
@@ -225,6 +191,8 @@ export default function HistoryRecordList<TRecord extends HistoryRecordListRecor
         ? `${formatShortTime(record.relatedTime)} · ${formatShortTime(record.time)}`
         : formatShortTime(record.time),
       extraInfo,
+      showNote = true,
+      showSourceMarker = true,
       interactive = false,
       expanded = false,
       highlighted = record.id === highlightedRecordId,
@@ -252,7 +220,9 @@ export default function HistoryRecordList<TRecord extends HistoryRecordListRecor
     const cardContent = renderHistoryCardContent(record, tone, change, {
       nested,
       timeLabel,
-      extraInfo
+      extraInfo,
+      showNote,
+      showSourceMarker
     });
 
     if (interactive) {
@@ -260,6 +230,13 @@ export default function HistoryRecordList<TRecord extends HistoryRecordListRecor
         <section
           key={record.id}
           id={`history-record-${record.id}`}
+          className={[
+            'history-record-card',
+            nested ? 'history-record-card--nested' : '',
+            !nested ? 'history-record-card--group' : ''
+          ]
+            .filter(Boolean)
+            .join(' ')}
           style={{
             ...cardStyle,
             display: 'grid',
@@ -307,6 +284,7 @@ export default function HistoryRecordList<TRecord extends HistoryRecordListRecor
       <article
         key={record.id}
         id={`history-record-${record.id}`}
+        className={`history-record-card${nested ? ' history-record-card--nested' : ''}`}
         style={{
           ...cardStyle,
           display: 'grid',
@@ -324,20 +302,38 @@ export default function HistoryRecordList<TRecord extends HistoryRecordListRecor
       return record ? renderHistoryCard(record) : null;
     }
 
-    const recordsByTimeDesc = [...group.records].sort(compareRecords);
-    const firstRecord = recordsByTimeDesc[recordsByTimeDesc.length - 1];
-    const lastRecord = recordsByTimeDesc[0];
+    const defaultDisplayRecords = [...group.records].sort(compareRecords);
+    const displayRecords = getGroupDisplayRecords
+      ? getGroupDisplayRecords(group.records)
+      : getGroupRecords
+        ? getGroupRecords(group.records)
+        : defaultDisplayRecords;
+    const summaryRecords = getGroupSummaryRecords
+      ? getGroupSummaryRecords(group.records)
+      : getGroupRecords
+        ? getGroupRecords(group.records)
+        : defaultDisplayRecords;
+    const firstRecord =
+      getGroupSummaryRecords || getGroupRecords
+        ? summaryRecords[0]
+        : summaryRecords[summaryRecords.length - 1];
+    const lastRecord =
+      getGroupSummaryRecords || getGroupRecords
+        ? summaryRecords[summaryRecords.length - 1]
+        : summaryRecords[0];
 
     if (!firstRecord || !lastRecord) {
       return null;
     }
 
     const expanded = expandedDates.includes(group.date);
+    const groupSummary = getGroupSummary?.(summaryRecords);
     const summaryRecord = {
       ...lastRecord,
       id: `history-group-${group.date}`,
-      beforeAmount: firstRecord.beforeAmount,
-      afterAmount: lastRecord.afterAmount,
+      type: groupSummary ? groupSummary.displayType : lastRecord.type,
+      beforeAmount: groupSummary ? groupSummary.beforeAmount : firstRecord.beforeAmount,
+      afterAmount: groupSummary ? groupSummary.afterAmount : lastRecord.afterAmount,
       source: group.records.some((record) => record.source === 'flash-note')
         ? 'flash-note'
         : group.records.some((record) => record.source === 'rollup')
@@ -352,9 +348,11 @@ export default function HistoryRecordList<TRecord extends HistoryRecordListRecor
           expanded,
           timeLabel: group.date,
           extraInfo: `${group.records.length}条记录`,
+          showNote: false,
+          showSourceMarker: false,
           onClick: () => onToggleDate?.(group.date),
           children: expanded
-            ? recordsByTimeDesc.map((record) =>
+            ? displayRecords.map((record) =>
                 renderHistoryCard(record, {
                   nested: true
                 })
@@ -382,11 +380,7 @@ export default function HistoryRecordList<TRecord extends HistoryRecordListRecor
       className="history-result-list-panel"
       style={{
         display: 'grid',
-        gap: 10,
-        border: '1px solid var(--border-soft)',
-        borderRadius: 'var(--radius-section)',
-        padding: '12px 4px 12px 12px',
-        background: 'var(--surface-strong)'
+        gap: 10
       }}
     >
       {records.map((record) => renderHistoryCard(record))}

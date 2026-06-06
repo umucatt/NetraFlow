@@ -1,24 +1,9 @@
 import AccountMark from '../../components/AccountMark';
-import type {
-  AccountMarkAccount
-} from '../../accountMark';
 import type { RollupAccountAssignment } from '../../rollupImportLogic';
-
-export type RollupImportAccountOption = AccountMarkAccount & {
-  id: string;
-  name: string;
-};
-
-export type RollupImportAccountGroup = {
-  id: string;
-  name: string;
-  activeAccounts: RollupImportAccountOption[];
-};
-
-export type RollupImportAccountMatch = {
-  account: RollupImportAccountOption;
-  score: number;
-};
+import type {
+  RollupImportAccountGroup,
+  RollupImportAccountMatch
+} from './rollupImportTypes';
 
 type RollupAccountAssignmentListProps = {
   keyword: string;

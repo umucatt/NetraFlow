@@ -19,7 +19,9 @@ const collectSourceFiles = (directory) => {
       return collectSourceFiles(fullPath);
     }
 
-    return entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')
+    return entry.isFile() &&
+      (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) &&
+      !entry.name.endsWith('.d.ts')
       ? [fullPath]
       : [];
   });
@@ -43,7 +45,9 @@ const rewriteRelativeImports = (code) =>
     );
 
 const sourceFiles = collectSourceFiles(sourceRoot);
-const testFiles = sourceFiles.filter((filePath) => filePath.endsWith('.test.ts'));
+const testFiles = sourceFiles.filter(
+  (filePath) => filePath.endsWith('.test.ts') || filePath.endsWith('.test.tsx')
+);
 
 if (testFiles.length === 0) {
   console.error('No test files found.');
@@ -54,7 +58,7 @@ rmSync(path.join(rootDir, '.tmp-tests'), { recursive: true, force: true });
 
 sourceFiles.forEach((sourceFile) => {
   const relativePath = path.relative(sourceRoot, sourceFile);
-  const outputFile = path.join(outRoot, relativePath).replace(/\.ts$/, '.js');
+  const outputFile = path.join(outRoot, relativePath).replace(/\.(ts|tsx)$/, '.js');
   const source = readFileSync(sourceFile, 'utf8');
   const transpiled = ts.transpileModule(source, {
     compilerOptions: {
@@ -73,7 +77,7 @@ sourceFiles.forEach((sourceFile) => {
 });
 
 for (const testFile of testFiles) {
-  const relativePath = path.relative(sourceRoot, testFile).replace(/\.ts$/, '.js');
+  const relativePath = path.relative(sourceRoot, testFile).replace(/\.(ts|tsx)$/, '.js');
   const outputFile = path.join(outRoot, relativePath);
 
   await import(pathToFileURL(outputFile).href);

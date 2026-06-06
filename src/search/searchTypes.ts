@@ -54,9 +54,14 @@ export type SettingsSearchItem = {
   title: string;
   group: string;
   description: string;
+  sectionTitle?: string;
+  blockTitle?: string;
+  summary?: string;
+  previewItems?: string[];
   section: string;
   blockId?: string;
   keywords?: string[];
+  weakKeywords?: string[];
   pinyinKeywords?: string[];
   pinyinInitials?: string[];
 };

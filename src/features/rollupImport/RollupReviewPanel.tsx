@@ -5,14 +5,13 @@ import type {
   RollupImportReview,
   RollupRiskLevel
 } from '../../rollupImportLogic';
+import RollupRecordGroupList from './RollupRecordGroupList';
+import RollupRiskSummary from './RollupRiskSummary';
 import type {
   RollupImportAccountGroup,
-  RollupImportAccountMatch
-} from './RollupAccountAssignmentList';
-import RollupRecordGroupList, {
-  type RollupImportRecordGroup
-} from './RollupRecordGroupList';
-import RollupRiskSummary from './RollupRiskSummary';
+  RollupImportAccountMatch,
+  RollupImportRecordGroup
+} from './rollupImportTypes';
 
 type RollupReviewPanelProps = {
   review: RollupImportReview;

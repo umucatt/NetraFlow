@@ -3,8 +3,21 @@ export {
   AssetStructureGraphic,
   PieSegments
 } from './AssetAllocationPanel';
+export type { StructureAssetDisplay } from './AssetAllocationPanel';
 export { default as AssetChartsPanel } from './AssetChartsPanel';
 export { default as AssetTrendPanel, AssetTrendChart } from './AssetTrendPanel';
+export type { TrendAssetDisplay } from './AssetTrendPanel';
+export { default as ChartPreviewPanel } from './ChartPreviewPanel';
+export {
+  GroupDetailChartDisplayPanel,
+  TotalAssetChartDisplayPanel
+} from './ChartDisplayPanel';
+export type {
+  ChartMoneyFormatter,
+  ChartPercentFormatter,
+  GroupDetailChartViewData,
+  TotalAssetChartViewData
+} from './chartViewTypes';
 export {
   default as ChartLegendList,
   getInteractiveChartClassName
@@ -32,3 +45,19 @@ export type {
   GroupDetailTrendSeries,
   GroupDetailTrendSettings
 } from './groupDetailTrendData';
+export {
+  getGlobalAccountDetailChartSettings,
+  getAccountPreviewTrendSettings,
+  getHomeThumbnailTrendSettings,
+  shouldShowHomeCharts
+} from './chartDataLogic';
+export type {
+  AccountDetailChartSettings,
+  AssetChartSettings,
+  CategoryChartVisibility,
+  CategoryDetailChartSettings,
+  HomeThumbnailChartSettings,
+  TrendPointValueMode,
+  TrendXAxisRange
+} from './chartDataLogic';
+export { useChartDataController } from './useChartDataController';

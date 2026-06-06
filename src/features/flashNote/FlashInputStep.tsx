@@ -4,9 +4,7 @@ import { FlashCalendarGrid } from './FlashCalendarGrid';
 
 type FlashInputStepProps = {
   weeks: Date[][];
-  cells: Record<string, FlashCell>;
   getCell: (dateValue: string) => FlashCell;
-  trackDates: string[];
   currentDate: string;
   nextDate: string;
   currentInput: string;
@@ -14,9 +12,7 @@ type FlashInputStepProps = {
 
 export function FlashInputStep({
   weeks,
-  cells,
   getCell,
-  trackDates,
   currentDate,
   nextDate,
   currentInput
@@ -48,9 +44,7 @@ export function FlashInputStep({
       <FlashCalendarGrid
         mode="input"
         weeks={weeks}
-        cells={cells}
         getCell={getCell}
-        trackDates={trackDates}
         currentDate={currentDate}
         nextDate={nextDate}
         currentInput={currentInput}

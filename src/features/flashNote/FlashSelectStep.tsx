@@ -66,7 +66,12 @@ const selectionTools: Array<{
   label: string;
   title: string;
 }> = [
-  { mode: 'replace', icon: NfSelectionSingleIcon, label: '单选', title: '单选：点击或拖选日期' },
+  {
+    mode: 'replace',
+    icon: NfSelectionSingleIcon,
+    label: '拖选日期',
+    title: '拖选日期：点击选择单日，拖动选择连续日期'
+  },
   { mode: 'union', icon: NfSelectionUnionIcon, label: '合集', title: '合集：合并日期选区' },
   { mode: 'subtract', icon: NfSelectionSubtractIcon, label: '删除', title: '删除：从选区中移除日期' }
 ];

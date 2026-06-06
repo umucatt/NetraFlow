@@ -1,13 +1,5 @@
 import RightPanelActionButton from '../../components/rightPanel/RightPanelActionButton';
-
-type AccountActionsPanelProps = {
-  isArchived: boolean;
-  onEditBalance: () => void;
-  onEditAccount: () => void;
-  onRestoreAccount?: () => void;
-  onOpenDangerActions: () => void;
-  onBack: () => void;
-};
+import type { AccountActionsPanelProps } from './accountOperationTypes';
 
 function AccountActionsPanel({
   isArchived,

@@ -419,6 +419,8 @@ test('flash keyboard action resolver covers enter, backspace, delete, and ctrl z
   assert.deepEqual(resolveFlashKeyboardAction({ key: 'Backspace', step: 'input' }), { type: 'backspace' });
   assert.deepEqual(resolveFlashKeyboardAction({ key: 'Delete', step: 'confirm' }), { type: 'delete' });
   assert.deepEqual(resolveFlashKeyboardAction({ ctrlKey: true, key: 'z', step: 'input' }), { type: 'ctrl-z' });
+  assert.deepEqual(resolveFlashKeyboardAction({ key: 'Escape', step: 'input' }), null);
+  assert.deepEqual(resolveFlashKeyboardAction({ key: 'Escape', step: 'confirm' }), null);
   assert.deepEqual(resolveFlashKeyboardAction({ key: 'ArrowDown', step: 'input' }), null);
   assert.deepEqual(resolveFlashKeyboardAction({ key: 'ArrowDown', step: 'confirm' }), null);
   assert.deepEqual(

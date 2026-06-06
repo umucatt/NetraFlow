@@ -1,8 +1,6 @@
 import {
-  type ChangeEvent,
   type CSSProperties,
   type DragEvent,
-  type FormEvent,
   type HTMLAttributes,
   type KeyboardEvent,
   type MouseEvent,
@@ -11,7 +9,6 @@ import {
   type WheelEvent,
   useEffect,
   useMemo,
-  useReducer,
   useRef,
   useState
 } from 'react';
@@ -20,36 +17,18 @@ import packageInfo from '../package.json';
 
 import {
   DAY_MS,
-  clampHistoryDateValue,
   compareHistoryByTimeDesc,
-  createHistoryTimestampForBusinessDate,
-  formatDateRangeDisplay,
   formatHistoryRecordDate,
   getCalendarDays,
-  getDateKeyFromValue,
-  getDateRangeKeys,
-  getDateTimestamp,
-  getDateWeekKey,
-  getHistoryCalendarLeadMonth,
-  getHistoryDateKey,
-  getHistoryRangeTokens,
-  getHistoryTimestamp,
-  getLastWeekRange,
-  getRecent7DayRange,
-  getRelativeDateLabel,
   getValidTimestamp,
-  isFutureDateKey,
-  isWithinDateRange,
-  parseDateToken,
-  parseHistoryRangeInput,
   toDateInputValue
 } from './app/dateUtils';
 import {
-  EXAMPLE_DATA_SETTINGS_BLOCK_ID,
-  EXAMPLE_DATA_SETTINGS_ID,
-  EXAMPLE_DATA_SETTINGS_SECTION,
   getExampleModeBadgeSettingsNavigation
 } from './app/exampleModeNavigation';
+import { clearPersistedAssetData } from './app/appDataLifecycleLogic';
+import { useAppDataLifecycleController } from './app/useAppDataLifecycleController';
+import { useAppDialogController } from './app/useAppDialogController';
 import {
   isPositiveNature,
   toStoredAmountByNature
@@ -70,10 +49,7 @@ import {
   LEGACY_ARCHIVED_ACCOUNTS_STORAGE_KEY,
   LEGACY_DELETED_RECORDS_STORAGE_KEY,
   LEGACY_HISTORY_STORAGE_KEY,
-  MIGRATION_BACKUP_STORAGE_KEY,
-  ROLLUP_IMPORT_HASHES_STORAGE_KEY,
-  USER_SETTINGS_FILE_TYPE,
-  USER_SETTINGS_FILE_VERSION
+  MIGRATION_BACKUP_STORAGE_KEY
 } from './app/storageKeys';
 import {
   migrateLegacyLocalStorageToNfStorage,
@@ -85,14 +61,11 @@ import {
   deleteAssetGroupFromAppData,
   deriveGroupsWithAccounts,
   getArchivedAccountEntries,
-  getArchivedAccountRestoreGroup,
-  getArchivedAccountRestoreTargetGroups,
   normalizeGroupsAndAccounts,
   normalizeGroupNature,
-  restoreArchivedAccountToGroup,
   stripRuntimeAccountsFromGroups
 } from './app/accountData';
-import { createStableAccountId, createStableGroupId } from './app/ids';
+import { createStableGroupId } from './app/ids';
 import {
   NfFlashnoteSourceIcon,
   NfRollupSourceWideIcon,
@@ -121,7 +94,8 @@ import {
   AccountHistoryList,
   AccountInfoEditorDialog,
   AccountRestoreDialog,
-  AccountRestoreTargetDialog
+  AccountRestoreTargetDialog,
+  useAccountOperationsController
 } from './features/account';
 import {
   findBestAccountTypeMatch,
@@ -129,28 +103,37 @@ import {
   normalizeTypeSearchText
 } from './features/account/accountTypeSearch';
 import {
-  AssetAllocationPanel,
-  AssetChartsPanel,
-  AssetStructureGraphic,
-  AssetTrendChart,
-  AssetTrendPanel,
-  CHART_COLORS,
-  ChartLegendList,
-  ChartSettingsPanel,
-  PieSegments,
-  deriveAssetStructureData,
-  deriveGroupDetailTrendData,
-  deriveGroupDetailStructureData,
-  formatChartNumber,
-  formatChartPercent,
-  getInteractiveChartClassName
-} from './features/charts';
-import { deriveAccountTrendPoints } from './features/charts/accountTrendData';
+  updateAccountTypeInAppData
+} from './features/account/accountTypeLogic';
+import { useAccountTypeController } from './features/account/useAccountTypeController';
 import {
-  deriveAssetTrendPoints,
-  type TrendChartPoint
-} from './features/charts/assetTrendData';
+  createNewAccountInAppData,
+  findArchivedAccountByName,
+  getNewAccountTypeInputMatch,
+  hasActiveDuplicateAccountName,
+  hasAddAccountUnsavedChanges as getAddAccountUnsavedChanges,
+  isNonNegativeAccountInput as isNonNegativeInput,
+  parseNonNegativeAccountAmount as parseNonNegativeAmount,
+  sanitizeNonNegativeAccountInput as sanitizeNonNegativeInput
+} from './features/account/accountEditorLogic';
+import {
+  filterArchivedAccountsForRestore,
+  type ArchivedRestoreSource
+} from './features/account/archivedAccountLogic';
+import {
+  AssetTrendChart,
+  ChartSettingsPanel,
+  GroupDetailChartDisplayPanel,
+  TotalAssetChartDisplayPanel,
+  formatChartNumber,
+  getGlobalAccountDetailChartSettings,
+  useChartDataController
+} from './features/charts';
+import type { TrendChartPoint } from './features/charts/assetTrendData';
+import DashboardPage from './features/dashboard/DashboardPage';
+import { useDashboardController } from './features/dashboard/useDashboardController';
 import { FlashNotePage } from './features/flashNote/FlashNotePage';
+import { useFlashNoteController } from './features/flashNote/useFlashNoteController';
 import {
   BackupRecordList,
   HistoryCalendarPanel,
@@ -158,51 +141,55 @@ import {
   HistoryPanel,
   HistoryRecordList
 } from './features/history';
+import {
+  createAccountHistoryRecordListProps,
+  createHistoryRecordListProps
+} from './features/history/historyGroupLogic';
+import { useHistoryController } from './features/history/useHistoryController';
 import { QuickEntryAccountPicker, QuickEntryPanel } from './features/quickEntry';
 import {
-  RollupImportDropzone,
+  RollupImportActionsPanel,
   RollupImportPage,
-  RollupReviewActionsPanel
+  useRollupImportController
 } from './features/rollupImport';
 import {
-  AboutNetraFlowPanel,
-  AppearanceSettingsPanel,
-  BackupSettingsPanel,
   PasswordEditorDialog,
-  SearchSettingsPanel,
+  SettingsNavigationPanel,
+  SettingsPage,
   SnapshotEncryptionDisableDialog,
   SnapshotPasswordEditorDialog
 } from './features/settings';
+import {
+  GLOBAL_SETTINGS_SEARCH_ITEMS,
+  isGlobalSettingsSection
+} from './features/settings/settingsSectionLogic';
+import type {
+  GlobalSettingsSection,
+  SettingsPageProps
+} from './features/settings/settingsPageTypes';
+import {
+  DEFAULT_AUTO_BACKUP_SETTINGS,
+  getBackupMethodLabel,
+  loadBackupRecords,
+  loadLastBackupAt,
+  loadLastBackupHistoryCount
+} from './features/backup/snapshotBackupLogic';
+import { useSnapshotBackupController } from './features/backup/useSnapshotBackupController';
+import { useSecuritySettingsController } from './features/security/useSecuritySettingsController';
+import { useUserSettingsFileController } from './features/userSettings/useUserSettingsFileController';
 
 import {
-  ACCOUNT_MARK_MAX_CHARS,
   getAccountDisplayMark,
-  limitAccountAliasInput
+  getEffectiveAccountAbbreviation
 } from './accountMark';
 import {
-  getAccountOperationCalendarMonth,
   getAccountOperationTodayDateValue,
   isFutureAccountOperationDateValue,
-  parseAccountOperationDateInput,
-  resolveProtectedAccountOperationDateInputState,
   shiftAccountOperationCalendarMonth,
-  toAccountOperationDateValue,
-  toAccountOperationIsoTime
+  toAccountOperationDateValue
 } from './accountOperationDate';
 import {
-  buildSteppedStackLayers,
   cloneCategoryChartSettings,
-  createSteppedAreaPath,
-  createSteppedHorizontalLinePath,
-  createSteppedVerticalLinePath,
-  getArchivedChartTooltipLabel,
-  getChartAxisLabelIndexes,
-  getChartValueLabelIndexes,
-  getChartValueLabelLayout,
-  getEffectiveAccountChartSettings,
-  getEffectiveCategoryChartSettings,
-  getNearestChangeDatePointIndex,
-  getZeroAnchoredStackedYAxisScale,
   isChartColorAssignmentMode,
   isChartXAxisRange,
   normalizeChartPointValueMode,
@@ -211,145 +198,64 @@ import {
 } from './chartLogic';
 import { EXAMPLE_TEMPLATES, createExampleData } from './exampleData';
 import {
-  appendFlashInputCharacter,
-  backspaceFlashInputValue,
-  getContinuousFlashDates,
-  getFlashDirectionFromDates,
-  getFlashDefaultVisibleMonth,
-  getFlashWeeksAround,
-  getFlashWeeksForDates,
-  parseFlashNumberInput,
-  resolveFlashConfirmNavigationDate,
-  resolveFlashCellValueUpdate,
-  resolveFlashSelectionBounds,
-  resolveFlashSelectionDates,
-  sortFlashDatesByDirection
-} from './features/flashNote/flashNoteUtils';
-import type { FlashConfirmNavigationKey } from './features/flashNote/flashNoteUtils';
-import { useFlashKeyboardInput } from './features/flashNote/useFlashKeyboardInput';
-import {
   DEFAULT_HOME_ASSET_STAT_SETTINGS,
   isHomeAssetStatLabelMode,
-  isHomeAssetStatMetric,
-  resolveHomeAssetStatLabel,
-  resolveHomeAssetStatValue
+  isHomeAssetStatMetric
 } from './homeAssetStats';
 import {
   formatCurrencyMoneyValue,
   formatHomeMoney,
-  formatMoneyInputValue,
-  formatMoneyValue,
-  isMoneyInput,
-  normalizeMoneyInput,
-  parseMoneyInput,
-  roundToMoneyPrecision
+  formatMoneyValue
 } from './money';
-import { ROLLUP_IMPORT_EXPLANATION, ROLLUP_IMPORT_PROMPT } from './rollupImportContent';
 import {
-  areAllRollupGroupsAssigned,
-  getRollupAccountGroupKeys,
-  parseRollupImportJson
-} from './rollupImportLogic';
-import { createGlobalSearchIndex, runGlobalSearch } from './search/searchEngine';
+  useSearchTargetHighlightController
+} from './search/searchHighlightLogic';
 import {
-  getNextSearchNavigationTarget,
-  getSearchNavigationCycle,
-  getSearchResultItemId,
-  getSearchResultsForCategory,
-  SEARCH_SCROLL_BLOCK
-} from './search/searchNavigation';
-import {
-  createInitialSearchState,
-  getSearchEscapeAction,
-  searchStateReducer
-} from './search/searchState';
-import { createPasswordHash, isPasswordHash, verifyPassword } from './security/passwordHash';
-import {
-  SNAPSHOT_DECRYPTION_ERROR_MESSAGE,
-  decryptSnapshotPayload,
-  encryptSnapshotPayload,
-  isEncryptedSnapshotFile
-} from './security/snapshotCrypto';
+  resolveSearchNavigationTarget
+} from './search/searchNavigationLogic';
+import { useGlobalSearchController } from './search/useGlobalSearchController';
+import { isPasswordHash } from './security/passwordHash';
 
 import type {
   Account,
-  AccountOperationEntrySource,
   AccountPointer,
   AccountTypeNature,
   AppData,
   ArchivedAccountEntry,
   AssetGroup,
   AssetGroupWithAccounts,
-  AutoBackupSettings,
-  BackupCycle,
   BackupCycleUnit,
-  BackupMethod,
-  BackupRecord,
-  EditMode,
   HistoryRecord,
   HistoryType
 } from './app/types';
 import type { RightPanelActionButtonProps } from './components/rightPanel';
-import type {
-  ChartLegendItemData,
-  GroupDetailTrendData,
-  GroupDetailStructureData,
-  TotalAssetChartSettings
-} from './features/charts';
-import type {
-  FlashCell,
-  FlashDateRule,
-  FlashDirection,
-  FlashInputMode,
-  FlashSelectionMode,
-  FlashStep,
-  FlashWriteRow
-} from './features/flashNote/flashNoteTypes';
+import type { FlashHistoryRecordInput } from './features/flashNote/flashNoteWriteLogic';
 import type { QuickEntryAccountGroup } from './features/quickEntry';
 import type {
-  BasicAccountChartSettings,
-  BasicCategoryChartSettings,
-  ChartColorAssignmentMode as NetraflowChartColorAssignmentMode,
-  ChartPointValueMode,
-  ChartXAxisRange,
-  GlobalChartControlMode
-} from './chartLogic';
+  AccountDetailChartSettings,
+  AssetChartSettings,
+  CategoryDetailChartSettings,
+  HomeThumbnailChartSettings,
+  StructureAssetDisplay,
+  TotalAssetChartSettings,
+  TrendAssetDisplay,
+  TrendPointValueMode,
+  TrendXAxisRange
+} from './features/charts';
 import type { ExampleTemplateId } from './exampleData';
-import type { HomeAssetStatLabelMode, HomeAssetStatMetric } from './homeAssetStats';
 import type {
-  RollupAccountAssignment,
-  RollupImportRecord,
-  RollupImportReview,
-  RollupRiskLevel
-} from './rollupImportLogic';
-import type {
-  GlobalSearchResult,
+  CreateSearchIndexOptions,
   SearchLogicMode,
-  SearchNavigationTarget,
-  SettingsSearchItem
+  SearchNavigationTarget
 } from './search/searchTypes';
-import type { PasswordHash } from './security/passwordHash';
-
-
-
-type FlashNoteInputMode = FlashInputMode;
-
-type RollupPromptTab = 'explanation' | 'prompt';
-
-type FlashNoteDirection = FlashDirection;
-
-type FlashNoteDateRule = FlashDateRule;
-
-type FlashNoteSelectionMode = FlashSelectionMode;
-
-
-
-type FlashNoteCell = FlashCell;
-
-
-
-type FlashNoteWriteRow = FlashWriteRow;
-
+import type {
+  GlobalSettings,
+  PagePositionMemoryMode,
+  PositiveNegativeColorMode,
+  ResolvedTheme,
+  ThemeMode,
+  ThemeStyle
+} from './features/security/securitySettingsTypes';
 
 
 type HistoryChangeKind = 'increase' | 'decrease' | 'neutral';
@@ -390,78 +296,6 @@ type HistoryTone = {
 
 
 
-type AdjustDirection = 'increase' | 'decrease';
-
-
-
-type AccountTypeEditorState = {
-
-  mode: 'create' | 'edit';
-
-  groupId?: string;
-
-} | null;
-
-
-
-type ConfirmationDialogState = {
-
-  title: string;
-
-  message: ReactNode;
-
-  confirmLabel: string;
-
-  cancelLabel?: string;
-
-  eyebrow?: string | null;
-
-  tone?: 'default' | 'danger';
-
-  onConfirm: () => void;
-
-  onCancel?: () => void;
-
-} | null;
-
-
-
-type NoticeDialogState = {
-
-  title: string;
-
-  message: ReactNode;
-
-  confirmLabel?: string;
-
-  onClose?: () => void;
-
-} | null;
-
-
-
-type InputDialogState = {
-
-  title: string;
-
-  message: ReactNode;
-
-  label: string;
-
-  confirmLabel: string;
-
-  inputType?: 'text' | 'password';
-
-  autoComplete?: string;
-
-  onConfirm: (value: string) => void;
-
-  onCancel: () => void;
-
-} | null;
-
-
-
 type GroupPointerInteraction = {
 
   pointerId: number;
@@ -478,167 +312,10 @@ type GroupPointerInteraction = {
 
 };
 
-type ArchivedRestoreSource =
-  | 'account-detail'
-  | 'account-restore-dialog'
-  | 'same-name-account'
-  | 'archived-accounts-list';
-
-type PendingArchivedRestore = {
-  accountId: string;
-  source: ArchivedRestoreSource;
-} | null;
-
 type GroupDropIndicator = {
   groupId: string;
   position: 'before' | 'after';
 } | null;
-
-
-
-type StructureAssetDisplay = 'positive' | 'negative' | 'both';
-
-type TrendAssetDisplay = 'net' | 'positive' | 'positive-negative';
-
-type TrendXAxisRange = ChartXAxisRange;
-
-type TrendPointValueMode = ChartPointValueMode;
-
-
-
-type HomeThumbnailChartSettings = {
-
-  showStructure: boolean;
-
-  showTrend: boolean;
-
-  xAxisRange: TrendXAxisRange;
-
-};
-
-
-
-type CategoryChartVisibility = {
-
-  showStructure: boolean;
-
-  showTrend: boolean;
-
-};
-
-
-
-type CategoryDetailChartSettings = BasicCategoryChartSettings & {
-
-  xAxisRange: TrendXAxisRange;
-
-  pointValueMode: TrendPointValueMode;
-
-};
-
-
-
-type AccountDetailChartSettings = BasicAccountChartSettings & {
-
-  adaptiveYAxis: boolean;
-
-  xAxisRange: TrendXAxisRange;
-
-  pointValueMode: TrendPointValueMode;
-
-};
-
-
-
-type AssetChartSettings = {
-
-  l0: HomeThumbnailChartSettings;
-
-  globalChartControlMode: GlobalChartControlMode;
-
-  structure: {
-
-    assetDisplay: StructureAssetDisplay;
-
-    showDebtMultiple: boolean;
-
-  };
-
-  trend: {
-
-    assetDisplay: TrendAssetDisplay;
-
-    adaptiveYAxis: boolean;
-
-    xAxisRange: TrendXAxisRange;
-
-    pointValueMode: TrendPointValueMode;
-
-  };
-
-  categoryVisibility: CategoryChartVisibility;
-
-  globalCategoryDetail: CategoryDetailChartSettings;
-
-  categoryDetailById: Record<string, CategoryDetailChartSettings>;
-
-  accountDetailById: Record<string, AccountDetailChartSettings>;
-
-};
-
-
-
-type PositiveNegativeColorMode = 'red-positive' | 'green-positive';
-
-type ThemeMode = 'light' | 'dark' | 'system';
-
-type ThemeStyle = 'default' | 'nyaa';
-
-type PagePositionMemoryMode = 'global' | 'covered-reset';
-
-type ResolvedTheme = 'light' | 'dark';
-
-
-
-type GlobalSettings = {
-
-  positiveNegativeColorMode: PositiveNegativeColorMode;
-
-  themeMode: ThemeMode;
-
-  themeStyle: ThemeStyle;
-
-  nyaaThemeUnlocked: boolean;
-
-  pagePositionMemoryMode: PagePositionMemoryMode;
-
-  searchLogicMode: SearchLogicMode;
-
-  chartColorAssignmentMode: NetraflowChartColorAssignmentMode;
-
-  homeAssetStatMetric: HomeAssetStatMetric;
-
-  homeAssetStatLabelMode: HomeAssetStatLabelMode;
-
-  homeAssetStatCompact: boolean;
-
-  passwordProtectionEnabled: boolean;
-
-  passwordHash: PasswordHash | null;
-
-  autoLockMinutes: number;
-
-  snapshotEncryptionEnabled: boolean;
-
-  snapshotPasswordHash: PasswordHash | null;
-
-};
-
-
-
-type PasswordEditorMode = 'setup' | 'edit' | null;
-
-type SnapshotPasswordEditorMode = 'setup' | 'edit' | null;
 
 
 
@@ -659,20 +336,6 @@ type SignedAmountCssVariables = CSSProperties & {
 type HistoryPanelView = 'history' | 'backup';
 
 type BackupReturnTarget = 'history' | 'global-settings-backup';
-
-type GlobalSettingsSection =
-
-  | 'appearance'
-
-  | 'charts'
-
-  | 'search'
-
-  | 'backup'
-
-  | 'security'
-
-  | 'about';
 
 
 
@@ -732,24 +395,6 @@ type ToastMessage = {
 
 
 
-type ExampleModeRealSnapshot = {
-
-  appData: AppData;
-
-  backupRecords: BackupRecord[];
-
-  lastBackupAt: string;
-
-  lastBackupHistoryCount: number;
-
-};
-
-
-
-type ExampleGeneratedData = ExampleModeRealSnapshot;
-
-
-
 type FirstWelcomeState = {
 
   completed: boolean;
@@ -764,20 +409,6 @@ type FirstWelcomeStage = 'welcome' | 'story' | null;
 
 
 
-type ResetAction = 'settings' | 'history' | 'all';
-
-
-
-type ResetConfirmationState = {
-
-  action: ResetAction;
-
-  code: string;
-
-} | null;
-
-
-
 type OverlayBackdropProps = Omit<
 
   HTMLAttributes<HTMLDivElement>,
@@ -789,32 +420,6 @@ type OverlayBackdropProps = Omit<
   onBack: () => void;
 
 };
-
-
-
-type TrendChartSeries = {
-
-  key: 'net' | 'positive' | 'negative';
-
-  label: string;
-
-  color: string;
-
-  values: number[];
-
-};
-
-
-
-type RecentNetWorthChange = {
-
-  date: string;
-
-  amount: number;
-
-  relativeLabel: string;
-
-} | null;
 
 
 
@@ -853,866 +458,6 @@ const SECRET_CONSOLE_DEFAULT_PLACEHOLDER = '嘘...轻一点';
 const SECRET_CONSOLE_TEST_DATA_SUCCESS = '示例数据已写入真实数据';
 
 const SECRET_CONSOLE_NYAA_SUCCESS = '已解锁nyaa主题';
-
-const GLOBAL_SETTINGS_NAV_ITEMS: Array<{ id: GlobalSettingsSection; label: string }> = [
-
-  { id: 'appearance', label: '显示与界面' },
-
-  { id: 'charts', label: '图表设置' },
-
-  { id: 'search', label: '全局搜索' },
-
-  { id: 'backup', label: '数据与备份' },
-
-  { id: 'security', label: '安全' },
-
-  { id: 'about', label: '关于净流' }
-
-];
-
-const GLOBAL_SETTINGS_SEARCH_ITEMS = [
-
-  {
-
-    id: 'appearance',
-
-    title: '显示与界面',
-
-    group: '全局设置',
-
-    description: '数字正负值显示、资产统计数值类型、显示类型、紧凑数字格式与页面主题',
-
-    section: 'appearance',
-
-    keywords: [
-
-      '设置页面入口',
-
-      '功能区标题',
-
-      '外观',
-
-      '显示',
-
-      '界面',
-
-      '数字正负值显示',
-
-      '红正绿负',
-
-      '绿正红负',
-
-      '首页资产统计',
-
-      '资产统计数值类型',
-
-      '净值',
-
-      '总资产',
-
-      '显示类型',
-
-      '全称',
-
-      '缩写',
-
-      '紧凑数字格式',
-
-      '页面主题',
-
-      '浅色',
-
-      '深色',
-
-      '跟随系统',
-
-      '主题风格',
-
-      '页面位置记忆',
-
-      '全局记忆',
-
-      '覆盖后重置',
-
-      '页面位置',
-
-      '位置记忆',
-
-      '页面滚动',
-
-      '滚动位置',
-
-      '页面被覆盖',
-
-      '覆盖重置',
-
-      '堆叠组',
-
-      '展开状态',
-
-      '收起状态'
-
-    ],
-
-    pinyinKeywords: ['xian shi', 'jie mian', 'wai guan', 'zhu ti', 'ye mian wei zhi ji yi'],
-
-    pinyinInitials: ['xs', 'jm', 'wg', 'zt', 'ymwzjy']
-
-  },
-
-  {
-
-    id: 'appearance-positive-negative-color',
-
-    title: '数字正负值显示',
-
-    group: '显示与界面',
-
-    description: '红正绿负、绿正红负',
-
-    section: 'appearance',
-
-    keywords: ['数字正负值显示', '红正绿负', '绿正红负', '金额颜色', '正负值颜色'],
-
-    pinyinKeywords: ['shu zi zheng fu zhi xian shi'],
-
-    pinyinInitials: ['szzfzxs']
-
-  },
-
-  {
-
-    id: 'appearance-home-asset-stat',
-
-    title: '资产统计数值类型',
-
-    group: '显示与界面',
-
-    description: '净值、总资产、显示类型、全称、缩写、紧凑数字格式',
-
-    section: 'appearance',
-
-    keywords: ['首页资产统计', '资产统计数值类型', '净值', '总资产', '显示类型', '全称', '缩写', '紧凑数字格式'],
-
-    pinyinKeywords: ['zi chan tong ji shu zhi lei xing', 'jin zhi', 'zong zi chan'],
-
-    pinyinInitials: ['zctjszlx', 'jz', 'zzc']
-
-  },
-
-  {
-
-    id: 'appearance-theme',
-
-    title: '页面主题',
-
-    group: '显示与界面',
-
-    description: '浅色、深色、跟随系统、主题风格',
-
-    section: 'appearance',
-
-    keywords: ['页面主题', '浅色', '深色', '跟随系统', '主题风格', 'nyaa'],
-
-    pinyinKeywords: ['ye mian zhu ti', 'qian se', 'shen se', 'gen sui xi tong'],
-
-    pinyinInitials: ['ymzt', 'qs', 'ss', 'gsxt']
-
-  },
-
-  {
-
-    id: 'appearance-page-position-memory',
-
-    title: '页面位置记忆',
-
-    group: '显示与界面',
-
-    description: '切换页面保留滚动位置和堆叠组状态，页面被覆盖将重置滚动位置和堆叠组状态',
-
-    section: 'appearance',
-
-    blockId: 'global-settings-page-position-memory',
-
-    keywords: [
-
-      '页面位置记忆',
-
-      '全局记忆',
-
-      '覆盖后重置',
-
-      '页面位置',
-
-      '位置记忆',
-
-      '页面滚动',
-
-      '滚动位置',
-
-      '切换页面',
-
-      '页面被覆盖',
-
-      '覆盖重置',
-
-      '堆叠组',
-
-      '堆叠组状态',
-
-      '展开状态',
-
-      '收起状态'
-
-    ],
-
-    pinyinKeywords: [
-
-      'ye mian wei zhi ji yi',
-
-      'quan ju ji yi',
-
-      'fu gai hou chong zhi',
-
-      'ye mian wei zhi',
-
-      'wei zhi ji yi',
-
-      'ye mian gun dong',
-
-      'gun dong wei zhi',
-
-      'dui die zu'
-
-    ],
-
-    pinyinInitials: ['ymwzjy', 'qjjy', 'fghcz', 'ymwz', 'wzjy', 'ymgd', 'gdwz', 'ddz']
-
-  },
-
-  {
-
-    id: 'charts',
-
-    title: '图表设置',
-
-    group: '全局设置',
-
-    description: '图表配色、资产结构显示、资产趋势显示、自适应纵轴、横轴范围显示与点值显示',
-
-    section: 'charts',
-
-    keywords: [
-
-      '设置页面入口',
-
-      '功能区标题',
-
-      '图表',
-
-      '图表设置',
-
-      '图表配色',
-
-      '图表配色遵循',
-
-      '创建时间优先',
-
-      '占比优先',
-
-      '首页缩略图表',
-
-      '资产结构显示',
-
-      '资产趋势显示',
-
-      '全局图表控制',
-
-      '控制模式',
-
-      '平级设定',
-
-      '全局锁定',
-
-      '总资产图表设置',
-
-      '多重叠加数字',
-
-      '自适应纵轴',
-
-      '横轴范围显示',
-
-      '点值显示',
-
-      '全局账户类型图表设置',
-
-      '账户详情图表设置',
-
-      '近 1 月',
-
-      '近 3 月',
-
-      '近 6 月',
-
-      '近 1 年',
-
-      '自适应',
-
-      '最高最低',
-
-      '不显示',
-
-      '正资产',
-
-      '负资产',
-
-      '正负资产',
-
-      '净资产'
-
-    ],
-
-    pinyinKeywords: [
-
-      'tu biao',
-
-      'tu biao she zhi',
-
-      'tu biao pei se',
-
-      'zi chan jie gou xian shi',
-
-      'zi chan qu shi xian shi',
-
-      'duo chong die jia shu zi',
-
-      'zi shi ying zong zhou',
-
-      'heng zhou fan wei xian shi',
-
-      'dian zhi xian shi',
-
-      'jin yi yue',
-
-      'jin san yue',
-
-      'jin liu yue',
-
-      'jin yi nian'
-
-    ],
-
-    pinyinInitials: ['tb', 'tbsz', 'tbps', 'zcjgxs', 'zcqsxs', 'dcdjsz', 'zsyzz', 'hzfwxs', 'dzxs', 'jyy', 'jsy', 'jly', 'jyn']
-
-  },
-
-  {
-
-    id: 'search-accounts',
-
-    title: '搜索账户',
-
-    group: '全局搜索',
-
-    description: '账户名称、账户类型、账户缩写与归档状态可参与搜索',
-
-    section: 'search',
-
-    keywords: ['搜索账户', '账户搜索', '账户名称', '账户类型', '账户缩写', '归档账户'],
-
-    pinyinKeywords: ['sou suo zhang hu', 'zhang hu sou suo'],
-
-    pinyinInitials: ['sszh', 'zhss']
-
-  },
-
-  {
-
-    id: 'search-history',
-
-    title: '搜索历史记录',
-
-    group: '全局搜索',
-
-    description: '历史记录日期、金额、变动类型、账户与备注可参与搜索',
-
-    section: 'search',
-
-    keywords: ['搜索历史记录', '历史记录搜索', '历史备注', '历史记录备注', '变动类型', '日期', '金额'],
-
-    pinyinKeywords: ['sou suo li shi ji lu', 'li shi ji lu sou suo'],
-
-    pinyinInitials: ['sslsjl', 'lsjlss']
-
-  },
-
-  {
-
-    id: 'search-snapshots',
-
-    title: '搜索快照',
-
-    group: '全局搜索',
-
-    description: '快照时间、方式、历史记录数量与增量记录数量可参与搜索',
-
-    section: 'search',
-
-    keywords: ['搜索快照', '快照搜索', '快照时间', '手动快照', '自动快照', '增量记录'],
-
-    pinyinKeywords: ['sou suo kuai zhao', 'kuai zhao sou suo'],
-
-    pinyinInitials: ['sskz', 'kzss']
-
-  },
-
-  {
-
-    id: 'search-settings-items',
-
-    title: '搜索设置项',
-
-    group: '全局搜索',
-
-    description: '设置页面入口、功能区标题、具体设置项名称与可见选项关键词可参与搜索',
-
-    section: 'search',
-
-    keywords: ['搜索设置项', '设置项搜索', '设置页面入口', '功能区标题', '具体设置项', '可见选项关键词'],
-
-    pinyinKeywords: ['sou suo she zhi xiang', 'she zhi xiang sou suo'],
-
-    pinyinInitials: ['ssszx', 'szxss']
-
-  },
-
-  {
-
-    id: 'search',
-
-    title: '全局搜索',
-
-    group: '全局设置',
-
-    description: '搜索账户、搜索历史记录、搜索快照、搜索设置项与搜索逻辑',
-
-    section: 'search',
-
-    keywords: [
-
-      '设置页面入口',
-
-      '功能区标题',
-
-      '搜索设置',
-
-      '搜索账户',
-
-      '搜索历史记录',
-
-      '搜索快照',
-
-      '搜索设置项',
-
-      '搜索逻辑',
-
-      '关键词匹配',
-
-      '只显示命中',
-
-      '允许推断',
-
-      '关闭推断',
-
-      '拼音',
-
-      '首字母'
-
-    ],
-
-    pinyinKeywords: ['quan ju sou suo', 'quan ji sou suo', 'sou suo'],
-
-    pinyinInitials: ['qjss', 'ss']
-
-  },
-
-  {
-
-    id: 'backup-user-settings',
-
-    title: '用户配置文件',
-
-    group: '数据与备份',
-
-    description: '导出用户配置文件、导入用户配置文件',
-
-    section: 'backup',
-
-    keywords: ['用户配置文件', '导出用户配置文件', '导入用户配置文件', '配置备份', '配置恢复'],
-
-    pinyinKeywords: ['yong hu pei zhi wen jian', 'dao chu yong hu pei zhi wen jian', 'dao ru yong hu pei zhi wen jian'],
-
-    pinyinInitials: ['yhpzwj', 'dcyhpzwj', 'dryhpzwj']
-
-  },
-
-  {
-
-    id: 'backup-history-snapshot',
-
-    title: '历史记录备份',
-
-    group: '数据与备份',
-
-    description: '快照、跳转至快照、手动快照与自动快照',
-
-    section: 'backup',
-
-    keywords: ['历史记录备份', '快照', '跳转至快照', '手动快照', '自动快照'],
-
-    pinyinKeywords: ['li shi ji lu bei fen', 'kuai zhao'],
-
-    pinyinInitials: ['lsjlbf', 'kz']
-
-  },
-
-  {
-
-    id: EXAMPLE_DATA_SETTINGS_ID,
-
-    title: '示例数据',
-
-    group: '数据与备份',
-
-    description: '进入示例模式、切换示例模板、退出示例模式',
-
-    section: EXAMPLE_DATA_SETTINGS_SECTION,
-
-    blockId: EXAMPLE_DATA_SETTINGS_BLOCK_ID,
-
-    keywords: ['示例数据', '进入示例模式', '切换示例模板', '退出示例模式', '示例模板'],
-
-    pinyinKeywords: ['shi li shu ju', 'shi li mo shi', 'shi li mo ban'],
-
-    pinyinInitials: ['slsj', 'slms', 'slmb']
-
-  },
-
-  {
-
-    id: 'backup-reset',
-
-    title: '重置功能',
-
-    group: '数据与备份',
-
-    description: '清除用户配置、清除历史记录、清除所有',
-
-    section: 'backup',
-
-    keywords: ['重置功能', '清除用户配置', '清除历史记录', '清除所有', '重置', '清除'],
-
-    pinyinKeywords: ['chong zhi gong neng', 'qing chu yong hu pei zhi', 'qing chu li shi ji lu', 'qing chu suo you'],
-
-    pinyinInitials: ['czgn', 'qcyhpz', 'qclsjl', 'qcsy']
-
-  },
-
-  {
-
-    id: 'backup',
-
-    title: '数据与备份',
-
-    group: '全局设置',
-
-    description: '用户配置文件、导出导入、历史记录备份、快照、示例数据与重置功能',
-
-    section: 'backup',
-
-    keywords: [
-
-      '设置页面入口',
-
-      '功能区标题',
-
-      '数据',
-
-      '备份',
-
-      '用户配置文件',
-
-      '导出用户配置文件',
-
-      '导入用户配置文件',
-
-      '历史记录备份',
-
-      '快照',
-
-      '跳转至快照',
-
-      '示例数据',
-
-      '进入示例模式',
-
-      '切换示例模板',
-
-      '退出示例模式',
-
-      '重置功能',
-
-      '清除用户配置',
-
-      '清除历史记录',
-
-      '清除所有',
-
-      '导入',
-
-      '导出'
-
-    ],
-
-    pinyinKeywords: ['shu ju', 'bei fen', 'kuai zhao', 'dao ru', 'dao chu'],
-
-    pinyinInitials: ['sj', 'bf', 'kz', 'dr', 'dc']
-
-  },
-
-  {
-
-    id: 'security-password-protection',
-
-    title: '登录密码保护',
-
-    group: '安全',
-
-    description: '是否开启登陆密码保护、设置登录密码、修改登录密码、自动锁定时间',
-
-    section: 'security',
-
-    keywords: ['登录密码保护', '登陆密码保护', '是否开启登陆密码保护', '设置登录密码', '修改登录密码', '自动锁定时间'],
-
-    pinyinKeywords: ['deng lu mi ma bao hu', 'she zhi deng lu mi ma', 'zi dong suo ding shi jian'],
-
-    pinyinInitials: ['dlmmbh', 'szdlmm', 'zdsdsj']
-
-  },
-
-  {
-
-    id: 'security-snapshot-encryption',
-
-    title: '快照加密',
-
-    group: '安全',
-
-    description: '是否启用快照加密、设置快照密码、修改快照密码',
-
-    section: 'security',
-
-    keywords: ['快照加密', '是否启用快照加密', '设置快照密码', '修改快照密码', '快照密码'],
-
-    pinyinKeywords: ['kuai zhao jia mi', 'she zhi kuai zhao mi ma', 'xiu gai kuai zhao mi ma'],
-
-    pinyinInitials: ['kzjm', 'szkzmm', 'xgkzmm']
-
-  },
-
-  {
-
-    id: 'security',
-
-    title: '安全',
-
-    group: '全局设置',
-
-    description: '登录密码保护、设置登录密码、自动锁定时间、快照加密与设置快照密码',
-
-    section: 'security',
-
-    keywords: [
-
-      '设置页面入口',
-
-      '功能区标题',
-
-      '安全',
-
-      '登陆密码保护',
-
-      '登录密码保护',
-
-      '是否开启登陆密码保护',
-
-      '设置登录密码',
-
-      '修改登录密码',
-
-      '自动锁定时间',
-
-      '快照加密',
-
-      '是否启用快照加密',
-
-      '设置快照密码',
-
-      '修改快照密码',
-
-      '密码',
-
-      '自动锁定',
-
-      '加密'
-
-    ],
-
-    pinyinKeywords: ['an quan', 'mi ma', 'zi dong suo ding', 'jia mi'],
-
-    pinyinInitials: ['aq', 'mm', 'zdsd', 'jm']
-
-  },
-
-  {
-
-    id: 'about-software',
-
-    title: '软件信息',
-
-    group: '关于净流',
-
-    description: '净流、NetraFlow、当前版本',
-
-    section: 'about',
-
-    keywords: ['软件信息', '净流', 'NetraFlow', '当前版本', '版本'],
-
-    pinyinKeywords: ['ruan jian xin xi', 'jing liu', 'ban ben'],
-
-    pinyinInitials: ['rjxx', 'jl', 'bb']
-
-  },
-
-  {
-
-    id: 'about-license-font',
-
-    title: '开源许可',
-
-    group: '关于净流',
-
-    description: '字体、Noto Sans、字体许可',
-
-    section: 'about',
-
-    keywords: ['开源许可', '字体', 'Noto Sans', '字体许可', '许可'],
-
-    pinyinKeywords: ['kai yuan xu ke', 'zi ti', 'xu ke'],
-
-    pinyinInitials: ['kyxk', 'zt', 'xk']
-
-  },
-
-  {
-
-    id: 'about-contact-memo',
-
-    title: '获取信息',
-
-    group: '关于净流',
-
-    description: 'Bilibili、GitHub Releases',
-
-    section: 'about',
-
-    keywords: ['获取信息', 'Bilibili', 'GitHub', 'Releases', '发布页', '版本发布'],
-
-    pinyinKeywords: ['huo qu xin xi', 'github', 'fa bu ye'],
-
-    pinyinInitials: ['hqxx', 'github', 'fby']
-
-  },
-
-  {
-
-    id: 'about',
-
-    title: '关于净流',
-
-    group: '全局设置',
-
-    description: '软件信息、开源许可、字体与获取信息',
-
-    section: 'about',
-
-    keywords: [
-
-      '设置页面入口',
-
-      '功能区标题',
-
-      '关于',
-
-      '关于净流',
-
-      '软件信息',
-
-      '净流',
-
-      'NetraFlow',
-
-      '版本',
-
-      '当前版本',
-
-      '开源许可',
-
-      '字体',
-
-      'Noto Sans',
-
-      '获取信息',
-
-      'Bilibili',
-
-      'GitHub',
-
-      'Releases',
-
-      '发布页',
-
-      '许可'
-
-    ],
-
-    pinyinKeywords: ['guan yu', 'ruan jian xin xi', 'zi ti', 'xu ke', 'huo qu xin xi', 'ban ben'],
-
-    pinyinInitials: ['gy', 'rjxx', 'zt', 'xk', 'hqxx', 'bb']
-
-  }
-
-] satisfies SettingsSearchItem[];
-
-const isGlobalSettingsSection = (value: string): value is GlobalSettingsSection =>
-
-  GLOBAL_SETTINGS_NAV_ITEMS.some((item) => item.id === value);
-
-const DEFAULT_AUTO_BACKUP_SETTINGS: AutoBackupSettings = {
-
-  enabled: false,
-
-  cycle: {
-
-    value: 7,
-
-    unit: 'day'
-
-  },
-
-  directory: ''
-
-};
 
 const DEFAULT_ASSET_CHART_SETTINGS: AssetChartSettings = {
 
@@ -1936,14 +681,6 @@ const createId = (prefix: string) => {
 
 
 
-function randomIntBetween(min: number, max: number): number {
-
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-
-}
-
-
-
 const useOverlayBack = <T extends HTMLElement>(handleBack: () => void) => {
 
   const mouseDownStartedOnBackdropRef = useRef<{ x: number; y: number } | null>(null);
@@ -2029,10 +766,6 @@ const isTextEditingElement = (element: Element | null): element is HTMLElement =
   );
 
 };
-
-
-
-let hasCheckedStartupAutoBackup = false;
 
 
 
@@ -2247,396 +980,6 @@ const readStorageJson = (key: string) => {
     return { exists: true, parsed: false, value: undefined, raw };
 
   }
-
-};
-
-
-
-const isBackupCycleUnit = (value: unknown): value is BackupCycleUnit =>
-
-  value === 'day' || value === 'week' || value === 'month';
-
-
-
-const normalizeBackupCycle = (value: unknown): BackupCycle => {
-
-  if (!isPlainObject(value)) {
-
-    return { ...DEFAULT_AUTO_BACKUP_SETTINGS.cycle };
-
-  }
-
-
-
-  const rawValue = value.value;
-
-  const rawUnit = value.unit;
-
-  const cycleValue =
-
-    typeof rawValue === 'number' && Number.isFinite(rawValue)
-
-      ? Math.max(1, Math.floor(rawValue))
-
-      : DEFAULT_AUTO_BACKUP_SETTINGS.cycle.value;
-
-
-
-  return {
-
-    value: cycleValue,
-
-    unit: isBackupCycleUnit(rawUnit) ? rawUnit : DEFAULT_AUTO_BACKUP_SETTINGS.cycle.unit
-
-  };
-
-};
-
-
-
-const isBackupMethod = (value: unknown): value is BackupMethod =>
-
-  value === 'manual' || value === 'auto';
-
-
-
-const normalizeBackupRecords = (value: unknown): BackupRecord[] => {
-
-  if (!Array.isArray(value)) {
-
-    return [];
-
-  }
-
-
-
-  return value
-
-    .flatMap((record): BackupRecord[] => {
-
-      if (!isPlainObject(record)) {
-
-        return [];
-
-      }
-
-
-
-      const backedUpAt =
-
-        getStringField(record, ['backedUpAt', 'backupAt', 'exportedAt', 'time']) ?? '';
-
-
-
-      if (getValidTimestamp(backedUpAt) === null) {
-
-        return [];
-
-      }
-
-
-
-      const rawHistoryCount = getNumberField(record, ['historyCount', 'backupHistoryCount']);
-
-      const rawIncrementCount = getNumberField(record, [
-
-        'incrementCount',
-
-        'incrementalCount',
-
-        'deltaCount'
-
-      ]);
-
-
-
-      return [
-
-        {
-
-          id: getStringField(record, ['id', 'recordId']) ?? createId('backup-record'),
-
-          backedUpAt,
-
-          historyCount:
-
-            rawHistoryCount === undefined ? 0 : Math.max(0, Math.floor(rawHistoryCount)),
-
-          incrementCount:
-
-            rawIncrementCount === undefined ? 0 : Math.max(0, Math.floor(rawIncrementCount)),
-
-          method: isBackupMethod(record.method) ? record.method : 'manual'
-
-        }
-
-      ];
-
-    })
-
-    .sort((left, right) => {
-
-      const leftTime = getValidTimestamp(left.backedUpAt) ?? 0;
-
-      const rightTime = getValidTimestamp(right.backedUpAt) ?? 0;
-
-
-
-      return rightTime - leftTime;
-
-    });
-
-};
-
-
-
-const mergeBackupRecords = (
-
-  currentRecords: BackupRecord[],
-
-  importedRecords: BackupRecord[]
-
-) => {
-
-  const recordsById = new Map<string, BackupRecord>();
-
-
-
-  currentRecords.forEach((record) => recordsById.set(record.id, record));
-
-  importedRecords.forEach((record) => {
-
-    const existingRecord = recordsById.get(record.id);
-
-    recordsById.set(record.id, existingRecord ? { ...existingRecord, ...record } : record);
-
-  });
-
-
-
-  return Array.from(recordsById.values()).sort((left, right) => {
-
-    const leftTime = getValidTimestamp(left.backedUpAt) ?? 0;
-
-    const rightTime = getValidTimestamp(right.backedUpAt) ?? 0;
-
-
-
-    return rightTime - leftTime;
-
-  });
-
-};
-
-
-
-const loadBackupRecords = () => {
-
-  const storedRecords = readStorageJson(BACKUP_RECORDS_STORAGE_KEY);
-
-
-
-  return storedRecords.parsed ? normalizeBackupRecords(storedRecords.value) : [];
-
-};
-
-
-
-const saveBackupRecords = (records: BackupRecord[]) => {
-
-  nfStorage.setItem(
-
-    BACKUP_RECORDS_STORAGE_KEY,
-
-    JSON.stringify(normalizeBackupRecords(records))
-
-  );
-
-};
-
-
-
-const getBackupCycleDays = (cycle: BackupCycle) => {
-
-  const unitMultiplier = cycle.unit === 'month' ? 30 : cycle.unit === 'week' ? 7 : 1;
-
-
-
-  return Math.max(1, Math.floor(cycle.value)) * unitMultiplier;
-
-};
-
-
-
-const hasBackupRecordMissingIncrementCount = () => {
-
-  const storedRecords = readStorageJson(BACKUP_RECORDS_STORAGE_KEY);
-
-
-
-  return (
-
-    storedRecords.parsed &&
-
-    Array.isArray(storedRecords.value) &&
-
-    storedRecords.value.some(
-
-      (record) => isPlainObject(record) && !('incrementCount' in record)
-
-    )
-
-  );
-
-};
-
-
-
-const loadLastBackupAt = () => {
-
-  const value = nfStorage.getItem(LAST_BACKUP_STORAGE_KEY);
-
-
-
-  return getValidTimestamp(value) === null ? '' : value ?? '';
-
-};
-
-
-
-const saveLastBackupAt = (time: string) => {
-
-  nfStorage.setItem(LAST_BACKUP_STORAGE_KEY, time);
-
-};
-
-
-
-const getStoredNumber = (key: string) => {
-
-  const storedValue = readStorageJson(key);
-
-  const value = storedValue.parsed ? storedValue.value : storedValue.raw;
-
-  const numberValue =
-
-    typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
-
-
-
-  return Number.isFinite(numberValue) ? numberValue : null;
-
-};
-
-
-
-const loadLastBackupHistoryCount = (currentHistoryCount: number) => {
-
-  const storedCount = getStoredNumber(LAST_BACKUP_HISTORY_COUNT_STORAGE_KEY);
-
-
-
-  if (storedCount !== null) {
-
-    return Math.max(0, Math.floor(storedCount));
-
-  }
-
-
-
-  const latestBackupRecord = loadBackupRecords()[0];
-
-
-
-  if (latestBackupRecord) {
-
-    return latestBackupRecord.historyCount;
-
-  }
-
-
-
-  return loadLastBackupAt() ? currentHistoryCount : 0;
-
-};
-
-
-
-const saveLastBackupHistoryCount = (count: number) => {
-
-  nfStorage.setItem(
-
-    LAST_BACKUP_HISTORY_COUNT_STORAGE_KEY,
-
-    JSON.stringify(Math.max(0, Math.floor(count)))
-
-  );
-
-};
-
-
-
-const normalizeAutoBackupSettings = (value: unknown): AutoBackupSettings => {
-
-  if (!isPlainObject(value)) {
-
-    return DEFAULT_AUTO_BACKUP_SETTINGS;
-
-  }
-
-
-
-  return {
-
-    enabled:
-
-      typeof value.enabled === 'boolean'
-
-        ? value.enabled
-
-        : DEFAULT_AUTO_BACKUP_SETTINGS.enabled,
-
-    cycle: normalizeBackupCycle(value.cycle),
-
-    directory:
-
-      typeof value.directory === 'string'
-
-        ? value.directory
-
-        : DEFAULT_AUTO_BACKUP_SETTINGS.directory
-
-  };
-
-};
-
-
-
-const loadAutoBackupSettings = () => {
-
-  const storedSettings = readStorageJson(AUTO_BACKUP_SETTINGS_STORAGE_KEY);
-
-
-
-  return storedSettings.parsed
-
-    ? normalizeAutoBackupSettings(storedSettings.value)
-
-    : DEFAULT_AUTO_BACKUP_SETTINGS;
-
-};
-
-
-
-const saveAutoBackupSettings = (settings: AutoBackupSettings) => {
-
-  nfStorage.setItem(
-
-    AUTO_BACKUP_SETTINGS_STORAGE_KEY,
-
-    JSON.stringify(normalizeAutoBackupSettings(settings))
-
-  );
 
 };
 
@@ -3374,28 +1717,6 @@ const getSignedAmountTone = (
 
 
 
-const areBackupCyclesEqual = (left: BackupCycle, right: BackupCycle) =>
-
-  left.value === right.value && left.unit === right.unit;
-
-
-
-const areAutoBackupSettingsEqual = (
-
-  left: AutoBackupSettings,
-
-  right: AutoBackupSettings
-
-) =>
-
-  left.enabled === right.enabled &&
-
-  left.directory === right.directory &&
-
-  areBackupCyclesEqual(left.cycle, right.cycle);
-
-
-
 const storedValueLooksNonEmpty = (raw: string | null) => {
 
   if (raw === null) {
@@ -3411,16 +1732,6 @@ const storedValueLooksNonEmpty = (raw: string | null) => {
   return trimmedRaw !== '' && trimmedRaw !== '[]';
 
 };
-
-
-
-const getStatAmount = (nature: AccountTypeNature, amount: number) =>
-
-  nature === 'liability' ? -Math.abs(amount) : Math.abs(amount);
-
-
-
-const toEditableAmount = (amount: number) => Math.abs(amount);
 
 
 
@@ -4305,84 +2616,6 @@ const saveAppData = (
 
 
 
-const cloneBackupRecords = (records: BackupRecord[]) =>
-
-  records.map((record) => ({ ...record }));
-
-
-
-const saveEmptyAssetData = () => {
-
-  nfStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify([]));
-
-  nfStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify([]));
-
-  nfStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify([]));
-
-  nfStorage.setItem(BACKUP_RECORDS_STORAGE_KEY, JSON.stringify([]));
-
-  nfStorage.removeItem(LAST_BACKUP_STORAGE_KEY);
-
-  nfStorage.setItem(LAST_BACKUP_HISTORY_COUNT_STORAGE_KEY, JSON.stringify(0));
-
-  [
-
-    LEGACY_ACCOUNTS_STORAGE_KEY,
-
-    LEGACY_ACCOUNT_TYPES_STORAGE_KEY,
-
-    LEGACY_HISTORY_STORAGE_KEY,
-
-    LEGACY_ARCHIVED_ACCOUNTS_STORAGE_KEY,
-
-    LEGACY_DELETED_RECORDS_STORAGE_KEY
-
-  ].forEach((key) => nfStorage.removeItem(key));
-
-};
-
-
-
-const loadRollupImportHashes = () => {
-
-  try {
-
-    const rawValue = nfStorage.getItem(ROLLUP_IMPORT_HASHES_STORAGE_KEY);
-
-    const parsedValue = rawValue ? JSON.parse(rawValue) : [];
-
-
-
-    return Array.isArray(parsedValue)
-
-      ? parsedValue.filter((value): value is string => typeof value === 'string')
-
-      : [];
-
-  } catch {
-
-    return [];
-
-  }
-
-};
-
-
-
-const saveRollupImportHashes = (hashes: string[]) => {
-
-  nfStorage.setItem(
-
-    ROLLUP_IMPORT_HASHES_STORAGE_KEY,
-
-    JSON.stringify(Array.from(new Set(hashes)).slice(-80))
-
-  );
-
-};
-
-
-
 const createHistoryRecord = (
 
   type: HistoryType,
@@ -4431,24 +2664,6 @@ const createHistoryRecord = (
 
 
 
-const parseNonNegativeAmount = (value: string) => {
-
-  const amount = parseMoneyInput(value);
-
-  return amount !== null && amount >= 0 ? amount : null;
-
-};
-
-
-
-const isNonNegativeInput = (value: string) => isMoneyInput(value);
-
-
-
-const sanitizeNonNegativeInput = (value: string) => normalizeMoneyInput(value);
-
-
-
 const getAccountMark = (account: Account) => getAccountDisplayMark(account);
 
 
@@ -4468,72 +2683,6 @@ const getArchivedAccountRestoreTitle = (account: ArchivedAccountEntry) => {
 const getSegmentedControlStyle = (optionCount: number): CSSProperties =>
 
   ({ '--segmented-option-count': optionCount } as CSSProperties);
-
-
-
-const clampNumber = (value: number, min: number, max: number) =>
-
-  Math.min(max, Math.max(min, value));
-
-
-
-const getHistoryNetWorthDelta = (record: HistoryRecord) =>
-
-  (record.afterAmount ?? 0) - (record.beforeAmount ?? 0);
-
-
-
-const deriveRecentNetWorthChange = (history: HistoryRecord[]): RecentNetWorthChange => {
-
-  const validRecords = history
-
-    .map((record) => ({
-
-      record,
-
-      timestamp: getHistoryTimestamp(record),
-
-      date: getHistoryDateKey(record.time)
-
-    }))
-
-    .filter((entry) => entry.timestamp > 0 && entry.date);
-
-
-
-  if (validRecords.length === 0) {
-
-    return null;
-
-  }
-
-
-
-  const latestDate = validRecords.reduce((latest, entry) =>
-
-    entry.timestamp > latest.timestamp ? entry : latest
-
-  ).date;
-
-  const amount = validRecords
-
-    .filter((entry) => entry.date === latestDate)
-
-    .reduce((sum, entry) => sum + getHistoryNetWorthDelta(entry.record), 0);
-
-
-
-  return {
-
-    date: latestDate,
-
-    amount,
-
-    relativeLabel: getRelativeDateLabel(latestDate)
-
-  };
-
-};
 
 
 
@@ -4570,22 +2719,6 @@ const getPageCoverage = (
   return panel === 'main' ? 'full' : 'right-panel-only';
 
 };
-
-
-
-const getGlobalAccountDetailChartSettings = (
-
-  trendSettings: AssetChartSettings['trend']
-
-): AccountDetailChartSettings => ({
-
-  adaptiveYAxis: trendSettings.adaptiveYAxis,
-
-  xAxisRange: trendSettings.xAxisRange,
-
-  pointValueMode: trendSettings.pointValueMode
-
-});
 
 
 
@@ -4626,86 +2759,6 @@ const renderWindowControlIcon = (
     />
 
   );
-
-};
-
-
-
-const getAxisLabelIndexes = (count: number, range: TrendXAxisRange, width: number) => {
-
-  return getChartAxisLabelIndexes(count, range, width);
-
-};
-
-
-
-const getValueLabelIndexes = (
-
-  series: TrendChartSeries,
-
-  mode: TrendPointValueMode,
-
-  width: number
-
-) => {
-
-  return getChartValueLabelIndexes(series.values, mode, width);
-
-};
-
-
-
-const useMeasuredWidth = <T extends HTMLElement>() => {
-
-  const ref = useRef<T | null>(null);
-
-  const [width, setWidth] = useState(0);
-
-
-
-  useEffect(() => {
-
-    const element = ref.current;
-
-
-
-    if (!element) {
-
-      return;
-
-    }
-
-
-
-    const updateWidth = () => setWidth(element.getBoundingClientRect().width);
-
-    updateWidth();
-
-
-
-    if (typeof ResizeObserver === 'undefined') {
-
-      window.addEventListener('resize', updateWidth);
-
-      return () => window.removeEventListener('resize', updateWidth);
-
-    }
-
-
-
-    const observer = new ResizeObserver(updateWidth);
-
-    observer.observe(element);
-
-
-
-    return () => observer.disconnect();
-
-  }, []);
-
-
-
-  return [ref, width] as const;
 
 };
 
@@ -4789,932 +2842,6 @@ function AccountTrendPanel({
 
 
 
-function GroupDetailStructurePanel({
-
-  data
-
-}: {
-
-  data: GroupDetailStructureData;
-
-}) {
-
-  const [hoveredSeriesId, setHoveredSeriesId] = useState<string | null>(null);
-
-  const legendRows = data.segments.map((segment) => ({
-
-    ...segment,
-
-    percent: formatChartPercent(segment.amount, data.total)
-
-  }));
-
-  const legendItems: ChartLegendItemData[] = legendRows.map((segment) => ({
-
-    id: segment.id,
-
-    label: segment.label,
-
-    color: segment.color,
-
-    value: formatChartNumber(segment.amount),
-
-    detail: segment.percent,
-
-    archived: segment.archived
-
-  }));
-
-
-
-  return (
-
-    <section className="asset-chart-panel">
-
-      <header className="asset-chart-panel__header chart-visual-text">
-
-        <div>
-
-          <h2>账户占比</h2>
-
-        </div>
-
-      </header>
-
-
-
-      <div className="asset-structure-detail">
-
-        <div className="asset-structure-graphic">
-
-          <svg viewBox="0 0 120 120" role="img">
-
-            <circle cx="60" cy="60" r="38" fill="var(--chart-center-bg)" />
-
-            <PieSegments
-
-              segments={data.segments}
-
-              total={data.total}
-
-              cx={60}
-
-              cy={60}
-
-              radius={34}
-
-              activeSegmentId={hoveredSeriesId}
-
-              onSegmentHover={setHoveredSeriesId}
-
-              formatMoney={formatChartNumber}
-
-            />
-
-            {data.total <= 0 ? (
-
-              <text
-
-                x="60"
-
-                y="62"
-
-                textAnchor="middle"
-
-                dominantBaseline="middle"
-
-                fill="var(--chart-axis-text)"
-
-                fontSize="8.5"
-
-                fontWeight="700"
-
-                className="chart-svg-text"
-
-              >
-
-                暂无占比
-
-              </text>
-
-            ) : null}
-
-          </svg>
-
-        </div>
-
-        <ChartLegendList
-
-          items={legendItems}
-
-          emptyMessage="暂无账户占比"
-
-          activeId={hoveredSeriesId}
-
-          onActiveIdChange={setHoveredSeriesId}
-
-        />
-
-      </div>
-
-    </section>
-
-  );
-
-}
-
-
-
-const getGroupDetailTrendBoundaryMessage = (data: GroupDetailTrendData) => {
-
-  if (data.dates.length < 2 || data.series.length === 0) {
-
-    return '暂无足够数据';
-
-  }
-
-
-
-  if (data.totals.every((value) => value === 0)) {
-
-    return '当前趋势为 0';
-
-  }
-
-
-
-  return null;
-
-};
-
-
-
-function GroupDetailTrendChart({
-
-  data,
-
-  settings,
-
-  activeSeriesId,
-
-  onSeriesHover,
-
-  detailMode = false,
-
-  onDetailModeChange
-
-}: {
-
-  data: GroupDetailTrendData;
-
-  settings: CategoryDetailChartSettings;
-
-  activeSeriesId?: string | null;
-
-  onSeriesHover?: (id: string | null) => void;
-
-  detailMode?: boolean;
-
-  onDetailModeChange?: (enabled: boolean) => void;
-
-}) {
-
-  const [containerRef, measuredWidth] = useMeasuredWidth<HTMLDivElement>();
-
-  const [detailIndex, setDetailIndex] = useState<number | null>(null);
-
-  const message = getGroupDetailTrendBoundaryMessage(data);
-
-  const densityWidth = measuredWidth || 620;
-
-  const isDetailMode = detailMode;
-
-  const chartActiveSeriesId = isDetailMode ? null : activeSeriesId;
-
-
-
-  useEffect(() => {
-
-    setDetailIndex(null);
-
-  }, [isDetailMode, data.dates, data.pointKinds]);
-
-
-
-  if (message) {
-
-    return (
-
-      <div ref={containerRef} className="asset-trend-chart is-empty">
-
-        <span className="chart-visual-text">{message}</span>
-
-      </div>
-
-    );
-
-  }
-
-
-
-  const viewWidth = 640;
-
-  const viewHeight = 300;
-
-  const padding = { top: 28, right: 32, bottom: 46, left: 56 };
-
-  const plotWidth = viewWidth - padding.left - padding.right;
-
-  const plotHeight = viewHeight - padding.top - padding.bottom;
-
-  const layers = buildSteppedStackLayers(data.series);
-
-  const yScale = getZeroAnchoredStackedYAxisScale(
-
-    data.totals,
-
-    isPositiveNature(data.nature) ? 'positive' : 'negative'
-
-  );
-
-  const [yMin, yMax] = yScale.domain;
-
-
-
-  const getX = (index: number) =>
-
-    padding.left + (data.dates.length === 1 ? 0 : (index / (data.dates.length - 1)) * plotWidth);
-
-  const getY = (value: number) =>
-
-    padding.top + (1 - (value - yMin) / (yMax - yMin)) * plotHeight;
-
-  const getValueLabelLayout = (index: number, value: number) =>
-
-    getChartValueLabelLayout({
-
-      pointX: getX(index),
-
-      pointY: getY(value),
-
-      plotLeft: padding.left,
-
-      plotTop: padding.top,
-
-      plotWidth,
-
-      plotHeight,
-
-      preferBelow: value < 0,
-
-      labelWidth: 70
-
-    });
-
-  const axisLabelIndexes = getAxisLabelIndexes(data.dates.length, settings.xAxisRange, densityWidth);
-
-  const yAxisLabels = yScale.ticks;
-
-  const valueLabelIndexes = getValueLabelIndexes(
-
-    {
-
-      key: 'net',
-
-      label: '合计',
-
-      color: CHART_COLORS.netLine,
-
-      values: data.totals
-
-    },
-
-    settings.pointValueMode,
-
-    densityWidth
-
-  );
-
-  const detailPointProxies = data.dates.map((_, index) => ({
-
-    kind: data.pointKinds[index]
-
-  }));
-
-  const updateDetailIndexFromMouse = (event: MouseEvent<SVGSVGElement>) => {
-
-    if (!isDetailMode) {
-
-      return;
-
-    }
-
-
-
-    const bounds = event.currentTarget.getBoundingClientRect();
-
-    const cursorX = ((event.clientX - bounds.left) / Math.max(bounds.width, 1)) * viewWidth;
-
-    const cursorY = ((event.clientY - bounds.top) / Math.max(bounds.height, 1)) * viewHeight;
-
-
-
-    if (
-
-      cursorX < padding.left ||
-
-      cursorX > padding.left + plotWidth ||
-
-      cursorY < padding.top ||
-
-      cursorY > padding.top + plotHeight
-
-    ) {
-
-      setDetailIndex(null);
-
-      return;
-
-    }
-
-
-
-    const nearestIndex = getNearestChangeDatePointIndex(detailPointProxies, cursorX, getX);
-
-    setDetailIndex(nearestIndex >= 0 ? nearestIndex : null);
-
-  };
-
-  const toggleDetailMode = () => {
-
-    onSeriesHover?.(null);
-
-    setDetailIndex(null);
-
-    onDetailModeChange?.(!isDetailMode);
-
-  };
-
-  const detailValue = detailIndex === null ? 0 : data.totals[detailIndex] ?? 0;
-
-  const detailX = detailIndex === null ? 0 : getX(detailIndex);
-
-  const detailY = detailIndex === null ? 0 : getY(detailValue);
-
-  const detailColor = CHART_COLORS.netLine;
-
-  const detailBubbleWidth = 116;
-
-  const detailBubbleX =
-
-    detailIndex === null
-
-      ? 0
-
-      : clampNumber(
-
-          detailX + (detailX > viewWidth - detailBubbleWidth - 14 ? -detailBubbleWidth - 10 : 10),
-
-          padding.left,
-
-          viewWidth - detailBubbleWidth - 4
-
-        );
-
-  const detailBubbleY =
-
-    detailIndex === null
-
-      ? 0
-
-      : clampNumber(detailY - 30, padding.top + 4, padding.top + plotHeight - 28);
-
-
-
-  return (
-
-    <div ref={containerRef} className="asset-trend-chart">
-
-      <svg
-
-        viewBox={`0 0 ${viewWidth} ${viewHeight}`}
-
-        role="img"
-
-        onDoubleClick={toggleDetailMode}
-
-        onMouseMove={isDetailMode ? updateDetailIndexFromMouse : undefined}
-
-        onMouseLeave={() => {
-
-          setDetailIndex(null);
-
-          if (!isDetailMode) {
-
-            onSeriesHover?.(null);
-
-          }
-
-        }}
-
-      >
-
-        <line
-
-          x1={padding.left}
-
-          y1={padding.top}
-
-          x2={padding.left}
-
-          y2={padding.top + plotHeight}
-
-          stroke="var(--chart-axis-line)"
-
-        />
-
-        <line
-
-          x1={padding.left}
-
-          y1={getY(0)}
-
-          x2={padding.left + plotWidth}
-
-          y2={getY(0)}
-
-          stroke="var(--chart-axis-line)"
-
-        />
-
-        {yAxisLabels.map((value) => {
-
-          const y = getY(value);
-
-
-
-          return (
-
-            <g key={value}>
-
-              <line
-
-                x1={padding.left}
-
-                y1={y}
-
-                x2={padding.left + plotWidth}
-
-                y2={y}
-
-                stroke="var(--chart-grid-line)"
-
-              />
-
-              <text
-
-                x={padding.left - 8}
-
-                y={y + 3}
-
-                textAnchor="end"
-
-                fill="var(--chart-axis-text)"
-
-                fontSize="10"
-
-                className="chart-svg-text"
-
-              >
-
-                {formatChartNumber(value)}
-
-              </text>
-
-            </g>
-
-          );
-
-        })}
-
-        {axisLabelIndexes.map((index) => (
-
-          <text
-
-            key={data.dates[index]}
-
-            x={getX(index)}
-
-            y={viewHeight - 14}
-
-            textAnchor="middle"
-
-            fill="var(--chart-axis-text)"
-
-            fontSize="10"
-
-            className="chart-svg-text"
-
-          >
-
-            {data.dates[index].slice(5)}
-
-          </text>
-
-        ))}
-
-        {layers.map((layer) => {
-
-          const isActive = chartActiveSeriesId === layer.series.id;
-
-          const isDimmed = Boolean(chartActiveSeriesId && chartActiveSeriesId !== layer.series.id);
-
-          const areaPath = createSteppedAreaPath(layer.upperValues, layer.lowerValues, getX, getY);
-
-          const horizontalPath = createSteppedHorizontalLinePath(layer.upperValues, getX, getY);
-
-          const verticalPath = createSteppedVerticalLinePath(layer.upperValues, getX, getY);
-
-
-
-          return (
-
-            <g key={layer.series.id}>
-
-              <path
-
-                d={areaPath}
-
-                fill={layer.series.color}
-
-                fillOpacity={isActive ? 0.56 : isDimmed ? 0.22 : 0.38}
-
-                stroke="none"
-
-                className={getInteractiveChartClassName(
-
-                  'chart-shape chart-shape--stacked-area',
-
-                  layer.series.id,
-
-                  chartActiveSeriesId
-
-                )}
-
-                onMouseEnter={() => {
-
-                  if (!isDetailMode) {
-
-                    onSeriesHover?.(layer.series.id);
-
-                  }
-
-                }}
-
-                onMouseLeave={() => {
-
-                  if (!isDetailMode) {
-
-                    onSeriesHover?.(null);
-
-                  }
-
-                }}
-
-              >
-
-                <title>{getArchivedChartTooltipLabel(layer.series.label, layer.series.archived)}</title>
-
-              </path>
-
-              <path
-
-                d={horizontalPath}
-
-                fill="none"
-
-                stroke={layer.series.color}
-
-                strokeWidth={isActive ? 2 : 1.35}
-
-                strokeOpacity={isActive ? 0.92 : isDimmed ? 0.42 : 0.76}
-
-                strokeLinecap="butt"
-
-                pointerEvents="none"
-
-                className={getInteractiveChartClassName(
-
-                  'chart-series-line chart-series-line--stacked-boundary',
-
-                  layer.series.id,
-
-                  chartActiveSeriesId
-
-                )}
-
-              />
-
-              <path
-
-                d={verticalPath}
-
-                fill="none"
-
-                stroke={layer.series.color}
-
-                strokeWidth={isActive ? 1.8 : 1.2}
-
-                strokeOpacity={isActive ? 0.5 : isDimmed ? 0.16 : 0.3}
-
-                strokeLinecap="butt"
-
-                pointerEvents="none"
-
-                className={getInteractiveChartClassName(
-
-                  'chart-series-line chart-series-line--stacked-boundary',
-
-                  layer.series.id,
-
-                  chartActiveSeriesId
-
-                )}
-
-              />
-
-            </g>
-
-          );
-
-        })}
-
-        {valueLabelIndexes.map((index) => {
-
-          const value = data.totals[index];
-
-          const labelLayout = getValueLabelLayout(index, value);
-
-
-
-          return (
-
-            <text
-
-              key={`group-total-value-${data.dates[index]}`}
-
-              x={labelLayout.x}
-
-              y={labelLayout.y}
-
-              textAnchor={labelLayout.textAnchor}
-
-              fill="var(--chart-axis-text)"
-
-              fontSize="10"
-
-              fontWeight="700"
-
-              className="chart-svg-text chart-value-label"
-
-            >
-
-              {formatChartNumber(value)}
-
-            </text>
-
-          );
-
-        })}
-
-        {isDetailMode && detailIndex !== null ? (
-
-          <g className="chart-detail-readout" pointerEvents="none">
-
-            <line
-
-              x1={padding.left}
-
-              y1={detailY}
-
-              x2={detailX}
-
-              y2={detailY}
-
-              className="chart-detail-readout__guide"
-
-            />
-
-            <line
-
-              x1={detailX}
-
-              y1={detailY}
-
-              x2={detailX}
-
-              y2={padding.top + plotHeight}
-
-              className="chart-detail-readout__guide"
-
-            />
-
-            <circle
-
-              cx={detailX}
-
-              cy={detailY}
-
-              r="4.1"
-
-              fill="var(--chart-point-fill)"
-
-              stroke={detailColor}
-
-              strokeWidth="1.7"
-
-            />
-
-            <text
-
-              x={padding.left - 8}
-
-              y={clampNumber(detailY - 6, padding.top + 10, padding.top + plotHeight - 6)}
-
-              textAnchor="end"
-
-              className="chart-detail-readout__axis-label chart-svg-text"
-
-            >
-
-              {formatChartNumber(detailValue)}
-
-            </text>
-
-            <text
-
-              x={detailX}
-
-              y={padding.top + plotHeight + 28}
-
-              textAnchor="middle"
-
-              className="chart-detail-readout__axis-label chart-svg-text"
-
-            >
-
-              {data.dates[detailIndex]}
-
-            </text>
-
-            <rect
-
-              x={detailBubbleX}
-
-              y={detailBubbleY}
-
-              width={detailBubbleWidth}
-
-              height="24"
-
-              rx="6"
-
-              className="chart-detail-readout__bubble"
-
-            />
-
-            <text
-
-              x={detailBubbleX + 8}
-
-              y={detailBubbleY + 15.5}
-
-              className="chart-detail-readout__bubble-text chart-svg-text"
-
-            >
-
-              合计 {formatChartNumber(detailValue)}
-
-            </text>
-
-          </g>
-
-        ) : null}
-
-      </svg>
-
-    </div>
-
-  );
-
-}
-
-
-
-function GroupDetailTrendPanel({
-
-  data,
-
-  settings
-
-}: {
-
-  data: GroupDetailTrendData;
-
-  settings: CategoryDetailChartSettings;
-
-}) {
-
-  const [hoveredSeriesId, setHoveredSeriesId] = useState<string | null>(null);
-
-  const [isDetailMode, setIsDetailMode] = useState(false);
-
-  const lastIndex = Math.max(0, data.dates.length - 1);
-
-  const latestTotal = Math.abs(data.totals[lastIndex] ?? 0);
-
-  const legendItems: ChartLegendItemData[] = data.series.map((item) => {
-
-    const latestValue = item.values[lastIndex] ?? 0;
-
-
-
-    return {
-
-      id: item.id,
-
-      label: item.label,
-
-      color: item.color,
-
-      value: formatChartNumber(latestValue),
-
-      detail: formatChartPercent(latestValue, latestTotal),
-
-      archived: item.archived
-
-    };
-
-  });
-
-
-
-  return (
-
-    <section className="asset-chart-panel">
-
-      <header className="asset-chart-panel__header chart-visual-text">
-
-        <div>
-
-          <h2>账户趋势</h2>
-
-        </div>
-
-      </header>
-
-      <GroupDetailTrendChart
-
-        data={data}
-
-        settings={settings}
-
-        activeSeriesId={isDetailMode ? null : hoveredSeriesId}
-
-        onSeriesHover={setHoveredSeriesId}
-
-        detailMode={isDetailMode}
-
-        onDetailModeChange={(enabled) => {
-
-          setIsDetailMode(enabled);
-
-          setHoveredSeriesId(null);
-
-        }}
-
-      />
-
-      <ChartLegendList
-
-        items={legendItems}
-
-        emptyMessage="暂无账户趋势"
-
-        activeId={isDetailMode ? null : hoveredSeriesId}
-
-        onActiveIdChange={isDetailMode ? undefined : setHoveredSeriesId}
-
-      />
-
-    </section>
-
-  );
-
-}
-
-
-
 function App() {
 
   const mainContentRef = useRef<HTMLElement | null>(null);
@@ -5753,17 +2880,11 @@ function App() {
 
   const userSettingsFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
-
-  const searchInteractionHoldUntilRef = useRef(0);
+  const globalSearchControllerRef = useRef<{ clearNavigation: () => void } | null>(null);
 
   const newAccountTypeInputRef = useRef<HTMLInputElement | null>(null);
 
   const autoSnapshotCycleInputRef = useRef<HTMLInputElement | null>(null);
-
-  const autoLockTimerRef = useRef<number | null>(null);
-
-  const snapshotPasswordRevealTimerRef = useRef<number | null>(null);
 
   const catPetTimerRef = useRef<number | null>(null);
 
@@ -5777,8 +2898,6 @@ function App() {
 
   const catPetCountRef = useRef(0);
 
-  const realDataBeforeExampleRef = useRef<ExampleModeRealSnapshot | null>(null);
-
   const toastTimerRefs = useRef<number[]>([]);
 
   const [appData, setAppData] = useState<AppData>(loadAppData);
@@ -5791,92 +2910,17 @@ function App() {
 
   );
 
-  const [editingAccount, setEditingAccount] = useState<AccountPointer>(null);
-
   const [selectedAccount, setSelectedAccount] = useState<AccountPointer>(null);
 
   const [isQuickSingleEntryAccountPickerOpen, setIsQuickSingleEntryAccountPickerOpen] =
 
     useState(false);
 
-  const [accountOperationEntrySource, setAccountOperationEntrySource] =
-
-    useState<AccountOperationEntrySource>('account-detail');
-
   const [isRollupImportOpen, setIsRollupImportOpen] = useState(false);
-
-  const [rollupPromptTab, setRollupPromptTab] = useState<RollupPromptTab>('explanation');
-
-  const [rollupPasteText, setRollupPasteText] = useState('');
-
-  const [rollupImportError, setRollupImportError] = useState('');
-
-  const [rollupImportReview, setRollupImportReview] = useState<RollupImportReview | null>(null);
-
-  const [rollupImportHash, setRollupImportHash] = useState('');
-
-  const [rollupImportedHashes, setRollupImportedHashes] = useState(loadRollupImportHashes);
-
-  const [rollupAccountAssignments, setRollupAccountAssignments] = useState<
-
-    Record<string, RollupAccountAssignment | null>
-
-  >({});
-
-  const [rollupPendingNewAccountKey, setRollupPendingNewAccountKey] = useState('');
-
-  const [isFlashNoteOpen, setIsFlashNoteOpen] = useState(false);
-
-  const [flashNoteStage, setFlashNoteStage] = useState<FlashStep>('select');
-
-  const [flashNoteAccount, setFlashNoteAccount] = useState<AccountPointer>(null);
-
-  const [flashVisibleMonth, setFlashVisibleMonth] = useState(() => getFlashDefaultVisibleMonth());
-
-  const [flashStartDate, setFlashStartDate] = useState('');
-
-  const [flashEndDate, setFlashEndDate] = useState('');
-
-  const [flashSelectedDates, setFlashSelectedDates] = useState<string[]>([]);
-
-  const [flashSelectionMode, setFlashSelectionMode] =
-
-    useState<FlashNoteSelectionMode>('replace');
-
-  const [flashActiveDateRule, setFlashActiveDateRule] = useState<FlashNoteDateRule | null>(null);
-
-  const [flashDragStartDate, setFlashDragStartDate] = useState('');
-
-  const [flashDragPreviewDates, setFlashDragPreviewDates] = useState<string[]>([]);
-
-  const [flashInputMode, setFlashInputMode] = useState<FlashNoteInputMode>('change');
-
-  const [flashCells, setFlashCells] = useState<Record<string, FlashNoteCell>>({});
-
-  const [flashInputCursor, setFlashInputCursor] = useState(0);
-
-  const [flashCurrentInput, setFlashCurrentInput] = useState('');
-
-  const [isFlashInputTailLocked, setIsFlashInputTailLocked] = useState(false);
-
-  const [flashEditingDate, setFlashEditingDate] = useState('');
-
-  const [flashShortcutHintHidden, setFlashShortcutHintHidden] = useState(false);
-
-  const [isFlashExitConfirmOpen, setIsFlashExitConfirmOpen] = useState(false);
-
-  const [isFlashReturnDateConfirmOpen, setIsFlashReturnDateConfirmOpen] = useState(false);
-
-  const [editingAccountInfo, setEditingAccountInfo] = useState<AccountPointer>(null);
-
-  const [accountTypeEditor, setAccountTypeEditor] = useState<AccountTypeEditorState>(null);
 
   const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([]);
 
   const [isGroupEditMode, setIsGroupEditMode] = useState(false);
-
-  const [pendingArchivedRestore, setPendingArchivedRestore] =
-    useState<PendingArchivedRestore>(null);
 
   const [isAddingAccount, setIsAddingAccount] = useState(false);
 
@@ -5890,28 +2934,6 @@ function App() {
 
     useState<BackupReturnTarget>('history');
 
-  const [lastBackupAt, setLastBackupAt] = useState(loadLastBackupAt);
-
-  const [lastBackupHistoryCount, setLastBackupHistoryCount] = useState(() =>
-
-    loadLastBackupHistoryCount(appData.history.length)
-
-  );
-
-  const [backupRecords, setBackupRecords] = useState(loadBackupRecords);
-
-  const [autoBackupSettings, setAutoBackupSettings] = useState(loadAutoBackupSettings);
-
-  const [autoBackupDraft, setAutoBackupDraft] =
-
-    useState<AutoBackupSettings>(() => autoBackupSettings);
-
-  const [autoBackupCycleValueInput, setAutoBackupCycleValueInput] = useState(() =>
-
-    String(autoBackupSettings.cycle.value)
-
-  );
-
   const [assetChartSettings, setAssetChartSettings] = useState(loadAssetChartSettings);
 
   const [globalSettings, setGlobalSettings] = useState(loadGlobalSettings);
@@ -5924,95 +2946,25 @@ function App() {
 
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(getSystemTheme);
 
-  const [isLocked, setIsLocked] = useState(() => loadGlobalSettings().passwordProtectionEnabled);
-
-  const [unlockPasswordInput, setUnlockPasswordInput] = useState('');
-
-  const [unlockError, setUnlockError] = useState('');
-
-  const [isUnlocking, setIsUnlocking] = useState(false);
-
-  const [passwordEditorMode, setPasswordEditorMode] = useState<PasswordEditorMode>(null);
-
-  const [oldPasswordInput, setOldPasswordInput] = useState('');
-
-  const [newPasswordInput, setNewPasswordInput] = useState('');
-
-  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
-
-  const [passwordEditorError, setPasswordEditorError] = useState('');
-
-  const [isSavingPassword, setIsSavingPassword] = useState(false);
-
-  const [autoLockMinutesInput, setAutoLockMinutesInput] = useState(() =>
-
-    String(loadGlobalSettings().autoLockMinutes)
-
-  );
-
-  const [isPasswordDisableConfirmOpen, setIsPasswordDisableConfirmOpen] = useState(false);
-
-  const [passwordDisableInput, setPasswordDisableInput] = useState('');
-
-  const [passwordDisableError, setPasswordDisableError] = useState('');
-
-  const [isDisablingPasswordProtection, setIsDisablingPasswordProtection] = useState(false);
-
-  const [snapshotPasswordEditorMode, setSnapshotPasswordEditorMode] =
-
-    useState<SnapshotPasswordEditorMode>(null);
-
-  const [
-
-    shouldEnableSnapshotEncryptionAfterPasswordSave,
-
-    setShouldEnableSnapshotEncryptionAfterPasswordSave
-
-  ] = useState(false);
-
-  const [oldSnapshotPasswordInput, setOldSnapshotPasswordInput] = useState('');
-
-  const [newSnapshotPasswordInput, setNewSnapshotPasswordInput] = useState('');
-
-  const [confirmSnapshotPasswordInput, setConfirmSnapshotPasswordInput] = useState('');
-
-  const [snapshotPasswordEditorError, setSnapshotPasswordEditorError] = useState('');
-
-  const [isSavingSnapshotPassword, setIsSavingSnapshotPassword] = useState(false);
-
-  const [visibleSnapshotPasswordField, setVisibleSnapshotPasswordField] =
-
-    useState<'new' | 'confirm' | null>(null);
-
-  const [isSnapshotEncryptionDisableConfirmOpen, setIsSnapshotEncryptionDisableConfirmOpen] =
-
-    useState(false);
-
-  const [snapshotEncryptionDisableInput, setSnapshotEncryptionDisableInput] = useState('');
-
-  const [snapshotEncryptionDisableError, setSnapshotEncryptionDisableError] = useState('');
-
-  const [isDisablingSnapshotEncryption, setIsDisablingSnapshotEncryption] = useState(false);
-
-  const [isCalendarVisible, setIsCalendarVisible] = useState(true);
-
   const [isAccountActionMenuOpen, setIsAccountActionMenuOpen] = useState(false);
 
-  const [isDangerActionsOpen, setIsDangerActionsOpen] = useState(false);
-
-  const [confirmationDialog, setConfirmationDialog] =
-
-    useState<ConfirmationDialogState>(null);
-
-  const [noticeDialog, setNoticeDialog] = useState<NoticeDialogState>(null);
-
-  const [inputDialog, setInputDialog] = useState<InputDialogState>(null);
-
-  const [inputDialogValue, setInputDialogValue] = useState('');
-
-  const [resetConfirmation, setResetConfirmation] = useState<ResetConfirmationState>(null);
-
-  const [resetConfirmationInput, setResetConfirmationInput] = useState('');
+  const {
+    confirmationDialog,
+    noticeDialog,
+    inputDialog,
+    inputDialogValue,
+    requestConfirmationDialog,
+    showConfirmationDialog,
+    closeConfirmationDialog,
+    confirmAndClose,
+    showNoticeDialog,
+    closeNoticeDialog,
+    requestInputDialog,
+    closeInputDialog,
+    confirmInputDialog,
+    setInputDialogValue,
+    getImportContentAfterIntegrityCheck
+  } = useAppDialogController();
 
   const [isCatPetted, setIsCatPetted] = useState(false);
 
@@ -6029,64 +2981,6 @@ function App() {
   const [isSecretConsoleHighlighted, setIsSecretConsoleHighlighted] = useState(false);
 
   const [expandedDetailDates, setExpandedDetailDates] = useState<string[]>([]);
-
-  const [editMode, setEditMode] = useState<EditMode>('set');
-
-  const [draftAmount, setDraftAmount] = useState('');
-
-  const [adjustAmountInput, setAdjustAmountInput] = useState('');
-
-  const [adjustDirection, setAdjustDirection] = useState<AdjustDirection>('increase');
-
-  const [accountEditInitialDate, setAccountEditInitialDate] = useState('');
-
-  const [setAmountDateInput, setSetAmountDateInput] = useState('');
-
-  const [setAmountSelectedDate, setSetAmountSelectedDate] = useState<string | null>(null);
-
-  const [setAmountVisibleMonth, setSetAmountVisibleMonth] = useState(() =>
-
-    getAccountOperationCalendarMonth(getAccountOperationTodayDateValue())
-
-  );
-
-  const [setAmountDateFutureHint, setSetAmountDateFutureHint] = useState(false);
-
-  const [setAmountNoteInput, setSetAmountNoteInput] = useState('');
-
-  const [adjustAmountDateInput, setAdjustAmountDateInput] = useState('');
-
-  const [adjustAmountSelectedDate, setAdjustAmountSelectedDate] = useState<string | null>(null);
-
-  const [adjustAmountVisibleMonth, setAdjustAmountVisibleMonth] = useState(() =>
-
-    getAccountOperationCalendarMonth(getAccountOperationTodayDateValue())
-
-  );
-
-  const [adjustAmountDateFutureHint, setAdjustAmountDateFutureHint] = useState(false);
-
-  const [adjustAmountNoteInput, setAdjustAmountNoteInput] = useState('');
-
-  const [accountNameDraft, setAccountNameDraft] = useState('');
-
-  const [accountAliasDraft, setAccountAliasDraft] = useState('');
-
-  const [accountInfoError, setAccountInfoError] = useState('');
-
-  const setAmountFutureHintTimerRef = useRef<number | null>(null);
-
-  const adjustAmountFutureHintTimerRef = useRef<number | null>(null);
-
-  const [accountTypeNameDraft, setAccountTypeNameDraft] = useState('');
-
-  const [accountTypeNatureDraft, setAccountTypeNatureDraft] =
-
-    useState<AccountTypeNature>('asset');
-
-  const [accountTypeStatsDraft, setAccountTypeStatsDraft] = useState(true);
-
-  const [accountTypeError, setAccountTypeError] = useState('');
 
   const [groupDetailNameDraft, setGroupDetailNameDraft] = useState('');
 
@@ -6126,30 +3020,6 @@ function App() {
 
     useState<GlobalSettingsSection>('appearance');
 
-  const [historyStartDate, setHistoryStartDate] = useState('');
-
-  const [historyEndDate, setHistoryEndDate] = useState('');
-
-  const [historyRangeInput, setHistoryRangeInput] = useState('');
-
-  const [searchState, dispatchSearchState] = useReducer(
-
-    searchStateReducer<SearchNavigationSnapshot>,
-
-    undefined,
-
-    createInitialSearchState<SearchNavigationSnapshot>
-
-  );
-
-  const [highlightedHistoryRecordId, setHighlightedHistoryRecordId] = useState('');
-
-  const [highlightedBackupRecordId, setHighlightedBackupRecordId] = useState('');
-
-  const [searchTargetScrollKey, setSearchTargetScrollKey] = useState(0);
-
-  const [calendarMonth, setCalendarMonth] = useState(() => getHistoryCalendarLeadMonth());
-
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
 
   const [toastMessages, setToastMessages] = useState<ToastMessage[]>([]);
@@ -6168,23 +3038,28 @@ function App() {
 
     : 'default';
 
-
-
-  const openSearch = () => {
-
-    dispatchSearchState({ type: 'open' });
-
+  const dismissToast = (toastId: string) => {
+    setToastMessages((currentMessages) =>
+      currentMessages.filter((message) => message.id !== toastId)
+    );
   };
 
+  const showToast = (message: string, tone: ToastTone = 'info') => {
+    const toastId = createId('toast');
+    const timerId = window.setTimeout(() => dismissToast(toastId), 2800);
 
+    toastTimerRefs.current.push(timerId);
+    setToastMessages((currentMessages) => [
+      ...currentMessages.filter((currentMessage) => currentMessage.message !== message),
+      {
+        id: toastId,
+        message,
+        tone
+      }
+    ]);
 
-  const closeSearch = () => {
-
-    dispatchSearchState({ type: 'close-and-reset' });
-
+    return toastId;
   };
-
-
 
   const clearSecretConsoleLongPress = () => {
 
@@ -6416,210 +3291,6 @@ function App() {
 
 
 
-  useEffect(() => {
-
-    setAutoBackupCycleValueInput(String(autoBackupDraft.cycle.value));
-
-  }, [autoBackupDraft.cycle.value]);
-
-
-
-  useEffect(() => {
-
-    setAutoLockMinutesInput(String(globalSettings.autoLockMinutes));
-
-  }, [globalSettings.autoLockMinutes]);
-
-
-  useEffect(() => {
-    if (!globalSettings.passwordProtectionEnabled) {
-      setIsLocked(false);
-      setUnlockPasswordInput('');
-      setUnlockError('');
-    }
-  }, [globalSettings.passwordProtectionEnabled]);
-
-
-  useEffect(() => {
-    const api = window.electronAPI ?? window.electronWindow;
-
-    if (!api?.onNetraFlowLock) {
-      return;
-    }
-
-    return api.onNetraFlowLock(() => {
-      if (!globalSettings.passwordProtectionEnabled || !globalSettings.passwordHash) {
-        showToast('请先开启登陆密码保护', 'info');
-        return;
-      }
-
-      setUnlockPasswordInput('');
-      setUnlockError('');
-      setIsLocked(true);
-    });
-  }, [globalSettings.passwordHash, globalSettings.passwordProtectionEnabled]);
-
-
-  useEffect(() => {
-
-    if (
-
-      !globalSettings.passwordProtectionEnabled ||
-
-      !globalSettings.passwordHash ||
-
-      isLocked
-
-    ) {
-
-      if (autoLockTimerRef.current !== null) {
-
-        window.clearTimeout(autoLockTimerRef.current);
-
-        autoLockTimerRef.current = null;
-
-      }
-
-
-
-      return;
-
-    }
-
-
-
-    const autoLockDelay = Math.max(1, globalSettings.autoLockMinutes) * 60 * 1000;
-
-    const resetAutoLockTimer = () => {
-
-      if (autoLockTimerRef.current !== null) {
-
-        window.clearTimeout(autoLockTimerRef.current);
-
-      }
-
-
-
-      autoLockTimerRef.current = window.setTimeout(() => {
-
-        setUnlockPasswordInput('');
-
-        setUnlockError('');
-
-        setIsLocked(true);
-
-      }, autoLockDelay);
-
-    };
-
-    const activityEvents: Array<keyof WindowEventMap> = [
-
-      'pointerdown',
-
-      'keydown',
-
-      'wheel',
-
-      'scroll',
-
-      'touchstart'
-
-    ];
-
-    const listenerOptions: AddEventListenerOptions = {
-
-      capture: true,
-
-      passive: true
-
-    };
-
-
-
-    resetAutoLockTimer();
-
-    activityEvents.forEach((eventName) => {
-
-      window.addEventListener(eventName, resetAutoLockTimer, listenerOptions);
-
-    });
-
-
-
-    return () => {
-
-      if (autoLockTimerRef.current !== null) {
-
-        window.clearTimeout(autoLockTimerRef.current);
-
-        autoLockTimerRef.current = null;
-
-      }
-
-
-
-      activityEvents.forEach((eventName) => {
-
-        window.removeEventListener(eventName, resetAutoLockTimer, listenerOptions);
-
-      });
-
-    };
-
-  }, [
-
-    globalSettings.autoLockMinutes,
-
-    globalSettings.passwordHash,
-
-    globalSettings.passwordProtectionEnabled,
-
-    isLocked
-
-  ]);
-
-
-
-  useEffect(() => {
-
-    const wheelGuard = (event: globalThis.WheelEvent) => {
-
-      event.preventDefault();
-
-    };
-
-    const guardedInputs = [
-
-      newAccountTypeInputRef.current,
-
-      autoSnapshotCycleInputRef.current
-
-    ];
-
-
-
-    guardedInputs.forEach((input) => {
-
-      input?.addEventListener('wheel', wheelGuard, { passive: false });
-
-    });
-
-
-
-    return () => {
-
-      guardedInputs.forEach((input) => {
-
-        input?.removeEventListener('wheel', wheelGuard);
-
-      });
-
-    };
-
-  }, [isAddingAccount, historyPanelView, autoBackupDraft.enabled]);
-
-
-
   useEffect(
 
     () => () => {
@@ -6627,26 +3298,6 @@ function App() {
       toastTimerRefs.current.forEach((timerId) => window.clearTimeout(timerId));
 
       toastTimerRefs.current = [];
-
-
-
-      if (autoLockTimerRef.current !== null) {
-
-        window.clearTimeout(autoLockTimerRef.current);
-
-        autoLockTimerRef.current = null;
-
-      }
-
-
-
-      if (snapshotPasswordRevealTimerRef.current !== null) {
-
-        window.clearTimeout(snapshotPasswordRevealTimerRef.current);
-
-        snapshotPasswordRevealTimerRef.current = null;
-
-      }
 
 
 
@@ -6724,82 +3375,6 @@ function App() {
 
 
 
-  useEffect(() => {
-
-    if (hasBackupRecordMissingIncrementCount()) {
-
-      saveBackupRecords(backupRecords);
-
-    }
-
-  }, []);
-
-
-
-  useEffect(() => {
-
-    const handleSearchShortcut = (event: globalThis.KeyboardEvent) => {
-
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLocaleLowerCase() !== 'k') {
-
-        return;
-
-      }
-
-
-
-      event.preventDefault();
-
-      event.stopPropagation();
-
-      openSearch();
-
-    };
-
-
-
-    document.addEventListener('keydown', handleSearchShortcut, true);
-
-
-
-    return () => {
-
-      document.removeEventListener('keydown', handleSearchShortcut, true);
-
-    };
-
-  }, []);
-
-
-
-  useEffect(() => {
-
-    if (!searchState.isOpen) {
-
-      return;
-
-    }
-
-
-
-    const focusTimer = window.setTimeout(() => {
-
-      searchInputRef.current?.focus();
-
-    }, 0);
-
-
-
-    return () => {
-
-      window.clearTimeout(focusTimer);
-
-    };
-
-  }, [searchState.isOpen]);
-
-
-
   const { groups: assetGroups, accounts, history } = appData;
   const groups = useMemo(
     () => deriveGroupsWithAccounts(assetGroups, accounts),
@@ -6816,41 +3391,25 @@ function App() {
 
   );
 
-  const recent7Range = getRecent7DayRange();
-
-  const hasHistoryDateFilter = Boolean(historyStartDate && historyEndDate);
-
-  const effectiveHistoryStartDate = hasHistoryDateFilter ? historyStartDate : recent7Range.start;
-
-  const effectiveHistoryEndDate = hasHistoryDateFilter ? historyEndDate : recent7Range.end;
-
-
-
-  const groupTotals = groups.map((group) => {
-
-    const activeAccounts = group.accounts.filter((account) => !account.archived);
-
-    const total = toStoredAmountByNature(
-
-      group.nature,
-
-      activeAccounts.reduce((sum, account) => sum + account.amount, 0)
-
-    );
-
-
-
-    return {
-
-      ...group,
-
-      activeAccounts,
-
-      total
-
-    };
-
+  const historyController = useHistoryController({
+    history,
+    selectedAccountId: selectedAccount?.accountId ?? '',
+    onHistoryInteraction: () => globalSearchControllerRef.current?.clearNavigation()
   });
+
+  const {
+    historyStartDate,
+    historyEndDate,
+    historyRangeInput,
+    historyRangeInputPlaceholder,
+    calendarMonth,
+    calendarSecondMonth,
+    isCalendarVisible,
+    sortedHistory,
+    filteredHistory,
+    selectedAccountHistory,
+    selectedAccountHistoryByDate
+  } = historyController;
 
 
 
@@ -6859,222 +3418,75 @@ function App() {
     [groups, accounts, history]
   );
 
-  const archivedRestoreTargetGroups = useMemo(
-    () => getArchivedAccountRestoreTargetGroups(assetGroups),
-    [assetGroups]
-  );
-
-  const pendingArchivedRestoreAccount = pendingArchivedRestore
-    ? accounts.find((account) => account.id === pendingArchivedRestore.accountId)
-    : undefined;
-
   const selectedGroupDetail = selectedGroupDetailId
 
     ? groups.find((group) => group.id === selectedGroupDetailId)
 
     : undefined;
 
-  const normalizedArchivedAccountSearchQuery = archivedAccountSearchQuery.trim().toLowerCase();
+  const filteredArchivedAccountsForRestore = filterArchivedAccountsForRestore(
+    archivedAccounts,
+    archivedAccountSearchQuery
+  );
 
-  const filteredArchivedAccountsForRestore = normalizedArchivedAccountSearchQuery
+  const selectedGroup = selectedAccount
 
-    ? archivedAccounts.filter((account) =>
+    ? groups.find((group) => group.id === selectedAccount.groupId)
 
-        account.name.toLowerCase().includes(normalizedArchivedAccountSearchQuery)
+    : undefined;
 
-      )
+  const selectedAccountEntry = selectedGroup?.accounts.find(
 
-    : archivedAccounts;
-
-  const sortedHistory = useMemo(() => [...history].sort(compareHistoryByTimeDesc), [history]);
-
-  const historyDateCounts = history.reduce<Record<string, number>>((counts, record) => {
-
-    const recordDate = toDateInputValue(new Date(record.time));
-
-    counts[recordDate] = (counts[recordDate] ?? 0) + 1;
-
-
-
-    return counts;
-
-  }, {});
-
-  const filteredHistory = sortedHistory.filter((record) =>
-
-    isWithinDateRange(record.time, effectiveHistoryStartDate, effectiveHistoryEndDate)
+    (account) => account.id === selectedAccount?.accountId
 
   );
 
-  const positiveStatsTotal = groupTotals.reduce(
-
-    (sum, group) =>
-
-      group.includeInStats && isPositiveNature(group.nature)
-
-        ? sum + Math.abs(group.total)
-
-        : sum,
-
-    0
-
-  );
-
-  const totalAssets = groupTotals.reduce(
-
-    (sum, group) =>
-
-      group.includeInStats ? sum + getStatAmount(group.nature, group.total) : sum,
-
-    0
-
-  );
-
-  const homeAssetStatValue = resolveHomeAssetStatValue(globalSettings.homeAssetStatMetric, {
-
-    netWorth: totalAssets,
-
-    totalAssets: positiveStatsTotal
-
-  });
-
-  const homeAssetStatLabel = resolveHomeAssetStatLabel(
-
-    globalSettings.homeAssetStatMetric,
-
-    globalSettings.homeAssetStatLabelMode
-
-  );
-
-  const assetStructureData = useMemo(
-
-    () => deriveAssetStructureData(groups, history, globalSettings.chartColorAssignmentMode),
-
-    [groups, history, globalSettings.chartColorAssignmentMode]
-
-  );
-
-  const homeGroupLegendColorByName = useMemo(() => {
-
-    const colorByName = new Map<string, string>();
-
-
-
-    [...assetStructureData.positiveSegments, ...assetStructureData.negativeSegments].forEach(
-
-      (segment) => {
-
-        (segment.sourceIds ?? [segment.label]).forEach((sourceId) =>
-
-          colorByName.set(sourceId, segment.color)
-
-        );
-
-      }
-
-    );
-
-
-
-    return colorByName;
-
-  }, [assetStructureData]);
-
-  const assetTrendPoints = useMemo(
-
-    () => deriveAssetTrendPoints(groups, history, assetChartSettings.trend),
-
-    [groups, history, assetChartSettings.trend]
-
-  );
-
-  const homeThumbnailTrendPoints = useMemo(
-
-    () =>
-
-      deriveAssetTrendPoints(groups, history, {
-
-        ...assetChartSettings.trend,
-
-        xAxisRange: assetChartSettings.l0.xAxisRange
-
-      }),
-
-    [groups, history, assetChartSettings.l0.xAxisRange, assetChartSettings.trend]
-
-  );
-
-  const selectedGroupDetailChartSettings = selectedGroupDetail
-
-    ? getEffectiveCategoryChartSettings(
-
-        assetChartSettings.globalChartControlMode,
-
-        assetChartSettings.globalCategoryDetail,
-
-        assetChartSettings.categoryDetailById,
-
-        selectedGroupDetail.id
-
-      )
-
-    : assetChartSettings.globalCategoryDetail;
-
-  const selectedGroupDetailStructureData = useMemo(
-
-    () =>
-
-      selectedGroupDetail
-
-        ? deriveGroupDetailStructureData(
-
-            selectedGroupDetail,
-
-            history,
-
-            globalSettings.chartColorAssignmentMode
-
-          )
-
-        : null,
-
-    [selectedGroupDetail, history, globalSettings.chartColorAssignmentMode]
-
-  );
-
-  const selectedGroupDetailTrendData = useMemo(
-
-    () =>
-
-      selectedGroupDetail
-
-        ? deriveGroupDetailTrendData(
-
-            selectedGroupDetail,
-
-            history,
-
-            selectedGroupDetailChartSettings,
-
-            globalSettings.chartColorAssignmentMode
-
-          )
-
-        : null,
-
+  const homeAssetStatSettings = useMemo(
+    () => ({
+      homeAssetStatMetric: globalSettings.homeAssetStatMetric,
+      homeAssetStatLabelMode: globalSettings.homeAssetStatLabelMode,
+      homeAssetStatCompact: globalSettings.homeAssetStatCompact
+    }),
     [
-
-      selectedGroupDetail,
-
-      history,
-
-      selectedGroupDetailChartSettings,
-
-      globalSettings.chartColorAssignmentMode
-
+      globalSettings.homeAssetStatMetric,
+      globalSettings.homeAssetStatLabelMode,
+      globalSettings.homeAssetStatCompact
     ]
-
   );
+  const {
+    accountGroups: groupTotals,
+    dashboardStats,
+    homeAssetStat,
+    recentNetWorthChange,
+    accountCount
+  } = useDashboardController({
+    groups,
+    history,
+    homeAssetStatSettings
+  });
+  const totalAssets = dashboardStats.netWorth;
+
+  const {
+    assetStructureData,
+    homeGroupLegendColorByName,
+    assetTrendPoints,
+    homeThumbnailTrendPoints,
+    homeThumbnailTrendSettings,
+    shouldShowL0Charts,
+    selectedGroupDetailChartSettings,
+    selectedGroupDetailStructureData,
+    selectedGroupDetailTrendData,
+    selectedAccountChartSettings,
+    selectedAccountTrendPoints,
+    selectedAccountPreviewTrendSettings
+  } = useChartDataController({
+    groups,
+    history,
+    assetChartSettings,
+    colorAssignmentMode: globalSettings.chartColorAssignmentMode,
+    selectedGroupDetail,
+    selectedAccountEntry
+  });
 
   useEffect(() => {
 
@@ -7112,188 +3524,6 @@ function App() {
 
   ]);
 
-  const recentNetWorthChange = useMemo(
-
-    () => deriveRecentNetWorthChange(history),
-
-    [history]
-
-  );
-
-  const shouldShowL0Charts =
-
-    assetChartSettings.l0.showStructure || assetChartSettings.l0.showTrend;
-
-  const accountCount = groups.reduce((count, group) => count + group.accounts.length, 0);
-
-  const backupHistoryDelta = history.length - lastBackupHistoryCount;
-
-  const incrementalRecordValue =
-
-    backupHistoryDelta < 0 ? '有记录删除' : `${backupHistoryDelta}`;
-
-  const hasAutoBackupDraftChanges = !areAutoBackupSettingsEqual(
-
-    autoBackupDraft,
-
-    autoBackupSettings
-
-  );
-
-  const canSaveAutoBackupSettings =
-
-    !isExampleMode &&
-
-    hasAutoBackupDraftChanges &&
-
-    (!autoBackupDraft.enabled ||
-
-      (autoBackupCycleValueInput.trim() !== '' &&
-
-        autoBackupDraft.cycle.value > 0 &&
-
-        autoBackupDraft.directory.trim() !== ''));
-
-  const rollupAccountGroupKeys = useMemo(
-
-    () => (rollupImportReview ? getRollupAccountGroupKeys(rollupImportReview.records) : []),
-
-    [rollupImportReview]
-
-  );
-
-  const rollupRecordGroups = useMemo(
-
-    () =>
-
-      rollupAccountGroupKeys.map((keyword) => ({
-
-        keyword,
-
-        records: rollupImportReview?.records.filter(
-
-          (record) => record.accountKeyword === keyword
-
-        ) ?? []
-
-      })),
-
-    [rollupAccountGroupKeys, rollupImportReview]
-
-  );
-
-  const rollupActiveAccountOptions = useMemo(
-
-    () =>
-
-      groups.flatMap((group) =>
-
-        group.accounts
-
-          .filter((account) => !account.archived)
-
-          .map((account) => ({
-
-            groupId: group.id,
-
-            groupName: group.name,
-
-            account
-
-          }))
-
-      ),
-
-    [groups]
-
-  );
-
-  const rollupConfirmedAccountCount = rollupAccountGroupKeys.filter((keyword) =>
-
-    Boolean(rollupAccountAssignments[keyword]?.accountId)
-
-  ).length;
-
-  const isRollupImportReady =
-
-    Boolean(rollupImportReview) &&
-
-    !rollupImportReview?.hasBlockingIssues &&
-
-    areAllRollupGroupsAssigned(rollupAccountGroupKeys, rollupAccountAssignments);
-
-
-
-  const currentGroup = editingAccount
-
-    ? groups.find((group) => group.id === editingAccount.groupId)
-
-    : undefined;
-
-  const currentAccount = currentGroup?.accounts.find(
-
-    (account) => account.id === editingAccount?.accountId
-
-  );
-
-  const selectedGroup = selectedAccount
-
-    ? groups.find((group) => group.id === selectedAccount.groupId)
-
-    : undefined;
-
-  const selectedAccountEntry = selectedGroup?.accounts.find(
-
-    (account) => account.id === selectedAccount?.accountId
-
-  );
-
-  const selectedAccountIsArchived = Boolean(selectedAccountEntry?.archived);
-
-  const flashSelectedGroup = flashNoteAccount
-
-    ? groups.find((group) => group.id === flashNoteAccount.groupId)
-
-    : undefined;
-
-  const flashSelectedAccountEntry = flashSelectedGroup?.accounts.find(
-
-    (account) => account.id === flashNoteAccount?.accountId
-
-  );
-
-  const accountInfoGroup = editingAccountInfo
-
-    ? groups.find((group) => group.id === editingAccountInfo.groupId)
-
-    : undefined;
-
-  const accountInfoEntry = accountInfoGroup?.accounts.find(
-
-    (account) => account.id === editingAccountInfo?.accountId
-
-  );
-
-  const accountTypeEditorGroup =
-
-    accountTypeEditor?.mode === 'edit'
-
-      ? groups.find((group) => group.id === accountTypeEditor.groupId)
-
-      : undefined;
-
-  const isAccountTypeEditorVisible = Boolean(
-
-    accountTypeEditor && (accountTypeEditor.mode === 'create' || accountTypeEditorGroup)
-
-  );
-
-  const selectedAccountHistory = selectedAccount
-
-    ? sortedHistory.filter((record) => record.accountId === selectedAccount.accountId)
-
-    : [];
-
   const selectedAccountTitle =
 
     selectedAccountEntry && selectedAccount
@@ -7301,190 +3531,6 @@ function App() {
       ? getAccountDetailTitle(selectedGroup?.name ?? selectedAccount.groupName, selectedAccountEntry.name)
 
       : '';
-
-  const selectedAccountChartSettings = selectedAccountEntry
-
-    ? getEffectiveAccountChartSettings(
-
-        assetChartSettings.globalChartControlMode,
-
-        getGlobalAccountDetailChartSettings(assetChartSettings.trend),
-
-        assetChartSettings.accountDetailById,
-
-        selectedAccountEntry.id
-
-      )
-
-    : getGlobalAccountDetailChartSettings(assetChartSettings.trend);
-
-  const selectedAccountTrendPoints = useMemo(
-
-    () =>
-
-      selectedAccountEntry
-
-        ? deriveAccountTrendPoints(selectedAccountEntry, history, selectedAccountChartSettings)
-
-        : [],
-
-    [selectedAccountEntry, history, selectedAccountChartSettings]
-
-  );
-
-  const mainPageKey = isFlashNoteOpen
-
-    ? 'flash-note'
-
-    : isRollupImportOpen
-
-      ? 'rollup-import'
-
-      : isGlobalSettingsOpen
-
-        ? 'global-settings'
-
-        : isTotalChartsOpen
-
-          ? 'total-charts'
-
-          : isAccountChartsOpen && selectedAccount && selectedAccountEntry
-
-            ? `account-charts:${selectedAccountEntry.id}`
-
-            : selectedGroupDetail
-
-              ? `group-detail:${selectedGroupDetail.id}`
-
-              : selectedAccount && selectedAccountEntry
-
-                ? `account-detail:${selectedAccountEntry.id}`
-
-                : 'home';
-
-  const leftLayerKey = isHistoryOpen
-
-    ? `history:${historyPanelView}`
-
-    : isArchivedAccountsOpen
-
-      ? 'archived-accounts'
-
-      : '';
-
-  const rightPanelKey = searchState.isOpen
-
-    ? 'search'
-
-    : isRollupImportOpen
-
-      ? 'rollup-import'
-
-      : isDangerActionsOpen && selectedAccount && selectedAccountEntry
-
-        ? `account-danger:${selectedAccountEntry.id}`
-
-        : isAccountChartsOpen && selectedAccount && selectedAccountEntry
-
-          ? `account-chart-settings:${selectedAccountEntry.id}`
-
-          : selectedAccount && selectedAccountEntry
-
-            ? `account-actions:${selectedAccountEntry.id}`
-
-            : isHistoryOpen
-
-              ? `history-actions:${historyPanelView}`
-
-              : isArchivedAccountsOpen
-
-                ? 'archived-actions'
-
-                : isTotalChartsOpen
-
-                  ? 'chart-settings'
-
-                  : selectedGroupDetail
-
-                    ? `group-detail-actions:${selectedGroupDetail.id}`
-
-                    : isGlobalSettingsOpen
-
-                      ? `global-settings:${globalSettingsSection}`
-
-                      : 'home-actions';
-
-  const selectedAccountHistoryByDate = selectedAccountHistory
-
-    .reduce<Array<{ date: string; records: HistoryRecord[] }>>((groupsByDate, record) => {
-
-      const date = toDateInputValue(new Date(record.time));
-
-      const existingGroup = groupsByDate.find((group) => group.date === date);
-
-
-
-      if (existingGroup) {
-
-        existingGroup.records.push(record);
-
-      } else {
-
-        groupsByDate.push({ date, records: [record] });
-
-      }
-
-
-
-      return groupsByDate;
-
-    }, [])
-
-    .map((group) => ({
-
-      ...group,
-
-      records: [...group.records].sort(compareHistoryByTimeDesc)
-
-    }))
-
-    .sort((left, right) => getDateTimestamp(right.date) - getDateTimestamp(left.date));
-
-  const currentEditableAmount = currentAccount ? toEditableAmount(currentAccount.amount) : 0;
-
-  const isEditingArchivedAccount = Boolean(currentAccount?.archived);
-
-  const parsedAdjustAmount = parseNonNegativeAmount(adjustAmountInput) ?? 0;
-
-  const signedAdjustAmount =
-
-    adjustDirection === 'increase' ? parsedAdjustAmount : -parsedAdjustAmount;
-
-  const rawNextAdjustedEditableAmount = currentEditableAmount + signedAdjustAmount;
-
-  const isAdjustAmountInvalid = editMode === 'adjust' && rawNextAdjustedEditableAmount < 0;
-
-  const nextAdjustedEditableAmount = roundToMoneyPrecision(
-
-    Math.max(0, rawNextAdjustedEditableAmount)
-
-  );
-
-  const parsedSetAmountDate = parseAccountOperationDateInput(setAmountDateInput);
-
-  const parsedAdjustAmountDate = parseAccountOperationDateInput(adjustAmountDateInput);
-
-  const activeAmountEditDate =
-
-    editMode === 'set' ? parsedSetAmountDate : parsedAdjustAmountDate;
-
-  const isAmountEditDateInvalid = activeAmountEditDate === null;
-
-  const activeAmountEditNote =
-
-    editMode === 'set' ? setAmountNoteInput : adjustAmountNoteInput;
-
-  const isAmountEditorSubmitDisabled = isAdjustAmountInvalid || isAmountEditDateInvalid;
 
   const signedAmountCssVariables = useMemo<SignedAmountCssVariables>(
 
@@ -7511,68 +3557,6 @@ function App() {
     },
 
     [globalSettings.positiveNegativeColorMode]
-
-  );
-
-
-
-  useEffect(() => {
-
-    if (!parsedSetAmountDate) {
-
-      return;
-
-    }
-
-
-
-    setSetAmountSelectedDate(parsedSetAmountDate);
-
-    setSetAmountVisibleMonth(getAccountOperationCalendarMonth(parsedSetAmountDate));
-
-  }, [parsedSetAmountDate]);
-
-
-
-  useEffect(() => {
-
-    if (!parsedAdjustAmountDate) {
-
-      return;
-
-    }
-
-
-
-    setAdjustAmountSelectedDate(parsedAdjustAmountDate);
-
-    setAdjustAmountVisibleMonth(getAccountOperationCalendarMonth(parsedAdjustAmountDate));
-
-  }, [parsedAdjustAmountDate]);
-
-
-
-  useEffect(
-
-    () => () => {
-
-      if (setAmountFutureHintTimerRef.current !== null) {
-
-        window.clearTimeout(setAmountFutureHintTimerRef.current);
-
-      }
-
-
-
-      if (adjustAmountFutureHintTimerRef.current !== null) {
-
-        window.clearTimeout(adjustAmountFutureHintTimerRef.current);
-
-      }
-
-    },
-
-    []
 
   );
 
@@ -7663,7 +3647,7 @@ function App() {
       history: nextData.history
     };
 
-    dispatchSearchState({ type: 'clear-navigation' });
+    globalSearch.clearNavigation();
 
     setAppData(normalizedData);
 
@@ -7726,6 +3710,218 @@ function App() {
     cancelPendingFirstWelcomeForRealChange();
 
   };
+
+  const syncCreatedAccountTypeSideEffects = (group: AssetGroup) => {
+    updateAssetChartSettings((currentSettings) => ({
+      ...currentSettings,
+      categoryDetailById: {
+        ...currentSettings.categoryDetailById,
+        [group.id]: cloneCategoryChartSettings(currentSettings.globalCategoryDetail)
+      }
+    }));
+    setNewAccountGroupId(group.id);
+    setNewAccountTypeInput(group.name);
+  };
+
+  const syncUpdatedAccountTypeSideEffects = ({
+    groupId,
+    previousName,
+    nextName
+  }: {
+    groupId: string;
+    previousName: string;
+    nextName: string;
+  }) => {
+    if (previousName !== nextName) {
+      updateAssetChartSettings((currentSettings) => {
+        const preservedSettings =
+          currentSettings.categoryDetailById[groupId] ??
+          currentSettings.globalCategoryDetail;
+        const nextSettingsById = { ...currentSettings.categoryDetailById };
+
+        nextSettingsById[groupId] = cloneCategoryChartSettings(preservedSettings);
+
+        return {
+          ...currentSettings,
+          categoryDetailById: nextSettingsById
+        };
+      });
+    }
+
+    setNewAccountTypeInput((typeInput) => (typeInput === previousName ? nextName : typeInput));
+    setSelectedAccount((account) =>
+      account?.groupId === groupId ? { ...account, groupName: nextName } : account
+    );
+    accountOperations.syncAccountGroupName(groupId, nextName);
+  };
+
+  const {
+    accountTypeEditor,
+    isAccountTypeEditorVisible,
+    accountTypeNameDraft,
+    setAccountTypeNameDraft,
+    accountTypeNatureDraft,
+    setAccountTypeNatureDraft,
+    accountTypeStatsDraft,
+    setAccountTypeStatsDraft,
+    accountTypeError,
+    setAccountTypeError,
+    hasAccountTypeUnsavedChanges,
+    openCreateAccountType,
+    closeAccountTypeEditor,
+    saveAccountType
+  } = useAccountTypeController({
+    appData: { groups: assetGroups, accounts, history },
+    groups,
+    createGroupId: () => createStableGroupId(assetGroups.map((group) => group.id)),
+    updateAppData,
+    onCreateAccountType: syncCreatedAccountTypeSideEffects,
+    onUpdateAccountType: syncUpdatedAccountTypeSideEffects
+  });
+
+  const {
+    lastBackupAt,
+    lastBackupHistoryCount,
+    backupRecords,
+    autoBackupSettings,
+    autoBackupDraft,
+    autoBackupCycleValueInput,
+    setAutoBackupCycleValueInput,
+    incrementalRecordValue,
+    hasAutoBackupDraftChanges,
+    canSaveAutoBackupSettings,
+    applyBackupState,
+    resetAutoBackupSettings,
+    resetAutoBackupDraft,
+    updateAutoBackupEnabled,
+    updateAutoBackupCycleValue,
+    adjustAutoBackupCycleValue,
+    updateAutoBackupCycleUnit,
+    selectAutoBackupDirectory,
+    saveAutoBackupDraft,
+    exportBackup,
+    importBackup
+  } = useSnapshotBackupController({
+    productName: PRODUCT_NAME_EN,
+    assetGroups,
+    accounts,
+    history,
+    isExampleMode,
+    globalSettings,
+    updateAppData,
+    cancelPendingFirstWelcomeForRealChange,
+    clearSearchNavigation: () => globalSearch.clearNavigation(),
+    getBackupFieldValue,
+    getBackupAccountData,
+    getBackupHistory,
+    mergeAccounts,
+    mergeGroups,
+    mergeHistoryRecords,
+    requestConfirmationDialog,
+    requestInputDialog,
+    showNoticeDialog,
+    getImportContentAfterIntegrityCheck,
+    showToast,
+    dismissToast
+  });
+
+  const {
+    isLocked,
+    unlockPasswordInput,
+    setUnlockPasswordInput,
+    unlockError,
+    setUnlockError,
+    isUnlocking,
+    passwordEditorMode,
+    oldPasswordInput,
+    setOldPasswordInput,
+    newPasswordInput,
+    setNewPasswordInput,
+    confirmPasswordInput,
+    setConfirmPasswordInput,
+    passwordEditorError,
+    setPasswordEditorError,
+    isSavingPassword,
+    autoLockMinutesInput,
+    isPasswordDisableConfirmOpen,
+    passwordDisableInput,
+    setPasswordDisableInput,
+    passwordDisableError,
+    setPasswordDisableError,
+    isDisablingPasswordProtection,
+    snapshotPasswordEditorMode,
+    oldSnapshotPasswordInput,
+    setOldSnapshotPasswordInput,
+    newSnapshotPasswordInput,
+    setNewSnapshotPasswordInput,
+    confirmSnapshotPasswordInput,
+    setConfirmSnapshotPasswordInput,
+    snapshotPasswordEditorError,
+    setSnapshotPasswordEditorError,
+    isSavingSnapshotPassword,
+    visibleSnapshotPasswordField,
+    isSnapshotEncryptionDisableConfirmOpen,
+    snapshotEncryptionDisableInput,
+    setSnapshotEncryptionDisableInput,
+    snapshotEncryptionDisableError,
+    setSnapshotEncryptionDisableError,
+    isDisablingSnapshotEncryption,
+    closePasswordDisableConfirm,
+    resetPasswordEditor,
+    requestOpenPasswordEditor,
+    updatePasswordProtection,
+    confirmDisablePasswordProtection,
+    saveLoginPassword,
+    closeSnapshotEncryptionDisableConfirm,
+    resetSnapshotPasswordEditor,
+    requestOpenSnapshotPasswordEditor,
+    updateSnapshotEncryption,
+    confirmDisableSnapshotEncryption,
+    toggleSnapshotPasswordVisibility,
+    saveSnapshotPassword,
+    updateAutoLockMinutesInput,
+    resetInvalidAutoLockMinutesInput,
+    unlockApp,
+    resetSecurityState
+  } = useSecuritySettingsController({
+    globalSettings,
+    autoBackupEnabled: autoBackupSettings.enabled,
+    updateGlobalSettings,
+    showConfirmationDialog,
+    showToast
+  });
+
+  const { exportUserSettings, importUserSettings } = useUserSettingsFileController({
+    globalSettings,
+    effectiveThemeStyle,
+    assetChartSettings,
+    normalizeAssetChartSettings,
+    updateGlobalSettings,
+    setAssetChartSettings,
+    saveAssetChartSettings,
+    getImportContentAfterIntegrityCheck,
+    showNoticeDialog
+  });
+
+  useEffect(() => {
+    const wheelGuard = (event: globalThis.WheelEvent) => {
+      event.preventDefault();
+    };
+    const guardedInputs = [
+      newAccountTypeInputRef.current,
+      autoSnapshotCycleInputRef.current
+    ];
+
+    guardedInputs.forEach((input) => {
+      input?.addEventListener('wheel', wheelGuard, { passive: false });
+    });
+
+    return () => {
+      guardedInputs.forEach((input) => {
+        input?.removeEventListener('wheel', wheelGuard);
+      });
+    };
+  }, [isAddingAccount, historyPanelView, autoBackupDraft.enabled]);
 
 
 
@@ -8143,31 +4339,20 @@ function App() {
 
   const resetDataViews = () => {
 
-    dispatchSearchState({ type: 'clear-navigation' });
+    globalSearch.clearNavigation();
 
     setSelectedAccount(null);
 
     setSelectedGroupDetailId('');
 
-    setEditingAccount(null);
+    resetAccountOperations();
 
-    setAccountOperationEntrySource('account-detail');
-
-    setEditingAccountInfo(null);
-
-    setAccountTypeEditor(null);
+    closeAccountTypeEditor();
 
     setIsQuickSingleEntryAccountPickerOpen(false);
 
     setIsRollupImportOpen(false);
-
-    setRollupImportReview(null);
-
-    setRollupImportError('');
-
-    setRollupAccountAssignments({});
-
-    setRollupPendingNewAccountKey('');
+    rollupImport.dismissPage();
 
     setIsAddingAccount(false);
 
@@ -8175,137 +4360,68 @@ function App() {
 
     setIsAccountActionMenuOpen(false);
 
-    setIsDangerActionsOpen(false);
-
     setExpandedGroupIds([]);
 
     setExpandedDetailDates([]);
 
-    closeSearch();
+    globalSearch.closeSearch();
 
   };
 
 
 
-  const applyBackupState = (
-
-    nextBackupRecords: BackupRecord[],
-
-    nextLastBackupAt: string,
-
-    nextLastBackupHistoryCount: number,
-
-    persist: boolean
-
-  ) => {
-
-    const normalizedRecords = normalizeBackupRecords(nextBackupRecords);
-
-    const normalizedHistoryCount = Math.max(0, Math.floor(nextLastBackupHistoryCount));
-
-
-
-    setBackupRecords(normalizedRecords);
-
-    setLastBackupAt(nextLastBackupAt);
-
-    setLastBackupHistoryCount(normalizedHistoryCount);
-
-
-
-    if (!persist) {
-
-      return;
-
-    }
-
-
-
-    saveBackupRecords(normalizedRecords);
-
-
-
-    if (nextLastBackupAt) {
-
-      saveLastBackupAt(nextLastBackupAt);
-
-    } else {
-
-      nfStorage.removeItem(LAST_BACKUP_STORAGE_KEY);
-
-    }
-
-
-
-    saveLastBackupHistoryCount(normalizedHistoryCount);
-
-  };
-
-
-
-  const applyExampleGeneratedData = (generatedData: ExampleGeneratedData) => {
-
-    resetDataViews();
-
-    setAppData(cloneAppData(generatedData.appData));
-
-    applyBackupState(
-
-      cloneBackupRecords(generatedData.backupRecords),
-
-      generatedData.lastBackupAt,
-
-      generatedData.lastBackupHistoryCount,
-
-      false
-
-    );
-
-  };
-
-
-
-  const writeExampleDataToRealData = () => {
-
-    if (!isExampleMode) {
-
-      return false;
-
-    }
-
-
-
-    const currentExampleData = cloneAppData(appData);
-
-
-
-    saveAppData(currentExampleData, { allowEmptyHistoryOverwrite: true });
-
-    setAppData(currentExampleData);
-
-    applyBackupState(
-
-      cloneBackupRecords(backupRecords),
-
-      lastBackupAt,
-
-      lastBackupHistoryCount,
-
-      true
-
-    );
-
-    setIsExampleMode(false);
-
-    realDataBeforeExampleRef.current = null;
-
-    cancelPendingFirstWelcomeForRealChange();
-
-
-
-    return true;
-
-  };
+  const {
+    resetConfirmation,
+    resetConfirmationInput,
+    setResetConfirmationInput,
+    enterExampleMode,
+    switchExampleTemplate,
+    exitExampleMode,
+    chooseFirstWelcomeStoryRoute,
+    writeExampleDataToRealData,
+    openResetConfirmation,
+    closeResetConfirmation,
+    confirmResetAction,
+    getResetActionLabel
+  } = useAppDataLifecycleController({
+    appData,
+    backupRecords,
+    lastBackupAt,
+    lastBackupHistoryCount,
+    selectedExampleTemplateId,
+    setSelectedExampleTemplateId,
+    isExampleMode,
+    setIsExampleMode,
+    defaultGlobalSettings: DEFAULT_GLOBAL_SETTINGS,
+    defaultAssetChartSettings: DEFAULT_ASSET_CHART_SETTINGS,
+    defaultAutoBackupSettings: DEFAULT_AUTO_BACKUP_SETTINGS,
+    setAppData,
+    setGlobalSettings,
+    saveGlobalSettings,
+    setAssetChartSettings,
+    saveAssetChartSettings,
+    resetAutoBackupSettings,
+    resetSecurityState,
+    resetDataViews,
+    applyBackupState,
+    createExampleData,
+    loadRealDataSnapshot: () => {
+      const restoredData = loadAppData();
+
+      return {
+        appData: restoredData,
+        backupRecords: loadBackupRecords(),
+        lastBackupAt: loadLastBackupAt(),
+        lastBackupHistoryCount: loadLastBackupHistoryCount(restoredData.history.length)
+      };
+    },
+    persistAppData: saveAppData,
+    persistEmptyAssetData: clearPersistedAssetData,
+    showConfirmationDialog,
+    completeFirstWelcome,
+    markPendingFirstWelcomeAfterClearAll,
+    cancelPendingFirstWelcomeForRealChange
+  });
 
 
 
@@ -8423,681 +4539,9 @@ function App() {
 
 
 
-  const startExampleMode = (templateId: ExampleTemplateId) => {
-
-    realDataBeforeExampleRef.current = {
-
-      appData: cloneAppData(appData),
-
-      backupRecords: cloneBackupRecords(backupRecords),
-
-      lastBackupAt,
-
-      lastBackupHistoryCount
-
-    };
-
-    setSelectedExampleTemplateId(templateId);
-
-    applyExampleGeneratedData(createExampleData(templateId));
-
-    setIsExampleMode(true);
-
-  };
-
-
-
-  const enterExampleMode = () => {
-
-    setConfirmationDialog({
-
-      title: '进入示例模式',
-
-      message: (
-
-        <>
-
-          <p>示例数据不会覆盖你的真实资产数据</p>
-
-          <p>在示例模式中的修改不会保存到真实数据中</p>
-
-          <p>退出示例模式后会恢复进入前的状态</p>
-
-          <strong>是否继续？</strong>
-
-        </>
-
-      ),
-
-      confirmLabel: '确认进入',
-
-      onConfirm: () => startExampleMode(selectedExampleTemplateId)
-
-    });
-
-  };
-
-
-
   const openFirstWelcomeStory = () => {
 
     setFirstWelcomeStage('story');
-
-  };
-
-
-
-  const chooseFirstWelcomeStoryRoute = (templateId: ExampleTemplateId) => {
-
-    completeFirstWelcome();
-
-    startExampleMode(templateId);
-
-  };
-
-
-
-  const switchExampleTemplate = () => {
-
-    setConfirmationDialog({
-
-      title: '切换示例模板',
-
-      message: (
-
-        <>
-
-          <p>切换示例模板会丢弃当前示例模式中的修改</p>
-
-          <p>系统将重新生成所选模板</p>
-
-          <strong>是否继续？</strong>
-
-        </>
-
-      ),
-
-      confirmLabel: '确认切换',
-
-      onConfirm: () => applyExampleGeneratedData(createExampleData(selectedExampleTemplateId))
-
-    });
-
-  };
-
-
-
-  const performExitExampleMode = () => {
-
-    const realSnapshot = realDataBeforeExampleRef.current;
-
-
-
-    resetDataViews();
-
-    setIsExampleMode(false);
-
-    realDataBeforeExampleRef.current = null;
-
-
-
-    if (!realSnapshot) {
-
-      const restoredData = loadAppData();
-
-      setAppData(restoredData);
-
-      applyBackupState(
-
-        loadBackupRecords(),
-
-        loadLastBackupAt(),
-
-        loadLastBackupHistoryCount(restoredData.history.length),
-
-        false
-
-      );
-
-      return;
-
-    }
-
-
-
-    setAppData(cloneAppData(realSnapshot.appData));
-
-    applyBackupState(
-
-      cloneBackupRecords(realSnapshot.backupRecords),
-
-      realSnapshot.lastBackupAt,
-
-      realSnapshot.lastBackupHistoryCount,
-
-      false
-
-    );
-
-  };
-
-
-
-  const exitExampleMode = () => {
-
-    if (!isExampleMode) {
-
-      return;
-
-    }
-
-
-
-    setConfirmationDialog({
-
-      title: '退出示例模式',
-
-      message: (
-
-        <>
-
-          <p>退出后将离开当前示例模式</p>
-
-          <p>示例模式中的修改不会保留</p>
-
-          <p>系统将恢复到进入示例模式前的真实数据状态</p>
-
-          <strong>确定退出吗？</strong>
-
-        </>
-
-      ),
-
-      confirmLabel: '确认退出',
-
-      onConfirm: performExitExampleMode
-
-    });
-
-  };
-
-
-
-  const getUserSettingsExportPayload = () => ({
-
-    type: USER_SETTINGS_FILE_TYPE,
-
-    version: USER_SETTINGS_FILE_VERSION,
-
-    exportedAt: new Date().toISOString(),
-
-    settings: {
-
-      themeMode: globalSettings.themeMode,
-
-      positiveNegativeColorMode: globalSettings.positiveNegativeColorMode,
-
-      pagePositionMemoryMode: globalSettings.pagePositionMemoryMode,
-
-      searchLogicMode: globalSettings.searchLogicMode,
-
-      chartColorAssignmentMode: globalSettings.chartColorAssignmentMode,
-
-      homeAssetStatMetric: globalSettings.homeAssetStatMetric,
-
-      homeAssetStatLabelMode: globalSettings.homeAssetStatLabelMode,
-
-      homeAssetStatCompact: globalSettings.homeAssetStatCompact,
-
-      themeStyle: effectiveThemeStyle,
-
-      assetChartSettings: normalizeAssetChartSettings(assetChartSettings)
-
-    }
-
-  });
-
-
-
-  const getUserSettingsFileName = (date: Date) => {
-
-    const year = date.getFullYear();
-
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-
-    const day = String(date.getDate()).padStart(2, '0');
-
-    const hour = String(date.getHours()).padStart(2, '0');
-
-    const minute = String(date.getMinutes()).padStart(2, '0');
-
-    const second = String(date.getSeconds()).padStart(2, '0');
-
-
-
-    return `netraflow-settings-${year}${month}${day}-${hour}${minute}${second}.netraflow-settings.json`;
-
-  };
-
-
-
-  const exportUserSettings = () => {
-
-    const exportedAt = new Date();
-
-    const blob = new Blob([JSON.stringify(getUserSettingsExportPayload(), null, 2)], {
-
-      type: 'application/json'
-
-    });
-
-    const objectUrl = URL.createObjectURL(blob);
-
-    const link = document.createElement('a');
-
-
-
-    link.href = objectUrl;
-
-    link.download = getUserSettingsFileName(exportedAt);
-
-    document.body.appendChild(link);
-
-    link.click();
-
-    link.remove();
-
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
-
-  };
-
-
-
-  const applyImportedUserSettings = (value: unknown) => {
-
-    if (
-
-      !isPlainObject(value) ||
-
-      value.type !== USER_SETTINGS_FILE_TYPE ||
-
-      value.version !== USER_SETTINGS_FILE_VERSION
-
-    ) {
-
-      throw new Error('Invalid user settings file.');
-
-    }
-
-
-
-    if (!isPlainObject(value.settings)) {
-
-      throw new Error('Invalid user settings payload.');
-
-    }
-
-
-
-    const importedSettings = value.settings;
-
-
-
-    updateGlobalSettings((currentSettings) => ({
-
-      ...currentSettings,
-
-      themeMode: isThemeMode(importedSettings.themeMode)
-
-        ? importedSettings.themeMode
-
-        : currentSettings.themeMode,
-
-      positiveNegativeColorMode: isPositiveNegativeColorMode(
-
-        importedSettings.positiveNegativeColorMode
-
-      )
-
-        ? importedSettings.positiveNegativeColorMode
-
-        : currentSettings.positiveNegativeColorMode,
-
-      searchLogicMode: isSearchLogicMode(importedSettings.searchLogicMode)
-
-        ? importedSettings.searchLogicMode
-
-        : currentSettings.searchLogicMode,
-
-      pagePositionMemoryMode: isPagePositionMemoryMode(
-
-        importedSettings.pagePositionMemoryMode
-
-      )
-
-        ? importedSettings.pagePositionMemoryMode
-
-        : currentSettings.pagePositionMemoryMode,
-
-      chartColorAssignmentMode: isChartColorAssignmentMode(
-
-        importedSettings.chartColorAssignmentMode
-
-      )
-
-        ? importedSettings.chartColorAssignmentMode
-
-        : currentSettings.chartColorAssignmentMode,
-
-      homeAssetStatMetric: isHomeAssetStatMetric(importedSettings.homeAssetStatMetric)
-
-        ? importedSettings.homeAssetStatMetric
-
-        : currentSettings.homeAssetStatMetric,
-
-      homeAssetStatLabelMode: isHomeAssetStatLabelMode(
-
-        importedSettings.homeAssetStatLabelMode
-
-      )
-
-        ? importedSettings.homeAssetStatLabelMode
-
-        : currentSettings.homeAssetStatLabelMode,
-
-      homeAssetStatCompact:
-
-        typeof importedSettings.homeAssetStatCompact === 'boolean'
-
-          ? importedSettings.homeAssetStatCompact
-
-          : currentSettings.homeAssetStatCompact,
-
-      themeStyle: isThemeStyle(importedSettings.themeStyle)
-
-        ? importedSettings.themeStyle
-
-        : currentSettings.themeStyle,
-
-      nyaaThemeUnlocked: currentSettings.nyaaThemeUnlocked
-
-    }));
-
-
-
-    if (importedSettings.assetChartSettings !== undefined) {
-
-      const nextChartSettings = normalizeAssetChartSettings(
-
-        importedSettings.assetChartSettings
-
-      );
-
-
-
-      setAssetChartSettings(nextChartSettings);
-
-      saveAssetChartSettings(nextChartSettings);
-
-    }
-
-
-
-  };
-
-
-
-  const importUserSettings = (event: ChangeEvent<HTMLInputElement>) => {
-
-    const file = event.target.files?.[0];
-
-    event.target.value = '';
-
-
-
-    if (!file) {
-
-      return;
-
-    }
-
-
-
-    const reader = new FileReader();
-
-
-
-    reader.onload = () => {
-
-      try {
-
-        applyImportedUserSettings(JSON.parse(String(reader.result ?? '')));
-
-        void showNoticeDialog({
-
-          title: '导入用户配置',
-
-          message: '用户配置文件已导入'
-
-        });
-
-      } catch (error) {
-
-        console.error('[NetraFlow settings] Failed to import user settings.', error);
-
-        void showNoticeDialog({
-
-          title: '导入用户配置失败',
-
-          message: '用户配置文件无法导入，请确认文件内容'
-
-        });
-
-      }
-
-    };
-
-    reader.onerror = () => {
-
-      void showNoticeDialog({
-
-        title: '读取用户配置失败',
-
-        message: '用户配置文件读取失败'
-
-      });
-
-    };
-
-    reader.readAsText(file);
-
-  };
-
-
-
-  const resetUserConfiguration = () => {
-
-    const nextGlobalSettings = DEFAULT_GLOBAL_SETTINGS;
-
-
-
-    setGlobalSettings(nextGlobalSettings);
-
-    saveGlobalSettings(nextGlobalSettings);
-
-    setAssetChartSettings(DEFAULT_ASSET_CHART_SETTINGS);
-
-    saveAssetChartSettings(DEFAULT_ASSET_CHART_SETTINGS);
-
-    setAutoBackupSettings(DEFAULT_AUTO_BACKUP_SETTINGS);
-
-    setAutoBackupDraft(DEFAULT_AUTO_BACKUP_SETTINGS);
-
-    setAutoBackupCycleValueInput(String(DEFAULT_AUTO_BACKUP_SETTINGS.cycle.value));
-
-    saveAutoBackupSettings(DEFAULT_AUTO_BACKUP_SETTINGS);
-
-    setIsLocked(false);
-
-    setUnlockPasswordInput('');
-
-    setUnlockError('');
-
-    setPasswordEditorMode(null);
-
-    setSnapshotPasswordEditorMode(null);
-
-    setIsPasswordDisableConfirmOpen(false);
-
-    setIsSnapshotEncryptionDisableConfirmOpen(false);
-
-  };
-
-
-
-  const resetAssetHistory = (persist: boolean) => {
-
-    const emptyData: AppData = { groups: [], accounts: [], history: [] };
-
-
-
-    resetDataViews();
-
-    setAppData(emptyData);
-
-    applyBackupState([], '', 0, persist);
-
-
-
-    if (persist) {
-
-      saveEmptyAssetData();
-
-    }
-
-  };
-
-
-
-  const resetAllData = () => {
-
-    resetUserConfiguration();
-
-    setIsExampleMode(false);
-
-    realDataBeforeExampleRef.current = null;
-
-    resetAssetHistory(true);
-
-    markPendingFirstWelcomeAfterClearAll();
-
-  };
-
-
-
-  const getResetActionLabel = (action: ResetAction) => {
-
-    if (action === 'settings') {
-
-      return '清除用户配置';
-
-    }
-
-
-
-    if (action === 'history') {
-
-      return '清除历史记录';
-
-    }
-
-
-
-    return '清除所有';
-
-  };
-
-
-
-  const openResetConfirmation = (action: ResetAction) => {
-
-    if (isExampleMode) {
-
-      return;
-
-    }
-
-
-
-    setResetConfirmation({
-
-      action,
-
-      code: String(randomIntBetween(0, 9999)).padStart(4, '0')
-
-    });
-
-    setResetConfirmationInput('');
-
-  };
-
-
-
-  const closeResetConfirmation = () => {
-
-    setResetConfirmation(null);
-
-    setResetConfirmationInput('');
-
-  };
-
-
-
-  const confirmResetAction = () => {
-
-    if (!resetConfirmation || resetConfirmationInput !== resetConfirmation.code) {
-
-      return;
-
-    }
-
-
-
-    const { action } = resetConfirmation;
-
-    closeResetConfirmation();
-
-
-
-    if (isExampleMode) {
-
-      return;
-
-    }
-
-
-
-    if (action === 'settings') {
-
-      resetUserConfiguration();
-
-      return;
-
-    }
-
-
-
-    if (action === 'history') {
-
-      resetAssetHistory(!isExampleMode);
-
-      return;
-
-    }
-
-
-
-    resetAllData();
 
   };
 
@@ -9159,1004 +4603,6 @@ function App() {
 
 
 
-  const resetPasswordEditor = () => {
-
-    setPasswordEditorMode(null);
-
-    setOldPasswordInput('');
-
-    setNewPasswordInput('');
-
-    setConfirmPasswordInput('');
-
-    setPasswordEditorError('');
-
-    setIsSavingPassword(false);
-
-  };
-
-
-
-  const openPasswordEditor = (mode: Exclude<PasswordEditorMode, null>) => {
-
-    setPasswordEditorMode(mode);
-
-    setOldPasswordInput('');
-
-    setNewPasswordInput('');
-
-    setConfirmPasswordInput('');
-
-    setPasswordEditorError('');
-
-    setIsSavingPassword(false);
-
-  };
-
-
-
-  const requestFirstPasswordSetup = () => {
-
-    setConfirmationDialog({
-
-      title: '设置登录密码',
-
-      message: (
-
-        <>
-
-          <p>忘记登录密码将无法进入净流</p>
-
-          <p>请妥善保存</p>
-
-        </>
-
-      ),
-
-      confirmLabel: '继续设置',
-
-      onConfirm: () => openPasswordEditor('setup')
-
-    });
-
-  };
-
-
-
-  const requestOpenPasswordEditor = () => {
-
-    if (globalSettings.passwordHash) {
-
-      openPasswordEditor('edit');
-
-      return;
-
-    }
-
-
-
-    requestFirstPasswordSetup();
-
-  };
-
-
-
-  const closePasswordDisableConfirm = () => {
-
-    setIsPasswordDisableConfirmOpen(false);
-
-    setPasswordDisableInput('');
-
-    setPasswordDisableError('');
-
-    setIsDisablingPasswordProtection(false);
-
-  };
-
-
-
-  const requestDisablePasswordProtection = () => {
-
-    if (!globalSettings.passwordHash) {
-
-      updateGlobalSettings((currentSettings) => ({
-
-        ...currentSettings,
-
-        passwordProtectionEnabled: false
-
-      }));
-
-      return;
-
-    }
-
-
-
-    setIsPasswordDisableConfirmOpen(true);
-
-    setPasswordDisableInput('');
-
-    setPasswordDisableError('');
-
-    setIsDisablingPasswordProtection(false);
-
-  };
-
-
-
-  const updatePasswordProtection = (value: string) => {
-
-    if (value === 'yes') {
-
-      if (globalSettings.passwordProtectionEnabled) {
-
-        return;
-
-      }
-
-
-
-      if (!globalSettings.passwordHash) {
-
-        requestFirstPasswordSetup();
-
-        return;
-
-      }
-
-
-
-      updateGlobalSettings((currentSettings) => ({
-
-        ...currentSettings,
-
-        passwordProtectionEnabled: true
-
-      }));
-
-      return;
-
-    }
-
-
-
-    if (value === 'no' && globalSettings.passwordProtectionEnabled) {
-
-      requestDisablePasswordProtection();
-
-    }
-
-  };
-
-
-
-  const confirmDisablePasswordProtection = async (event: FormEvent<HTMLFormElement>) => {
-
-    event.preventDefault();
-
-
-
-    if (!globalSettings.passwordHash) {
-
-      updateGlobalSettings((currentSettings) => ({
-
-        ...currentSettings,
-
-        passwordProtectionEnabled: false
-
-      }));
-
-      closePasswordDisableConfirm();
-
-      return;
-
-    }
-
-
-
-    setIsDisablingPasswordProtection(true);
-
-    setPasswordDisableError('');
-
-
-
-    const isPasswordValid = await verifyPassword(
-
-      passwordDisableInput,
-
-      globalSettings.passwordHash
-
-    );
-
-
-
-    if (!isPasswordValid) {
-
-      setPasswordDisableError('密码错误');
-
-      setIsDisablingPasswordProtection(false);
-
-      return;
-
-    }
-
-
-
-    updateGlobalSettings((currentSettings) => ({
-
-      ...currentSettings,
-
-      passwordProtectionEnabled: false
-
-    }));
-
-    setIsLocked(false);
-
-    closePasswordDisableConfirm();
-
-  };
-
-
-
-  const saveLoginPassword = async (event: FormEvent<HTMLFormElement>) => {
-
-    event.preventDefault();
-
-
-
-    if (newPasswordInput.trim() === '') {
-
-      setPasswordEditorError('请输入新密码');
-
-      return;
-
-    }
-
-
-
-    if (newPasswordInput !== confirmPasswordInput) {
-
-      setPasswordEditorError('两次输入的新密码不一致');
-
-      return;
-
-    }
-
-
-
-    const savedPasswordHash = globalSettings.passwordHash;
-
-
-
-    setIsSavingPassword(true);
-
-    setPasswordEditorError('');
-
-
-
-    if (passwordEditorMode === 'edit') {
-
-      if (!savedPasswordHash) {
-
-        setPasswordEditorError('旧密码不正确');
-
-        setIsSavingPassword(false);
-
-        return;
-
-      }
-
-
-
-      const isOldPasswordValid = await verifyPassword(oldPasswordInput, savedPasswordHash);
-
-
-
-      if (!isOldPasswordValid) {
-
-        setPasswordEditorError('旧密码不正确');
-
-        setIsSavingPassword(false);
-
-        return;
-
-      }
-
-    }
-
-
-
-    try {
-
-      const nextPasswordHash = await createPasswordHash(newPasswordInput);
-
-
-
-      updateGlobalSettings((currentSettings) => ({
-
-        ...currentSettings,
-
-        passwordHash: nextPasswordHash,
-
-        passwordProtectionEnabled:
-
-          passwordEditorMode === 'setup' ? true : currentSettings.passwordProtectionEnabled
-
-      }));
-
-      resetPasswordEditor();
-
-    } catch (error) {
-
-      console.error('[NetraFlow security] Failed to save login password.', error);
-
-      setPasswordEditorError('密码保存失败');
-
-      setIsSavingPassword(false);
-
-    }
-
-  };
-
-
-
-  const getSnapshotEncryptionEnableMessage = () =>
-
-    autoBackupSettings.enabled
-
-      ? (
-
-          <>
-
-            <p>手动导出的快照文件和当前已开启的自动快照文件都将使用快照密码加密</p>
-
-            <p>忘记快照密码将无法恢复这些加密快照</p>
-
-            <strong>是否继续？</strong>
-
-          </>
-
-        )
-
-      : (
-
-          <>
-
-            <p>手动导出的快照文件将使用快照密码加密</p>
-
-            <p>忘记快照密码将无法恢复这些加密快照</p>
-
-            <strong>是否继续？</strong>
-
-          </>
-
-        );
-
-
-
-  const resetSnapshotPasswordEditor = () => {
-
-    setSnapshotPasswordEditorMode(null);
-
-    setShouldEnableSnapshotEncryptionAfterPasswordSave(false);
-
-    setOldSnapshotPasswordInput('');
-
-    setNewSnapshotPasswordInput('');
-
-    setConfirmSnapshotPasswordInput('');
-
-    setSnapshotPasswordEditorError('');
-
-    setIsSavingSnapshotPassword(false);
-
-    setVisibleSnapshotPasswordField(null);
-
-
-
-    if (snapshotPasswordRevealTimerRef.current !== null) {
-
-      window.clearTimeout(snapshotPasswordRevealTimerRef.current);
-
-      snapshotPasswordRevealTimerRef.current = null;
-
-    }
-
-  };
-
-
-
-  const openSnapshotPasswordEditor = (
-
-    mode: Exclude<SnapshotPasswordEditorMode, null>,
-
-    enableAfterSave = false
-
-  ) => {
-
-    setSnapshotPasswordEditorMode(mode);
-
-    setShouldEnableSnapshotEncryptionAfterPasswordSave(enableAfterSave);
-
-    setOldSnapshotPasswordInput('');
-
-    setNewSnapshotPasswordInput('');
-
-    setConfirmSnapshotPasswordInput('');
-
-    setSnapshotPasswordEditorError('');
-
-    setIsSavingSnapshotPassword(false);
-
-    setVisibleSnapshotPasswordField(null);
-
-
-
-    if (snapshotPasswordRevealTimerRef.current !== null) {
-
-      window.clearTimeout(snapshotPasswordRevealTimerRef.current);
-
-      snapshotPasswordRevealTimerRef.current = null;
-
-    }
-
-  };
-
-
-
-  const requestFirstSnapshotPasswordSetup = (enableAfterSave = false) => {
-
-    setConfirmationDialog({
-
-      title: '设置快照密码',
-
-      message: (
-
-        <>
-
-          <p>忘记快照密码将无法恢复已加密的快照</p>
-
-          <p>请妥善保存</p>
-
-        </>
-
-      ),
-
-      confirmLabel: '继续设置',
-
-      onConfirm: () => openSnapshotPasswordEditor('setup', enableAfterSave)
-
-    });
-
-  };
-
-
-
-  const requestOpenSnapshotPasswordEditor = () => {
-
-    if (!globalSettings.snapshotPasswordHash) {
-
-      requestFirstSnapshotPasswordSetup();
-
-      return;
-
-    }
-
-
-
-    setConfirmationDialog({
-
-      title: '修改快照密码',
-
-      message: (
-
-        <>
-
-          <p>之后生成的加密快照将使用新密码</p>
-
-          <p>此前已经使用旧快照密码加密的文件，仍需要使用原密码解密</p>
-
-        </>
-
-      ),
-
-      confirmLabel: '继续修改',
-
-      onConfirm: () => openSnapshotPasswordEditor('edit')
-
-    });
-
-  };
-
-
-
-  const closeSnapshotEncryptionDisableConfirm = () => {
-
-    setIsSnapshotEncryptionDisableConfirmOpen(false);
-
-    setSnapshotEncryptionDisableInput('');
-
-    setSnapshotEncryptionDisableError('');
-
-    setIsDisablingSnapshotEncryption(false);
-
-  };
-
-
-
-  const requestDisableSnapshotEncryption = () => {
-
-    if (!globalSettings.snapshotPasswordHash) {
-
-      updateGlobalSettings((currentSettings) => ({
-
-        ...currentSettings,
-
-        snapshotEncryptionEnabled: false
-
-      }));
-
-      return;
-
-    }
-
-
-
-    setIsSnapshotEncryptionDisableConfirmOpen(true);
-
-    setSnapshotEncryptionDisableInput('');
-
-    setSnapshotEncryptionDisableError('');
-
-    setIsDisablingSnapshotEncryption(false);
-
-  };
-
-
-
-  const updateSnapshotEncryption = (value: string) => {
-
-    if (value === 'yes') {
-
-      if (globalSettings.snapshotEncryptionEnabled) {
-
-        return;
-
-      }
-
-
-
-      if (!globalSettings.snapshotPasswordHash) {
-
-        setConfirmationDialog({
-
-          title: '启用快照加密',
-
-          message: getSnapshotEncryptionEnableMessage(),
-
-          confirmLabel: '继续',
-
-          onConfirm: () => requestFirstSnapshotPasswordSetup(true)
-
-        });
-
-        return;
-
-      }
-
-
-
-      setConfirmationDialog({
-
-        title: '启用快照加密',
-
-        message: getSnapshotEncryptionEnableMessage(),
-
-        confirmLabel: '确认启用',
-
-        onConfirm: () =>
-
-          updateGlobalSettings((currentSettings) => ({
-
-            ...currentSettings,
-
-            snapshotEncryptionEnabled: true
-
-          }))
-
-      });
-
-      return;
-
-    }
-
-
-
-    if (value === 'no' && globalSettings.snapshotEncryptionEnabled) {
-
-      requestDisableSnapshotEncryption();
-
-    }
-
-  };
-
-
-
-  const confirmDisableSnapshotEncryption = async (event: FormEvent<HTMLFormElement>) => {
-
-    event.preventDefault();
-
-
-
-    if (!globalSettings.snapshotPasswordHash) {
-
-      updateGlobalSettings((currentSettings) => ({
-
-        ...currentSettings,
-
-        snapshotEncryptionEnabled: false
-
-      }));
-
-      closeSnapshotEncryptionDisableConfirm();
-
-      return;
-
-    }
-
-
-
-    setIsDisablingSnapshotEncryption(true);
-
-    setSnapshotEncryptionDisableError('');
-
-
-
-    const isPasswordValid = await verifyPassword(
-
-      snapshotEncryptionDisableInput,
-
-      globalSettings.snapshotPasswordHash
-
-    );
-
-
-
-    if (!isPasswordValid) {
-
-      setSnapshotEncryptionDisableError('快照密码不正确');
-
-      setIsDisablingSnapshotEncryption(false);
-
-      return;
-
-    }
-
-
-
-    updateGlobalSettings((currentSettings) => ({
-
-      ...currentSettings,
-
-      snapshotEncryptionEnabled: false
-
-    }));
-
-    closeSnapshotEncryptionDisableConfirm();
-
-  };
-
-
-
-  const toggleSnapshotPasswordVisibility = (field: 'new' | 'confirm') => {
-
-    if (snapshotPasswordRevealTimerRef.current !== null) {
-
-      window.clearTimeout(snapshotPasswordRevealTimerRef.current);
-
-      snapshotPasswordRevealTimerRef.current = null;
-
-    }
-
-
-
-    if (visibleSnapshotPasswordField === field) {
-
-      setVisibleSnapshotPasswordField(null);
-
-      return;
-
-    }
-
-
-
-    setVisibleSnapshotPasswordField(field);
-
-    snapshotPasswordRevealTimerRef.current = window.setTimeout(() => {
-
-      setVisibleSnapshotPasswordField(null);
-
-      snapshotPasswordRevealTimerRef.current = null;
-
-    }, 2400);
-
-  };
-
-
-
-  const saveSnapshotPassword = async (event: FormEvent<HTMLFormElement>) => {
-
-    event.preventDefault();
-
-
-
-    if (newSnapshotPasswordInput.trim() === '') {
-
-      setSnapshotPasswordEditorError('请输入新快照密码');
-
-      return;
-
-    }
-
-
-
-    if (newSnapshotPasswordInput !== confirmSnapshotPasswordInput) {
-
-      setSnapshotPasswordEditorError('两次输入的新快照密码不一致');
-
-      return;
-
-    }
-
-
-
-    const savedSnapshotPasswordHash = globalSettings.snapshotPasswordHash;
-
-
-
-    setIsSavingSnapshotPassword(true);
-
-    setSnapshotPasswordEditorError('');
-
-
-
-    if (snapshotPasswordEditorMode === 'edit') {
-
-      if (!savedSnapshotPasswordHash) {
-
-        setSnapshotPasswordEditorError('旧快照密码不正确');
-
-        setIsSavingSnapshotPassword(false);
-
-        return;
-
-      }
-
-
-
-      const isOldSnapshotPasswordValid = await verifyPassword(
-
-        oldSnapshotPasswordInput,
-
-        savedSnapshotPasswordHash
-
-      );
-
-
-
-      if (!isOldSnapshotPasswordValid) {
-
-        setSnapshotPasswordEditorError('旧快照密码不正确');
-
-        setIsSavingSnapshotPassword(false);
-
-        return;
-
-      }
-
-    }
-
-
-
-    try {
-
-      const nextSnapshotPasswordHash = await createPasswordHash(newSnapshotPasswordInput);
-
-
-
-      updateGlobalSettings((currentSettings) => ({
-
-        ...currentSettings,
-
-        snapshotPasswordHash: nextSnapshotPasswordHash,
-
-        snapshotEncryptionEnabled:
-
-          shouldEnableSnapshotEncryptionAfterPasswordSave ||
-
-          currentSettings.snapshotEncryptionEnabled
-
-      }));
-
-      resetSnapshotPasswordEditor();
-
-    } catch (error) {
-
-      console.error('[NetraFlow security] Failed to save snapshot password.', error);
-
-      setSnapshotPasswordEditorError('快照密码保存失败');
-
-      setIsSavingSnapshotPassword(false);
-
-    }
-
-  };
-
-
-
-  const updateAutoLockMinutesInput = (value: string) => {
-
-    if (!/^\d*$/.test(value)) {
-
-      return;
-
-    }
-
-
-
-    setAutoLockMinutesInput(value);
-
-
-
-    if (!value) {
-
-      return;
-
-    }
-
-
-
-    const nextMinutes = Number(value);
-
-
-
-    if (!Number.isFinite(nextMinutes) || nextMinutes < 1) {
-
-      return;
-
-    }
-
-
-
-    updateGlobalSettings((currentSettings) => ({
-
-      ...currentSettings,
-
-      autoLockMinutes: Math.floor(nextMinutes)
-
-    }));
-
-  };
-
-
-
-  const resetInvalidAutoLockMinutesInput = () => {
-
-    const nextMinutes = Number(autoLockMinutesInput);
-
-
-
-    if (!autoLockMinutesInput || !Number.isFinite(nextMinutes) || nextMinutes < 1) {
-
-      setAutoLockMinutesInput(String(globalSettings.autoLockMinutes));
-
-    }
-
-  };
-
-
-
-  const unlockApp = async (event: FormEvent<HTMLFormElement>) => {
-
-    event.preventDefault();
-
-
-
-    if (!globalSettings.passwordProtectionEnabled || !globalSettings.passwordHash) {
-
-      setIsLocked(false);
-
-      setUnlockPasswordInput('');
-
-      setUnlockError('');
-
-      return;
-
-    }
-
-
-
-    setIsUnlocking(true);
-
-    setUnlockError('');
-
-
-
-    const isPasswordValid = await verifyPassword(unlockPasswordInput, globalSettings.passwordHash);
-
-
-
-    if (!isPasswordValid) {
-
-      setUnlockError('密码错误');
-
-      setIsUnlocking(false);
-
-      return;
-
-    }
-
-
-
-    setIsLocked(false);
-
-    setUnlockPasswordInput('');
-
-    setUnlockError('');
-
-    setIsUnlocking(false);
-
-  };
-
-
-
-  const dismissToast = (toastId: string) => {
-
-    setToastMessages((currentMessages) =>
-
-      currentMessages.filter((message) => message.id !== toastId)
-
-    );
-
-  };
-
-
-
-  const showToast = (message: string, tone: ToastTone = 'info') => {
-
-    const toastId = createId('toast');
-
-    const timerId = window.setTimeout(() => dismissToast(toastId), 2800);
-
-
-
-    toastTimerRefs.current.push(timerId);
-
-    setToastMessages((currentMessages) => [
-
-      ...currentMessages.filter((currentMessage) => currentMessage.message !== message),
-
-      {
-
-        id: toastId,
-
-        message,
-
-        tone
-
-      }
-
-    ]);
-
-
-
-    return toastId;
-
-  };
-
-
-
   const openExternalInfoLink = (url: string, logMessage: string) => {
 
     const api = window.electronAPI ?? window.electronWindow;
@@ -10203,120 +4649,6 @@ function App() {
 
 
 
-  const closeConfirmationDialog = () => {
-
-    const cancelAction = confirmationDialog?.onCancel;
-
-
-
-    setConfirmationDialog(null);
-
-    cancelAction?.();
-
-  };
-
-
-
-  const confirmAndClose = () => {
-
-    const action = confirmationDialog?.onConfirm;
-
-
-
-    setConfirmationDialog(null);
-
-    action?.();
-
-  };
-
-
-
-  const requestConfirmationDialog = (
-
-    options: Omit<NonNullable<ConfirmationDialogState>, 'onConfirm' | 'onCancel'>
-
-  ) =>
-
-    new Promise<boolean>((resolve) => {
-
-      setConfirmationDialog({
-
-        ...options,
-
-        onConfirm: () => resolve(true),
-
-        onCancel: () => resolve(false)
-
-      });
-
-    });
-
-
-
-  const closeNoticeDialog = () => {
-
-    const closeAction = noticeDialog?.onClose;
-
-
-
-    setNoticeDialog(null);
-
-    closeAction?.();
-
-  };
-
-
-
-  const showNoticeDialog = (options: Omit<NonNullable<NoticeDialogState>, 'onClose'>) =>
-
-    new Promise<void>((resolve) => {
-
-      setNoticeDialog({
-
-        ...options,
-
-        onClose: resolve
-
-      });
-
-    });
-
-
-
-  const closeInputDialog = () => {
-
-    const cancelAction = inputDialog?.onCancel;
-
-
-
-    setInputDialog(null);
-
-    setInputDialogValue('');
-
-    cancelAction?.();
-
-  };
-
-
-
-  const confirmInputDialog = () => {
-
-    const confirmAction = inputDialog?.onConfirm;
-
-    const value = inputDialogValue;
-
-
-
-    setInputDialog(null);
-
-    setInputDialogValue('');
-
-    confirmAction?.(value);
-
-  };
-
-
-
   const formatMoney = (amount: number | null, options: { compact?: boolean } = {}) =>
 
     formatCurrencyMoneyValue(amount, options);
@@ -10336,16 +4668,6 @@ function App() {
   const formatHistoryAmount = (amount: number | null) =>
 
     amount === null ? '0' : formatMoneyValue(amount);
-
-  const signedAdjustAmountLabel =
-
-    adjustDirection === 'decrease'
-
-      ? `-${formatHistoryAmount(parsedAdjustAmount)}`
-
-      : `+${formatHistoryAmount(parsedAdjustAmount)}`;
-
-
 
   const formatShortTime = (time: string) => {
 
@@ -10493,80 +4815,6 @@ function App() {
 
 
 
-  const getBackupMethodLabel = (method: BackupMethod) =>
-
-    method === 'auto' ? '自动快照' : '手动快照';
-
-
-
-  const formatBackupFileTimestamp = (date: Date) => {
-
-    const year = date.getFullYear();
-
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-
-    const day = String(date.getDate()).padStart(2, '0');
-
-    const hour = String(date.getHours()).padStart(2, '0');
-
-    const minute = String(date.getMinutes()).padStart(2, '0');
-
-
-
-    return `${year}${month}${day}-${hour}${minute}`;
-
-  };
-
-
-
-  const formatPercentage = (amount: number, denominator: number) => {
-
-    if (denominator === 0) {
-
-      return '0%';
-
-    }
-
-
-
-    return `${((Math.abs(amount) / Math.abs(denominator)) * 100).toFixed(1)}%`;
-
-  };
-
-
-
-  const getGroupPercentageLabel = (group: (typeof groupTotals)[number]) =>
-
-    group.includeInStats ? formatPercentage(group.total, positiveStatsTotal) : '未计入';
-
-
-
-  const getAccountPercentageLabel = (
-
-    group: (typeof groupTotals)[number],
-
-    account: Account
-
-  ) => (group.includeInStats ? formatPercentage(account.amount, group.total) : '未计入');
-
-
-
-  const getPercentageColor = (nature: AccountTypeNature, includeInStats: boolean) => {
-
-    if (!includeInStats) {
-
-      return 'var(--text-muted)';
-
-    }
-
-
-
-    return nature === 'liability' ? '#15803d' : '#9a6b2f';
-
-  };
-
-
-
   const getGroupNature = (groupId: string) =>
 
     groups.find((group) => group.id === groupId)?.nature ?? 'asset';
@@ -10577,483 +4825,182 @@ function App() {
 
     toStoredAmountByNature(getGroupNature(groupId), amount);
 
-
-
-  const getGroupName = (groupId: string) =>
-
-    groups.find((group) => group.id === groupId)?.name ?? '';
-
-
-
-  const flashDirection: FlashNoteDirection = getFlashDirectionFromDates(flashStartDate, flashEndDate);
-
-  const flashVisibleMonthEnd = useMemo(
-
-    () => new Date(flashVisibleMonth.getFullYear(), flashVisibleMonth.getMonth() + 2, 0),
-
-    [flashVisibleMonth]
-
-  );
-
-  const flashVisibleSelectableDates = useMemo(
-
-    () =>
-
-      getDateRangeKeys(
-
-        toDateInputValue(flashVisibleMonth),
-
-        toDateInputValue(flashVisibleMonthEnd)
-
-      ),
-
-    [flashVisibleMonth, flashVisibleMonthEnd]
-
-  );
-
-  const flashTrackDates = useMemo(() => {
-
-    const safeDates = flashSelectedDates.filter((dateValue) => !isFutureDateKey(dateValue));
-
-    if (
-      flashStartDate &&
-      !flashEndDate &&
-      safeDates.length === 1 &&
-      safeDates[0] === flashStartDate &&
-      !isFutureDateKey(flashStartDate)
-    ) {
-
-      return getContinuousFlashDates({
-
-        startDate: flashStartDate,
-
-        direction: flashDirection,
-
-        minimumCount: Math.max(35, flashInputCursor + 14),
-
-        includeDates: Object.keys(flashCells)
-
-      });
-
-    }
-
-
-
-    if (safeDates.length === 0) {
-
-      return [];
-
-    }
-
-
-
-    return sortFlashDatesByDirection(safeDates, flashDirection);
-
-  }, [flashCells, flashDirection, flashEndDate, flashInputCursor, flashSelectedDates, flashStartDate]);
-
-  const flashSelectedDateSet = useMemo(
-
-    () => new Set(flashSelectedDates),
-
-    [flashSelectedDates]
-
-  );
-
-  const flashDragPreviewDateSet = useMemo(
-
-    () => new Set(flashDragPreviewDates),
-
-    [flashDragPreviewDates]
-
-  );
-
-  const flashCurrentDate = flashTrackDates[flashInputCursor] ?? '';
-
-  const flashHasTemporaryContent =
-
-    Boolean(flashStartDate) ||
-
-    flashSelectedDates.length > 0 ||
-
-    flashNoteStage !== 'select' ||
-
-    Object.values(flashCells).some((cell) => cell.value.trim() || cell.enabled || cell.missing);
-
-
-
-  const getFlashCell = (dateValue: string): FlashNoteCell => {
-
-    const existingCell = flashCells[dateValue];
-
-
-
-    return (
-
-      existingCell ?? {
-
-        date: dateValue,
-
-        value: '',
-
-        enabled: flashSelectedDateSet.has(dateValue),
-
-        original: flashSelectedDateSet.has(dateValue),
-
-        missing: false
-
-      }
-
-    );
-
+  const scrollMainToTop = (behavior: ScrollBehavior = 'auto') => {
+    mainContentRef.current?.scrollTo({ top: 0, behavior });
   };
 
+  const openRollupNewAccountForm = (keyword: string) => {
+    const firstGroup = groups[0];
 
+    setIsAddingAccount(true);
+    setNewAccountGroupId(firstGroup?.id ?? '');
+    setNewAccountTypeInput(firstGroup?.name ?? '');
+    setNewAccountName(keyword.trim());
+    setNewAccountAmount('0');
+    setNewAccountError('');
+  };
 
-  const createFlashCell = (
-
-    dateValue: string,
-
-    overrides: Partial<FlashNoteCell> = {}
-
-  ): FlashNoteCell => ({
-
-    ...getFlashCell(dateValue),
-
-    ...overrides,
-
-    date: dateValue
-
+  const rollupImport = useRollupImportController({
+    assetGroups,
+    accounts,
+    groups,
+    accountGroups: groupTotals,
+    history,
+    isExampleMode,
+    updateAppData,
+    createHistoryRecord: ({
+      account,
+      afterAmount,
+      beforeAmount,
+      groupName,
+      source,
+      time
+    }) =>
+      createHistoryRecord(
+        '修改',
+        account,
+        groupName,
+        beforeAmount,
+        afterAmount,
+        time,
+        undefined,
+        source
+      ),
+    showToast,
+    onClosePage: () => setIsRollupImportOpen(false),
+    onSelectFile: () => rollupFileInputRef.current?.click(),
+    onRequestCreateAccount: openRollupNewAccountForm,
+    onScrollMainToTop: scrollMainToTop
   });
 
 
-
-  const getFlashSelectionResult = (
-
-    candidateDates: string[],
-
-    mode: FlashNoteSelectionMode
-
-  ) =>
-    resolveFlashSelectionDates({
-      candidateDates,
-      isDateDisabled: isFutureDateKey,
-      mode,
-      selectedDates: flashSelectedDates
-    });
-
-
-
-  const wouldFlashSelectionFillVisibleRange = (dates: string[]) =>
-
-    flashVisibleSelectableDates.length > 0 &&
-
-    dates.length === flashVisibleSelectableDates.length &&
-
-    flashVisibleSelectableDates.every((dateValue) => dates.includes(dateValue));
-
-
-
-  const applyFlashDateSelection = (
-
-    candidateDates: string[],
-
-    mode = flashSelectionMode,
-
-    bounds?: { start: string; end?: string; keepBounds?: boolean }
-
-  ) => {
-
-    const nextDates = getFlashSelectionResult(candidateDates, mode);
-
-
-
-    if (wouldFlashSelectionFillVisibleRange(nextDates)) {
-
-      return false;
-
-    }
-
-
-
-    setFlashSelectedDates(nextDates);
-
-    setFlashDragPreviewDates([]);
-
-    setFlashActiveDateRule(null);
-
-
-
-    const nextBounds = resolveFlashSelectionBounds({
-      currentEndDate: flashEndDate,
-      currentStartDate: flashStartDate,
-      mode,
-      nextDates,
-      requestedEndDate: bounds?.end,
-      requestedStartDate: bounds?.start,
-      shouldPreserveBounds: Boolean(bounds?.keepBounds)
-    });
-
-    setFlashStartDate(nextBounds.startDate);
-
-    setFlashEndDate(nextBounds.endDate);
-
-
-
-    return true;
-
-  };
-
-
-
-  const handleFlashDatePointerDown = (dateValue: string) => {
-
-    if (isFutureDateKey(dateValue)) {
-
-      return;
-
-    }
-
-
-
-    setFlashDragStartDate(dateValue);
-
-    setFlashDragPreviewDates([dateValue]);
-
-  };
-
-
-
-  const handleFlashDatePointerEnter = (dateValue: string) => {
-
-    if (!flashDragStartDate || isFutureDateKey(dateValue)) {
-
-      return;
-
-    }
-
-
-
-    setFlashDragPreviewDates(getDateRangeKeys(flashDragStartDate, dateValue));
-
-  };
-
-
-
-  const handleFlashDatePointerUp = (dateValue: string) => {
-
-    if (!flashDragStartDate || isFutureDateKey(dateValue)) {
-
-      return;
-
-    }
-
-
-
-    const isSingleClick = flashDragStartDate === dateValue && flashDragPreviewDates.length <= 1;
-
-
-
-    if (isSingleClick && flashSelectionMode === 'replace') {
-
-      if (!flashStartDate || flashEndDate || flashStartDate === dateValue) {
-
-        applyFlashDateSelection([dateValue], 'replace', { start: dateValue });
-
-      } else {
-
-        applyFlashDateSelection(getDateRangeKeys(flashStartDate, dateValue), 'replace', {
-
-          start: flashStartDate,
-
-          end: dateValue
-
-        });
-
+  const accountOperations = useAccountOperationsController({
+    appData: { groups: assetGroups, accounts, history },
+    groups,
+    selectedAccount,
+    selectedAccountEntry,
+    assetGroups,
+    formatMoney,
+    createHistoryRecordId: () => createId('history'),
+    updateAppData,
+    showConfirmationDialog,
+    showNoticeDialog,
+    normalizeAlias: getEffectiveAccountAbbreviation,
+    onCloseAccountDetail: () => closeAccountDetail(),
+    onCloseAccountActionMenu: () => setIsAccountActionMenuOpen(false),
+    onReturnFromActionPanel: () => currentLayerBack?.(),
+    onAmountEditorReturnHome: () => {
+      setSelectedAccount(null);
+      setExpandedDetailDates([]);
+      setIsAccountActionMenuOpen(false);
+    },
+    onCompleteArchivedRestoreSource: (source: ArchivedRestoreSource) => {
+      if (source === 'account-restore-dialog' || source === 'same-name-account') {
+        closeAddAccount();
       }
-
-    } else {
-
-      applyFlashDateSelection(getDateRangeKeys(flashDragStartDate, dateValue), flashSelectionMode, {
-
-        start: flashDragStartDate,
-
-        end: dateValue
-
-      });
-
     }
-
-
-
-    setFlashDragStartDate('');
-
-  };
-
-
-
-  const applyFlashDateRule = (rule: FlashNoteDateRule) => {
-
-    if (!flashStartDate || isFutureDateKey(flashStartDate)) {
-
-      return;
-
-    }
-
-
-
-    const visibleEndDate =
-
-      flashVisibleSelectableDates[flashVisibleSelectableDates.length - 1] ?? flashStartDate;
-
-    const endDate = flashEndDate || visibleEndDate;
-
-    const candidateDates = getDateRangeKeys(flashStartDate, endDate).filter((dateValue) => {
-
-      const weekdayIndex = getDateKeyFromValue(dateValue).getDay();
-
-
-
-      if (rule === 'weekday') {
-
-        return weekdayIndex >= 1 && weekdayIndex <= 5;
-
-      }
-
-
-
-      if (rule === 'weekend') {
-
-        return weekdayIndex === 0 || weekdayIndex === 6;
-
-      }
-
-
-
-      return true;
-
-    });
-
-
-
-    applyFlashDateSelection(candidateDates, 'replace', {
-
-      start: flashStartDate,
-
-      end: flashEndDate,
-
-      keepBounds: true
-
-    });
-
-    setFlashActiveDateRule(rule);
-
-  };
-
-
-
-  const getFlashDateRuleCandidateDates = (rule: FlashNoteDateRule) => {
-
-    if (!flashStartDate || isFutureDateKey(flashStartDate)) {
-
-      return [];
-
-    }
-
-    const visibleEndDate =
-
-      flashVisibleSelectableDates[flashVisibleSelectableDates.length - 1] ?? flashStartDate;
-
-    const endDate = flashEndDate || visibleEndDate;
-
-    return getDateRangeKeys(flashStartDate, endDate).filter((dateValue) => {
-
-      const weekdayIndex = getDateKeyFromValue(dateValue).getDay();
-
-      if (rule === 'weekday') {
-
-        return weekdayIndex >= 1 && weekdayIndex <= 5;
-
-      }
-
-      if (rule === 'weekend') {
-
-        return weekdayIndex === 0 || weekdayIndex === 6;
-
-      }
-
-      return true;
-
-    });
-
-  };
-
-
-
-  const isFlashDateRuleDisabled = (rule: FlashNoteDateRule) => {
-
-    const candidateDates = getFlashDateRuleCandidateDates(rule);
-
-    if (candidateDates.length === 0) {
-
-      return true;
-
-    }
-
-    return wouldFlashSelectionFillVisibleRange(getFlashSelectionResult(candidateDates, 'replace'));
-
-  };
-
-
-
-  const resetFlashNoteDraft = (keepOpen = true) => {
-
-    setIsFlashNoteOpen(keepOpen);
-
-    setFlashNoteStage('select');
-
-    setFlashNoteAccount(null);
-
-    setFlashVisibleMonth(getFlashDefaultVisibleMonth());
-
-    setFlashStartDate('');
-
-    setFlashEndDate('');
-
-    setFlashSelectedDates([]);
-
-    setFlashSelectionMode('replace');
-
-    setFlashActiveDateRule(null);
-
-    setFlashDragStartDate('');
-
-    setFlashDragPreviewDates([]);
-
-    setFlashInputMode('change');
-
-    setFlashCells({});
-
-    setFlashInputCursor(0);
-
-    setFlashCurrentInput('');
-
-    setIsFlashInputTailLocked(false);
-
-    setFlashEditingDate('');
-
-    setFlashShortcutHintHidden(false);
-
-    setIsFlashExitConfirmOpen(false);
-
-    setIsFlashReturnDateConfirmOpen(false);
-
-  };
-
-
+  });
+
+  const {
+    editingAccount,
+    editingAccountInfo,
+    pendingArchivedRestore,
+    pendingArchivedRestoreAccount,
+    archivedRestoreTargetGroups,
+    isDangerActionsOpen,
+    editMode,
+    setEditMode,
+    draftAmount,
+    setDraftAmount,
+    adjustAmountInput,
+    setAdjustAmountInput,
+    adjustDirection,
+    setAdjustDirection,
+    setAmountDateInput,
+    setAmountSelectedDate,
+    setAmountVisibleMonth,
+    setSetAmountVisibleMonth,
+    setAmountDateFutureHint,
+    setAmountNoteInput,
+    setSetAmountNoteInput,
+    adjustAmountDateInput,
+    adjustAmountSelectedDate,
+    adjustAmountVisibleMonth,
+    setAdjustAmountVisibleMonth,
+    adjustAmountDateFutureHint,
+    adjustAmountNoteInput,
+    setAdjustAmountNoteInput,
+    accountNameDraft,
+    setAccountNameDraft,
+    accountAliasDraft,
+    setAccountAliasDraft,
+    accountInfoError,
+    setAccountInfoError,
+    currentGroup,
+    currentAccount,
+    accountInfoEntry,
+    signedAdjustAmount,
+    isAdjustAmountInvalid,
+    nextAdjustedEditableAmount,
+    parsedSetAmountDate,
+    parsedAdjustAmountDate,
+    isEditingArchivedAccount,
+    isAmountEditorSubmitDisabled,
+    signedAdjustAmountLabel,
+    accountActionsPanelProps,
+    accountDangerActionsPanelProps,
+    openEditor,
+    closeEditor,
+    requestCloseEditor,
+    closeAccountInfoEditor,
+    requestCloseAccountInfoEditor,
+    saveAccountInfo,
+    closeDangerActions,
+    resetAccountOperations,
+    updateSetAmountDateInput,
+    selectSetAmountCalendarDate,
+    updateAdjustAmountDateInput,
+    selectAdjustAmountCalendarDate,
+    saveAmount,
+    restoreAccount,
+    cancelPendingArchivedRestore,
+    choosePendingArchivedRestoreGroup
+  } = accountOperations;
+
+  const flashNote = useFlashNoteController({
+    accountGroups: groupTotals,
+    accounts,
+    assetGroups,
+    groups,
+    history,
+    sortedHistory,
+    createHistoryRecord: ({
+      account,
+      afterAmount,
+      beforeAmount,
+      groupName,
+      source,
+      time
+    }: FlashHistoryRecordInput) =>
+      createHistoryRecord(
+        '修改',
+        account,
+        groupName,
+        beforeAmount,
+        afterAmount,
+        time,
+        undefined,
+        source
+      ),
+    onWriteComplete: (targetAccount) => {
+      setSelectedAccount(targetAccount);
+      setExpandedDetailDates([]);
+    },
+    updateAppData
+  });
 
   const openFlashNote = () => {
-
-    dispatchSearchState({ type: 'clear-navigation' });
+    globalSearch.clearNavigation();
 
     exitGroupEditMode();
 
@@ -11071,7 +5018,7 @@ function App() {
 
     setIsArchivedAccountsOpen(false);
 
-    resetFlashNoteDraft(true);
+    flashNote.open();
 
     window.setTimeout(() => {
 
@@ -11080,867 +5027,6 @@ function App() {
     }, 0);
 
   };
-
-
-
-  const closeFlashNote = () => {
-
-    resetFlashNoteDraft(false);
-
-  };
-
-
-
-  const requestCloseFlashNote = () => {
-
-    if (!flashHasTemporaryContent) {
-
-      closeFlashNote();
-
-      return;
-
-    }
-
-
-
-    setIsFlashExitConfirmOpen(true);
-
-  };
-
-
-
-  const hasFlashSequenceValidInput = () =>
-
-    parseFlashNumberInput(flashCurrentInput) !== null ||
-
-    Object.values(flashCells).some((cell) => parseFlashNumberInput(cell.value) !== null);
-
-
-
-  const clearFlashSequenceDraft = () => {
-
-    setFlashCells({});
-
-    setFlashInputCursor(0);
-
-    setFlashCurrentInput('');
-
-    setIsFlashInputTailLocked(false);
-
-    setFlashEditingDate('');
-
-  };
-
-
-
-  const returnFlashDateSelection = () => {
-
-    clearFlashSequenceDraft();
-
-    setIsFlashReturnDateConfirmOpen(false);
-
-    setFlashNoteStage('select');
-
-  };
-
-
-
-  const requestReturnFlashDateSelection = () => {
-
-    if (flashNoteStage !== 'input') {
-
-      return;
-
-    }
-
-
-
-    if (!hasFlashSequenceValidInput()) {
-
-      returnFlashDateSelection();
-
-      return;
-
-    }
-
-
-
-    setIsFlashReturnDateConfirmOpen(true);
-
-  };
-
-
-
-  const chooseFlashAccount = (groupId: string, account: Account) => {
-    const group = groups.find((currentGroup) => currentGroup.id === groupId);
-
-    setFlashNoteAccount({ groupId, groupName: group?.name, accountId: account.id });
-
-  };
-
-
-
-  const advanceFlashDateSelection = () => {
-
-    if (!flashSelectedAccountEntry || flashTrackDates.length === 0 || !flashStartDate) {
-
-      return;
-
-    }
-
-    startFlashSequenceInput();
-
-  };
-
-
-
-  const startFlashSequenceInput = () => {
-
-    if (!flashSelectedAccountEntry || flashTrackDates.length === 0) {
-
-      return;
-
-    }
-
-
-
-    const isOpenSingleDateSelection =
-      !flashEndDate &&
-      flashSelectedDates.length === 1 &&
-      flashSelectedDates[0] === flashStartDate;
-    const initialTrackDates = isOpenSingleDateSelection ? flashTrackDates.slice(0, 1) : flashTrackDates;
-
-    const nextCells = initialTrackDates.reduce<Record<string, FlashNoteCell>>(
-
-      (cells, dateValue) => ({
-
-        ...cells,
-
-        [dateValue]: {
-
-          date: dateValue,
-
-          value: '',
-
-          enabled: true,
-
-          original: true,
-
-          missing: false
-
-        }
-
-      }),
-
-      {}
-
-    );
-
-
-
-    setFlashCells(nextCells);
-
-    setFlashInputCursor(0);
-
-    setFlashCurrentInput('');
-
-    setIsFlashInputTailLocked(false);
-
-    setFlashNoteStage('input');
-
-  };
-
-
-
-  const syncFlashCurrentInputFromCursor = (nextCursor: number, nextCells = flashCells) => {
-
-    const nextDate = flashTrackDates[nextCursor] ?? '';
-
-    setIsFlashInputTailLocked(false);
-
-    setFlashCurrentInput(nextDate ? nextCells[nextDate]?.value ?? '' : '');
-
-  };
-
-
-
-  const commitFlashSequenceInput = () => {
-
-    if (isFlashInputTailLocked) {
-
-      return;
-
-    }
-
-    const currentDate = flashTrackDates[flashInputCursor];
-
-
-
-    if (!currentDate) {
-
-      return;
-
-    }
-
-
-
-    const trimmedValue = flashCurrentInput.trim();
-
-    const parsedValue = parseFlashNumberInput(trimmedValue);
-
-    const normalizedValue = parsedValue === null ? '' : formatMoneyInputValue(parsedValue);
-
-    const nextCells = {
-
-      ...flashCells,
-
-      [currentDate]: createFlashCell(currentDate, {
-
-        value: normalizedValue,
-
-        enabled: true,
-
-        original: true,
-
-        missing: parsedValue === null
-
-      })
-
-    };
-
-
-
-    setFlashCells(nextCells);
-
-
-
-    if (flashInputCursor >= flashTrackDates.length - 1) {
-
-      setFlashCurrentInput(nextCells[currentDate]?.value ?? '');
-
-      setIsFlashInputTailLocked(parsedValue !== null);
-
-      return;
-
-    }
-
-
-
-    const nextCursor = flashInputCursor + 1;
-
-    setFlashInputCursor(nextCursor);
-
-    setIsFlashInputTailLocked(false);
-
-    syncFlashCurrentInputFromCursor(nextCursor, nextCells);
-
-  };
-
-
-
-  const undoFlashSequenceInput = () => {
-
-    setIsFlashInputTailLocked(false);
-
-    const currentDate = flashTrackDates[flashInputCursor];
-
-    const currentCell = currentDate ? getFlashCell(currentDate) : null;
-
-    const currentDraftValue = flashCurrentInput.trim();
-
-
-
-    const currentHasValue =
-
-      Boolean(currentDate) &&
-
-      (parseFlashNumberInput(currentDraftValue) !== null ||
-
-        (currentCell && parseFlashNumberInput(currentCell.value) !== null));
-
-
-
-    if (currentHasValue && currentDate) {
-
-      const nextCells = {
-
-        ...flashCells,
-
-        [currentDate]: createFlashCell(currentDate, {
-
-          value: '',
-
-          enabled: true,
-
-          missing: true
-
-        })
-
-      };
-
-      const previousCursor = Math.max(0, flashInputCursor - 1);
-
-      setFlashCells(nextCells);
-
-      setFlashInputCursor(previousCursor);
-
-      syncFlashCurrentInputFromCursor(previousCursor, nextCells);
-
-      return;
-
-    }
-
-
-
-    if (flashInputCursor <= 0) {
-
-      return;
-
-    }
-
-
-
-    const previousCursor = flashInputCursor - 1;
-
-    const previousDate = flashTrackDates[previousCursor];
-
-
-
-    if (!previousDate) {
-
-      return;
-
-    }
-
-
-
-    const nextCells = {
-
-      ...flashCells,
-
-      [previousDate]: createFlashCell(previousDate, {
-
-        value: '',
-
-        enabled: true,
-
-        missing: true
-
-      })
-
-    };
-
-
-
-    setFlashInputCursor(previousCursor);
-
-    setFlashCells(nextCells);
-
-    setFlashCurrentInput('');
-
-  };
-
-
-
-  const appendFlashSequenceInputCharacter = (key: string) => {
-
-    if (isFlashInputTailLocked) {
-
-      return;
-
-    }
-
-    setFlashCurrentInput((currentValue) => appendFlashInputCharacter(currentValue, key));
-
-  };
-
-
-
-  const backspaceFlashSequenceInput = () => {
-
-    setIsFlashInputTailLocked(false);
-
-    setFlashCurrentInput((currentValue) => backspaceFlashInputValue(currentValue));
-
-  };
-
-
-
-  const enterFlashConfirmStage = () => {
-
-    const currentCellValue = flashCurrentDate ? getFlashCell(flashCurrentDate).value : '';
-
-    if (
-      !isFlashInputTailLocked &&
-      flashCurrentDate &&
-      (flashCurrentInput.trim() || flashCurrentInput !== currentCellValue)
-    ) {
-
-      commitFlashSequenceInput();
-
-    }
-
-    setIsFlashInputTailLocked(false);
-
-    const firstSelectableDate =
-
-      flashTrackDates.find((dateValue) => {
-
-        const cell = getFlashCell(dateValue);
-
-        return cell.enabled || parseFlashNumberInput(cell.value) !== null;
-
-      }) ?? '';
-
-    setFlashEditingDate(firstSelectableDate);
-
-    setFlashNoteStage('confirm');
-
-  };
-
-
-
-  const cancelFlashCellEdit = () => {
-
-    setFlashEditingDate('');
-
-  };
-
-
-
-  const getFlashAccountPreviousAmount = () => {
-
-    if (!flashSelectedAccountEntry) {
-
-      return null;
-
-    }
-
-
-
-    const latestRecord = sortedHistory.find(
-
-      (record) =>
-
-        record.accountId === flashSelectedAccountEntry.id &&
-
-        record.afterAmount !== null
-
-    );
-
-
-
-    return latestRecord?.afterAmount ?? flashSelectedAccountEntry.amount;
-
-  };
-
-
-
-  const getFlashBalanceHasPreviousRecord = () =>
-
-    Boolean(
-
-      flashSelectedAccountEntry &&
-
-        sortedHistory.some(
-
-          (record) =>
-
-            record.accountId === flashSelectedAccountEntry.id &&
-
-            record.afterAmount !== null
-
-        )
-
-    );
-
-
-
-  const isFlashConfirmSelectableDate = (dateValue: string) => {
-
-    if (isFutureDateKey(dateValue) || !flashTrackDates.includes(dateValue)) {
-
-      return false;
-
-    }
-
-    const cell = getFlashCell(dateValue);
-
-    return cell.enabled || parseFlashNumberInput(cell.value) !== null;
-
-  };
-
-
-
-  const selectFlashConfirmDate = (dateValue: string) => {
-
-    if (!isFlashConfirmSelectableDate(dateValue)) {
-
-      return;
-
-    }
-
-    setFlashEditingDate(dateValue);
-
-  };
-
-
-
-  const updateFlashConfirmCellValue = (dateValue: string, nextValue: string) => {
-
-    if (!dateValue || !isFlashConfirmSelectableDate(dateValue)) {
-
-      return;
-
-    }
-
-    setFlashCells((currentCells) => {
-      const nextCell = resolveFlashCellValueUpdate({
-        cell: currentCells[dateValue] ?? getFlashCell(dateValue),
-        dateValue,
-        nextValue
-      });
-
-      return nextCell
-        ? {
-            ...currentCells,
-            [dateValue]: nextCell
-          }
-        : currentCells;
-    });
-
-  };
-
-
-
-  const appendFlashConfirmInputCharacter = (key: string) => {
-
-    if (!flashEditingDate) {
-
-      return;
-
-    }
-
-    updateFlashConfirmCellValue(
-
-      flashEditingDate,
-
-      appendFlashInputCharacter(getFlashCell(flashEditingDate).value, key)
-
-    );
-
-  };
-
-
-
-  const backspaceFlashConfirmInput = () => {
-
-    if (!flashEditingDate) {
-
-      return;
-
-    }
-
-    updateFlashConfirmCellValue(
-
-      flashEditingDate,
-
-      backspaceFlashInputValue(getFlashCell(flashEditingDate).value)
-
-    );
-
-  };
-
-
-
-  const clearFlashConfirmCell = () => {
-
-    if (!flashEditingDate || !isFlashConfirmSelectableDate(flashEditingDate)) {
-
-      return;
-
-    }
-
-    updateFlashConfirmCellValue(flashEditingDate, '');
-
-  };
-
-
-
-  const selectNextFlashConfirmCell = () => {
-
-    const selectableDates = flashTrackDates.filter(isFlashConfirmSelectableDate);
-
-    if (selectableDates.length === 0) {
-
-      return;
-
-    }
-
-    const currentIndex = flashEditingDate ? selectableDates.indexOf(flashEditingDate) : -1;
-
-    selectFlashConfirmDate(selectableDates[(currentIndex + 1) % selectableDates.length] ?? selectableDates[0]!);
-
-  };
-
-
-
-  const moveFlashConfirmSelection = (key: FlashConfirmNavigationKey) => {
-
-    const selectableDates = flashTrackDates.filter(isFlashConfirmSelectableDate);
-
-    if (!flashEditingDate || selectableDates.length === 0) {
-
-      return;
-
-    }
-
-    const nextDate = resolveFlashConfirmNavigationDate({
-      currentDate: flashEditingDate,
-      key,
-      selectableDates
-    });
-
-    if (nextDate !== flashEditingDate) {
-
-      selectFlashConfirmDate(nextDate);
-
-    }
-
-  };
-
-
-
-  const getFlashWriteRows = (): FlashNoteWriteRow[] => {
-
-    if (!flashSelectedAccountEntry || !flashNoteAccount) {
-
-      return [];
-
-    }
-
-
-
-    let previousAmount = getFlashAccountPreviousAmount();
-
-    let hasPreviousBalance = getFlashBalanceHasPreviousRecord();
-
-
-
-    return flashTrackDates
-
-      .filter((dateValue) => {
-
-        return parseFlashNumberInput(getFlashCell(dateValue).value) !== null;
-
-      })
-
-      .map((dateValue) => {
-
-        const value = getFlashCell(dateValue).value.trim();
-
-        const inputAmount = parseFlashNumberInput(value) ?? 0;
-
-        const beforeAmount = previousAmount;
-
-        const rawAfterAmount =
-
-          flashInputMode === 'change'
-
-            ? (beforeAmount ?? flashSelectedAccountEntry.amount) + inputAmount
-
-            : toStoredGroupAmount(flashNoteAccount.groupId, inputAmount);
-
-        const afterAmount = roundToMoneyPrecision(rawAfterAmount);
-
-        const delta =
-
-          flashInputMode === 'change'
-
-            ? inputAmount
-
-            : hasPreviousBalance && beforeAmount !== null
-
-              ? roundToMoneyPrecision(afterAmount - beforeAmount)
-
-              : null;
-
-
-
-        previousAmount = afterAmount;
-
-        hasPreviousBalance = true;
-
-
-
-        return {
-
-          date: dateValue,
-
-          value,
-
-          inputAmount,
-
-          beforeAmount,
-
-          afterAmount,
-
-          delta,
-
-          weekKey: getDateWeekKey(dateValue)
-
-        };
-
-      });
-
-  };
-
-
-
-  const confirmFlashNoteWrite = () => {
-
-    if (!flashSelectedAccountEntry || !flashNoteAccount) {
-
-      return;
-
-    }
-
-
-
-    const rows = getFlashWriteRows();
-
-
-
-    if (rows.length === 0) {
-
-      return;
-
-    }
-
-
-
-    const latestRowByDate = [...rows].sort((left, right) =>
-
-      right.date.localeCompare(left.date)
-
-    )[0];
-
-    const nextAmount = latestRowByDate?.afterAmount ?? flashSelectedAccountEntry.amount;
-
-    const nextAccounts = accounts.map((account) =>
-      account.id === flashNoteAccount.accountId ? { ...account, amount: nextAmount } : account
-    );
-    const flashWriteTime = new Date();
-    const nextHistory = [
-
-      ...rows.map((row, index) => {
-
-        const recordTime = createHistoryTimestampForBusinessDate(row.date, flashWriteTime, index);
-
-
-
-        return createHistoryRecord(
-
-          '修改',
-
-          flashSelectedAccountEntry,
-
-          (flashSelectedGroup?.name ?? flashNoteAccount.groupName ?? ''),
-
-          row.beforeAmount,
-
-          row.afterAmount,
-
-          recordTime,
-
-          undefined,
-
-          'flash-note'
-
-        );
-
-      }),
-
-      ...history
-
-    ].sort(compareHistoryByTimeDesc);
-
-
-
-    updateAppData({ groups: assetGroups, accounts: nextAccounts, history: nextHistory });
-
-    setSelectedAccount(flashNoteAccount);
-
-    setExpandedDetailDates([]);
-
-    setFlashNoteStage('completed');
-
-    resetFlashNoteDraft(false);
-
-  };
-
-
-
-  useFlashKeyboardInput({
-
-    enabled: isFlashNoteOpen && flashNoteStage === 'input',
-
-    step: 'input',
-
-    onInputCharacter: appendFlashSequenceInputCharacter,
-
-    onEnter: commitFlashSequenceInput,
-
-    onBackspace: backspaceFlashSequenceInput,
-
-    onCtrlZ: undoFlashSequenceInput,
-
-    onDelete: () => undefined,
-
-    onEscape: requestReturnFlashDateSelection
-
-  });
-
-
-
-  useFlashKeyboardInput({
-
-    enabled: isFlashNoteOpen && flashNoteStage === 'confirm',
-
-    step: 'confirm',
-
-    hasConfirmSelection: Boolean(flashEditingDate),
-
-    onInputCharacter: appendFlashConfirmInputCharacter,
-
-    onEnter: selectNextFlashConfirmCell,
-
-    onBackspace: backspaceFlashConfirmInput,
-
-    onCtrlZ: clearFlashConfirmCell,
-
-    onDelete: clearFlashConfirmCell,
-
-    onMoveSelection: moveFlashConfirmSelection,
-
-    onEscape: () => {
-
-      if (flashEditingDate) {
-
-        setFlashEditingDate('');
-
-        return;
-
-      }
-
-      setFlashNoteStage('input');
-
-    }
-
-  });
-
-
-
   const renderFlashLightningIcon = (className = 'flash-note-lightning') => (
 
     <NfSvgIcon svg={NfFlashnoteSourceIcon} className={className} decorative />
@@ -11983,9 +5069,9 @@ function App() {
 
   const renderFlashExitConfirm = () =>
 
-    isFlashExitConfirmOpen ? (
+    flashNote.isExitConfirmOpen ? (
 
-      <OverlayBackdrop onBack={() => setIsFlashExitConfirmOpen(false)} className="modal-backdrop">
+      <OverlayBackdrop onBack={flashNote.dismissExitConfirm} className="modal-backdrop">
 
         <section
 
@@ -12015,7 +5101,7 @@ function App() {
 
               className="modal-button modal-button--secondary"
 
-              onClick={() => setIsFlashExitConfirmOpen(false)}
+              onClick={flashNote.dismissExitConfirm}
 
             >
 
@@ -12029,7 +5115,7 @@ function App() {
 
               className="modal-button modal-button--danger"
 
-              onClick={closeFlashNote}
+              onClick={flashNote.confirmExit}
 
             >
 
@@ -12049,11 +5135,11 @@ function App() {
 
   const renderFlashReturnDateConfirm = () =>
 
-    isFlashReturnDateConfirmOpen ? (
+    flashNote.isReturnDateConfirmOpen ? (
 
       <OverlayBackdrop
 
-        onBack={() => setIsFlashReturnDateConfirmOpen(false)}
+        onBack={flashNote.dismissReturnDateConfirm}
 
         className="modal-backdrop"
 
@@ -12093,7 +5179,7 @@ function App() {
 
               className="modal-button modal-button--secondary"
 
-              onClick={() => setIsFlashReturnDateConfirmOpen(false)}
+              onClick={flashNote.dismissReturnDateConfirm}
 
             >
 
@@ -12107,7 +5193,7 @@ function App() {
 
               className="modal-button modal-button--primary"
 
-              onClick={returnFlashDateSelection}
+              onClick={flashNote.confirmReturnDateSelection}
 
             >
 
@@ -12125,163 +5211,11 @@ function App() {
 
 
 
-  const flashAccountGroups = groupTotals.map((group) => ({
-
-    id: group.id,
-
-    name: group.name,
-
-    accounts: group.activeAccounts.map((account) => ({
-
-      id: account.id,
-
-      name: account.name
-
-    }))
-
-  }));
-
-  const flashInputWeeks = getFlashWeeksAround(flashCurrentDate || flashTrackDates[0] || flashStartDate, flashDirection);
-
-  const flashConfirmDates = flashTrackDates.filter((dateValue) => {
-
-    const cell = getFlashCell(dateValue);
-
-    return cell.enabled || parseFlashNumberInput(cell.value) !== null;
-
-  });
-
-  const flashConfirmWeeks = getFlashWeeksForDates(
-
-    flashConfirmDates.length > 0 ? flashConfirmDates : flashTrackDates.slice(0, 7)
-
-  );
-
-  const flashWriteRows = getFlashWriteRows();
-
-  const flashDisabledDateRules: Record<FlashNoteDateRule, boolean> = {
-
-    all: isFlashDateRuleDisabled('all'),
-
-    weekday: isFlashDateRuleDisabled('weekday'),
-
-    weekend: isFlashDateRuleDisabled('weekend')
-
-  };
-
   const renderFlashNotePage = () => (
 
     <>
 
-      <FlashNotePage
-
-        step={flashNoteStage as FlashStep}
-
-        accountName={flashSelectedAccountEntry?.name ?? ''}
-
-        selectedAccountId={flashNoteAccount?.accountId}
-
-        inputMode={flashInputMode}
-
-        direction={flashDirection}
-
-        visibleMonth={flashVisibleMonth}
-
-        activeDateRule={flashActiveDateRule}
-
-        disabledDateRules={flashDisabledDateRules}
-
-        accountGroups={flashAccountGroups}
-
-        selectedDates={flashSelectedDateSet}
-
-        previewDates={flashDragPreviewDateSet}
-
-        startDate={flashStartDate}
-
-        endDate={flashEndDate}
-
-        inputWeeks={flashInputWeeks}
-
-        confirmWeeks={flashConfirmWeeks}
-
-        cells={flashCells}
-
-        trackDates={flashTrackDates}
-
-        currentDate={flashCurrentDate}
-
-        nextDate={flashTrackDates[flashInputCursor + 1] ?? ''}
-
-        currentInput={flashCurrentInput}
-
-        confirmSelectedDate={flashEditingDate}
-
-        writeRows={flashWriteRows}
-
-        showShortcutHint={!flashShortcutHintHidden}
-
-        canStartInput={Boolean(flashSelectedAccountEntry && flashStartDate && flashTrackDates.length > 0)}
-
-        canWrite={flashWriteRows.length > 0}
-
-        getCell={getFlashCell}
-
-        getCalendarDays={getCalendarDays}
-
-        onChooseAccount={(groupId, accountId) => {
-
-          const group = groups.find((currentGroup) => currentGroup.id === groupId);
-
-          const account = group?.accounts.find((currentAccount) => currentAccount.id === accountId);
-
-          if (account) {
-
-            chooseFlashAccount(groupId, account);
-
-          }
-
-        }}
-
-        onModeChange={setFlashInputMode}
-
-        selectionMode={flashSelectionMode}
-
-        onSelectionModeChange={setFlashSelectionMode}
-
-        onDateRuleApply={applyFlashDateRule}
-
-        onVisibleMonthChange={setFlashVisibleMonth}
-
-        onDatePointerDown={handleFlashDatePointerDown}
-
-        onDatePointerEnter={handleFlashDatePointerEnter}
-
-        onDatePointerUp={handleFlashDatePointerUp}
-
-        onClose={requestCloseFlashNote}
-
-        onBackToSelect={requestReturnFlashDateSelection}
-
-        onStartInput={advanceFlashDateSelection}
-
-        onGoToConfirm={enterFlashConfirmStage}
-
-        onBackToInput={() => {
-
-          setIsFlashInputTailLocked(false);
-
-          setFlashNoteStage('input');
-
-        }}
-
-        onConfirmWrite={confirmFlashNoteWrite}
-
-        onSelectConfirmDate={selectFlashConfirmDate}
-
-        onCloseShortcutHint={() => setFlashShortcutHintHidden(true)}
-
-      />
+      <FlashNotePage {...flashNote.pageProps} />
 
       {renderFlashExitConfirm()}
 
@@ -12290,7 +5224,6 @@ function App() {
     </>
 
   );
-
 
 
   const getChangeDisplay = (
@@ -12370,20 +5303,19 @@ function App() {
 
 
   const getHistoryTone = (record: HistoryRecord): HistoryTone => {
+    const baseTone = {
+      background: 'var(--surface-bg)',
+      border: 'var(--border-soft)',
+      emphasisBorder: 'var(--border-medium)',
+      divider: 'var(--border-soft)',
+      nestedBackground: 'var(--surface-strong)'
+    };
 
     if (record.type === '删除') {
 
       return {
 
-        background: 'var(--danger-bg)',
-
-        border: 'var(--danger-border)',
-
-        emphasisBorder: 'var(--danger-border-strong)',
-
-        divider: 'var(--danger-divider)',
-
-        nestedBackground: 'var(--surface-bg)',
+        ...baseTone,
 
         text: 'var(--danger-text)',
 
@@ -12399,15 +5331,7 @@ function App() {
 
       return {
 
-        background: 'var(--info-bg)',
-
-        border: 'var(--info-border)',
-
-        emphasisBorder: 'var(--info-border-strong)',
-
-        divider: 'var(--info-divider)',
-
-        nestedBackground: 'var(--surface-bg)',
+        ...baseTone,
 
         text: 'var(--info-text)',
 
@@ -12423,15 +5347,7 @@ function App() {
 
       return {
 
-        background: 'var(--success-bg)',
-
-        border: 'var(--success-border)',
-
-        emphasisBorder: 'var(--success-border-strong)',
-
-        divider: 'var(--success-divider)',
-
-        nestedBackground: 'var(--surface-bg)',
+        ...baseTone,
 
         text: 'var(--success-text)',
 
@@ -12445,15 +5361,7 @@ function App() {
 
     return {
 
-      background: 'var(--surface-bg)',
-
-      border: 'var(--border-soft)',
-
-      emphasisBorder: 'var(--border-medium)',
-
-      divider: 'var(--border-soft)',
-
-      nestedBackground: 'var(--surface-strong)',
+      ...baseTone,
 
       text: 'var(--text-secondary)',
 
@@ -12462,97 +5370,6 @@ function App() {
     };
 
   };
-
-
-
-  const normalizeAccountName = (name: string) => name.trim().toLocaleLowerCase();
-
-
-
-  const hasActiveDuplicateAccountName = (name: string) => {
-
-    const normalizedName = normalizeAccountName(name);
-
-
-
-    return groups.some((group) =>
-
-      group.accounts.some(
-
-        (account) =>
-
-          !account.archived && normalizeAccountName(account.name) === normalizedName
-
-      )
-
-    );
-
-  };
-
-
-
-  const hasActiveDuplicateAccountNameExcept = (name: string, accountId: string) => {
-
-    const normalizedName = normalizeAccountName(name);
-
-
-
-    return groups.some((group) =>
-
-      group.accounts.some(
-
-        (account) =>
-
-          !account.archived &&
-
-          account.id !== accountId &&
-
-          normalizeAccountName(account.name) === normalizedName
-
-      )
-
-    );
-
-  };
-
-
-
-  const findArchivedAccountByName = (name: string) => {
-
-    const normalizedName = normalizeAccountName(name);
-
-
-
-    return archivedAccounts.find(
-
-      (account) => normalizeAccountName(account.name) === normalizedName
-
-    );
-
-  };
-
-
-
-  const hasDuplicateGroupName = (name: string, exceptName?: string) => {
-
-    const normalizedName = normalizeAccountName(name);
-
-    const normalizedExceptName = exceptName ? normalizeAccountName(exceptName) : '';
-
-
-
-    return groups.some(
-
-      (group) =>
-
-        normalizeAccountName(group.name) === normalizedName &&
-
-        normalizeAccountName(group.name) !== normalizedExceptName
-
-    );
-
-  };
-
 
 
   const handleMainContentBlankClick = (event: MouseEvent<HTMLElement>) => {
@@ -12863,38 +5680,6 @@ function App() {
 
 
 
-  const openCreateAccountType = (initialName = '') => {
-
-    setAccountTypeEditor({ mode: 'create' });
-
-    setAccountTypeNameDraft(initialName.trim());
-
-    setAccountTypeNatureDraft('asset');
-
-    setAccountTypeStatsDraft(true);
-
-    setAccountTypeError('');
-
-  };
-
-
-
-  const closeAccountTypeEditor = () => {
-
-    setAccountTypeEditor(null);
-
-    setAccountTypeNameDraft('');
-
-    setAccountTypeNatureDraft('asset');
-
-    setAccountTypeStatsDraft(true);
-
-    setAccountTypeError('');
-
-  };
-
-
-
   const openGroupDetailPage = (groupId: string) => {
 
     const group = groups.find((currentGroup) => currentGroup.id === groupId);
@@ -12909,7 +5694,7 @@ function App() {
 
 
 
-    dispatchSearchState({ type: 'clear-navigation' });
+    globalSearch.clearNavigation();
 
     exitGroupEditMode();
 
@@ -12939,7 +5724,7 @@ function App() {
 
   const closeGroupDetailPage = () => {
 
-    dispatchSearchState({ type: 'clear-navigation' });
+    globalSearch.clearNavigation();
 
     setSelectedGroupDetailId('');
 
@@ -13001,246 +5786,6 @@ function App() {
 
 
 
-  const applyAccountTypeUpdate = (
-
-    groupId: string,
-
-    nextName: string,
-
-    nextNature: AccountTypeNature,
-
-    nextIncludeInStats: boolean
-
-  ) => {
-
-    const currentGroup = groups.find((group) => group.id === groupId);
-
-
-
-    if (!currentGroup) {
-
-      return;
-
-    }
-
-
-
-    const currentName = currentGroup.name;
-
-    const targetAccountIds = new Set(
-
-      accounts.filter((account) => account.groupId === groupId).map((account) => account.id)
-
-    );
-
-    const nextGroups = assetGroups.map((group) =>
-
-      group.id === groupId
-
-        ? {
-
-            ...group,
-
-            name: nextName,
-
-            nature: nextNature,
-
-            includeInStats: nextIncludeInStats
-
-          }
-
-        : group
-
-    );
-
-    const nextAccounts = accounts.map((account) =>
-
-      account.groupId === groupId
-
-        ? { ...account, amount: toStoredAmountByNature(nextNature, account.amount) }
-
-        : account
-
-    );
-
-    const nextHistory = history.map((record) =>
-
-      targetAccountIds.has(record.accountId) ? { ...record, groupName: nextName } : record
-
-    );
-
-
-
-    updateAppData({ groups: nextGroups, accounts: nextAccounts, history: nextHistory });
-
-    if (currentName !== nextName) {
-
-      updateAssetChartSettings((currentSettings) => {
-
-        const preservedSettings =
-
-          currentSettings.categoryDetailById[groupId] ??
-
-          currentSettings.globalCategoryDetail;
-
-        const nextSettingsById = { ...currentSettings.categoryDetailById };
-
-
-
-        nextSettingsById[groupId] = cloneCategoryChartSettings(preservedSettings);
-
-
-
-        return {
-
-          ...currentSettings,
-
-          categoryDetailById: nextSettingsById
-
-        };
-
-      });
-
-    }
-
-    setNewAccountTypeInput((typeInput) => (typeInput === currentName ? nextName : typeInput));
-
-    setSelectedAccount((account) =>
-
-      account?.groupId === groupId ? { ...account, groupName: nextName } : account
-
-    );
-
-    setEditingAccount((account) =>
-
-      account?.groupId === groupId ? { ...account, groupName: nextName } : account
-
-    );
-
-    setEditingAccountInfo((account) =>
-
-      account?.groupId === groupId ? { ...account, groupName: nextName } : account
-
-    );
-
-  };
-
-
-
-  const saveAccountType = () => {
-
-    if (!accountTypeEditor) {
-
-      return;
-
-    }
-
-
-
-    const nextName = accountTypeNameDraft.trim();
-
-
-
-    if (!nextName) {
-
-      setAccountTypeError('请输入账户类型名称');
-
-      return;
-
-    }
-
-
-
-    if (accountTypeEditor.mode === 'create') {
-
-      const sortOrder =
-
-        assetGroups.length > 0 ? Math.max(...assetGroups.map((group) => group.sortOrder)) + 1 : 0;
-
-      const nextGroupId = createStableGroupId(assetGroups.map((group) => group.id));
-
-      const nextGroups = [
-
-        ...assetGroups,
-
-        {
-
-          id: nextGroupId,
-
-          name: nextName,
-
-          nature: accountTypeNatureDraft,
-
-          includeInStats: accountTypeStatsDraft,
-
-          sortOrder
-
-        }
-
-      ];
-
-
-
-      updateAppData({ groups: nextGroups, accounts, history });
-
-      updateAssetChartSettings((currentSettings) => ({
-
-        ...currentSettings,
-
-        categoryDetailById: {
-
-          ...currentSettings.categoryDetailById,
-
-          [nextGroupId]: cloneCategoryChartSettings(currentSettings.globalCategoryDetail)
-
-        }
-
-      }));
-
-      setNewAccountGroupId(nextGroupId);
-
-      setNewAccountTypeInput(nextName);
-
-      closeAccountTypeEditor();
-
-      return;
-
-    }
-
-
-
-    const currentGroupId = accountTypeEditor.groupId;
-
-
-
-    if (!currentGroupId || !accountTypeEditorGroup) {
-
-      closeAccountTypeEditor();
-
-      return;
-
-    }
-
-
-
-    applyAccountTypeUpdate(
-
-      currentGroupId,
-
-      nextName,
-
-      accountTypeNatureDraft,
-
-      accountTypeStatsDraft
-
-    );
-
-    closeAccountTypeEditor();
-
-  };
-
-
-
   const saveGroupDetailInfo = () => {
 
     if (!selectedGroupDetail) {
@@ -13251,31 +5796,25 @@ function App() {
 
 
 
-    const nextName = groupDetailNameDraft.trim();
+    const result = updateAccountTypeInAppData({
+      appData: { groups: assetGroups, accounts, history },
+      groupId: selectedGroupDetail.id,
+      name: groupDetailNameDraft,
+      nature: groupDetailNatureDraft,
+      includeInStats: groupDetailStatsDraft
+    });
 
-
-
-    if (!nextName) {
-
-      setGroupDetailError('请输入账户类型名称');
-
+    if (!result.ok) {
+      setGroupDetailError(result.error);
       return;
-
     }
 
-
-
-    applyAccountTypeUpdate(
-
-      selectedGroupDetail.id,
-
-      nextName,
-
-      groupDetailNatureDraft,
-
-      groupDetailStatsDraft
-
-    );
+    updateAppData(result.nextData);
+    syncUpdatedAccountTypeSideEffects({
+      groupId: selectedGroupDetail.id,
+      previousName: result.previousGroup.name,
+      nextName: result.group.name
+    });
 
     setGroupDetailError('');
 
@@ -13469,7 +6008,7 @@ function App() {
 
 
 
-    dispatchSearchState({ type: 'clear-navigation' });
+    globalSearch.clearNavigation();
 
     setIsArchivedAccountsOpen(false);
 
@@ -13485,7 +6024,7 @@ function App() {
 
     setIsAccountActionMenuOpen(false);
 
-    setIsDangerActionsOpen(false);
+    closeDangerActions();
 
   };
 
@@ -13493,7 +6032,7 @@ function App() {
 
   const closeAccountDetail = () => {
 
-    dispatchSearchState({ type: 'clear-navigation' });
+    globalSearch.clearNavigation();
 
     setSelectedAccount(null);
 
@@ -13503,7 +6042,7 @@ function App() {
 
     setIsAccountActionMenuOpen(false);
 
-    setIsDangerActionsOpen(false);
+    closeDangerActions();
 
   };
 
@@ -13519,13 +6058,13 @@ function App() {
 
 
 
-    dispatchSearchState({ type: 'clear-navigation' });
+    globalSearch.clearNavigation();
 
     setIsAccountChartsOpen(true);
 
     setIsAccountActionMenuOpen(false);
 
-    setIsDangerActionsOpen(false);
+    closeDangerActions();
 
     window.setTimeout(() => {
 
@@ -13539,7 +6078,7 @@ function App() {
 
   const closeAccountChartsPage = () => {
 
-    dispatchSearchState({ type: 'clear-navigation' });
+    globalSearch.clearNavigation();
 
     setIsAccountChartsOpen(false);
 
@@ -13549,7 +6088,7 @@ function App() {
 
   const openTotalChartsPage = () => {
 
-    dispatchSearchState({ type: 'clear-navigation' });
+    globalSearch.clearNavigation();
 
     exitGroupEditMode();
 
@@ -13583,7 +6122,7 @@ function App() {
 
   const closeTotalChartsPage = () => {
 
-    dispatchSearchState({ type: 'clear-navigation' });
+    globalSearch.clearNavigation();
 
     setIsTotalChartsOpen(false);
 
@@ -13613,7 +6152,7 @@ function App() {
     scrollBlock: ScrollLogicalPosition = 'start'
   ) => {
 
-    dispatchSearchState({ type: 'clear-navigation' });
+    globalSearch.clearNavigation();
 
     if (blockId) {
       skipNextMainScrollResetRef.current = true;
@@ -13631,35 +6170,24 @@ function App() {
 
     closeSnapshotEncryptionDisableConfirm();
 
-    setConfirmationDialog(null);
+    closeConfirmationDialog();
 
     setSelectedAccount(null);
 
     setSelectedGroupDetailId('');
 
-    setEditingAccount(null);
-
-    setAccountOperationEntrySource('account-detail');
-
     setIsQuickSingleEntryAccountPickerOpen(false);
 
     setIsRollupImportOpen(false);
+    rollupImport.dismissPage();
 
-    setRollupImportReview(null);
+    resetAccountOperations();
 
-    setRollupImportError('');
-
-    setRollupAccountAssignments({});
-
-    setRollupPendingNewAccountKey('');
-
-    setEditingAccountInfo(null);
-
-    setAccountTypeEditor(null);
+    closeAccountTypeEditor();
 
     setIsAccountActionMenuOpen(false);
 
-    setIsDangerActionsOpen(false);
+    closeDangerActions();
 
     setIsAddingAccount(false);
 
@@ -13703,7 +6231,7 @@ function App() {
 
   const closeGlobalSettings = () => {
 
-    dispatchSearchState({ type: 'clear-navigation' });
+    globalSearch.clearNavigation();
 
     resetPasswordEditor();
 
@@ -13714,24 +6242,6 @@ function App() {
     closeSnapshotEncryptionDisableConfirm();
 
     setIsGlobalSettingsOpen(false);
-
-  };
-
-
-
-  const openDangerActions = () => {
-
-    setIsAccountActionMenuOpen(false);
-
-    setIsDangerActionsOpen(true);
-
-  };
-
-
-
-  const closeDangerActions = () => {
-
-    setIsDangerActionsOpen(false);
 
   };
 
@@ -13753,123 +6263,9 @@ function App() {
 
 
 
-  const openEditor = (
-
-    groupId: string,
-
-    account: Account,
-
-    mode: EditMode = 'set',
-
-    source: AccountOperationEntrySource = 'account-detail'
-
-  ) => {
-
-    const group = groups.find((currentGroup) => currentGroup.id === groupId);
-
-    const today = getAccountOperationTodayDateValue();
-
-    const todayMonth = getAccountOperationCalendarMonth(today);
-
-
-
-    setEditingAccount({ groupId, groupName: group?.name, accountId: account.id });
-
-    setAccountOperationEntrySource(source);
-
-    setEditMode(mode);
-
-    setDraftAmount(formatMoneyInputValue(toEditableAmount(account.amount)));
-
-    setAdjustAmountInput('');
-
-    setAdjustDirection('increase');
-
-    setAccountEditInitialDate(today);
-
-    setSetAmountDateInput(today);
-
-    setSetAmountSelectedDate(today);
-
-    setSetAmountVisibleMonth(todayMonth);
-
-    setSetAmountNoteInput('');
-
-    setAdjustAmountDateInput(today);
-
-    setAdjustAmountSelectedDate(today);
-
-    setAdjustAmountVisibleMonth(todayMonth);
-
-    setAdjustAmountNoteInput('');
-
-  };
-
-
-
-  const closeEditor = () => {
-
-    const shouldReturnHome = accountOperationEntrySource === 'quick-single-entry';
-
-
-
-    setEditingAccount(null);
-
-    setAccountOperationEntrySource('account-detail');
-
-    setDraftAmount('');
-
-    setAdjustAmountInput('');
-
-    setAdjustDirection('increase');
-
-    setAccountEditInitialDate('');
-
-    setSetAmountDateInput('');
-
-    setSetAmountSelectedDate(null);
-
-    setSetAmountVisibleMonth(getAccountOperationCalendarMonth(getAccountOperationTodayDateValue()));
-
-    setSetAmountDateFutureHint(false);
-
-    setSetAmountNoteInput('');
-
-    setAdjustAmountDateInput('');
-
-    setAdjustAmountSelectedDate(null);
-
-    setAdjustAmountVisibleMonth(
-
-      getAccountOperationCalendarMonth(getAccountOperationTodayDateValue())
-
-    );
-
-    setAdjustAmountDateFutureHint(false);
-
-    setAdjustAmountNoteInput('');
-
-
-
-    if (shouldReturnHome) {
-
-      setSelectedAccount(null);
-
-      setExpandedDetailDates([]);
-
-      setIsAccountActionMenuOpen(false);
-
-      setIsDangerActionsOpen(false);
-
-    }
-
-  };
-
-
-
   const openQuickSingleEntry = () => {
 
-    dispatchSearchState({ type: 'clear-navigation' });
+    globalSearch.clearNavigation();
 
     exitGroupEditMode();
 
@@ -13887,17 +6283,10 @@ function App() {
 
     setIsAccountActionMenuOpen(false);
 
-    setIsDangerActionsOpen(false);
+    closeDangerActions();
 
     setIsRollupImportOpen(false);
-
-    setRollupImportReview(null);
-
-    setRollupImportError('');
-
-    setRollupAccountAssignments({});
-
-    setRollupPendingNewAccountKey('');
+    rollupImport.dismissPage();
 
     setIsQuickSingleEntryAccountPickerOpen(true);
 
@@ -13913,31 +6302,8 @@ function App() {
 
 
 
-  const resetRollupImportReview = () => {
-
-    setRollupImportReview(null);
-
-    setRollupImportHash('');
-
-    setRollupImportError('');
-
-    setRollupAccountAssignments({});
-
-    setRollupPendingNewAccountKey('');
-
-  };
-
-
-
   const closeRollupImport = () => {
-
-    setIsRollupImportOpen(false);
-
-    setRollupPromptTab('explanation');
-
-    setRollupPasteText('');
-
-    resetRollupImportReview();
+    rollupImport.closeSession();
 
   };
 
@@ -13945,7 +6311,7 @@ function App() {
 
   const openRollupImport = () => {
 
-    dispatchSearchState({ type: 'clear-navigation' });
+    globalSearch.clearNavigation();
 
     exitGroupEditMode();
 
@@ -13965,507 +6331,25 @@ function App() {
 
     setIsAccountActionMenuOpen(false);
 
-    setIsDangerActionsOpen(false);
+    closeDangerActions();
 
     setIsQuickSingleEntryAccountPickerOpen(false);
 
-    setEditingAccount(null);
+    resetAccountOperations();
 
-    setAccountOperationEntrySource('account-detail');
-
-    setEditingAccountInfo(null);
-
-    setAccountTypeEditor(null);
+    closeAccountTypeEditor();
 
     setIsAddingAccount(false);
 
-    setRollupPromptTab('explanation');
-
-    resetRollupImportReview();
+    rollupImport.openSession();
 
     setIsRollupImportOpen(true);
 
     window.setTimeout(() => {
 
-      mainContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollMainToTop('smooth');
 
     }, 0);
-
-  };
-
-
-
-  const createRollupImportHash = async (text: string) => {
-
-    if (window.crypto?.subtle) {
-
-      const bytes = new TextEncoder().encode(text);
-
-      const digest = await window.crypto.subtle.digest('SHA-256', bytes);
-
-
-
-      return Array.from(new Uint8Array(digest))
-
-        .map((byte) => byte.toString(16).padStart(2, '0'))
-
-        .join('');
-
-    }
-
-
-
-    let hash = 0;
-
-
-
-    for (let index = 0; index < text.length; index += 1) {
-
-      hash = (hash * 31 + text.charCodeAt(index)) | 0;
-
-    }
-
-
-
-    return `fallback-${Math.abs(hash).toString(16)}-${text.length}`;
-
-  };
-
-
-
-  const acceptRollupImportText = async (text: string) => {
-
-    const trimmedText = text.trim();
-
-
-
-    if (!trimmedText) {
-
-      setRollupImportError('请先提供汇总 JSON');
-
-      setRollupImportReview(null);
-
-      setRollupAccountAssignments({});
-
-      return;
-
-    }
-
-
-
-    try {
-
-      const contentHash = await createRollupImportHash(trimmedText);
-
-      const result = parseRollupImportJson(trimmedText, {
-
-        todayDateValue: getAccountOperationTodayDateValue(),
-
-        contentHash,
-
-        importedHashes: rollupImportedHashes
-
-      });
-
-
-
-      if (!result.ok) {
-
-        setRollupImportError(result.issues[0]?.message ?? '汇总 JSON 无法导入');
-
-        setRollupImportReview(null);
-
-        setRollupAccountAssignments({});
-
-        setRollupImportHash('');
-
-        return;
-
-      }
-
-
-
-      setRollupImportHash(contentHash);
-
-      setRollupImportReview(result.review);
-
-      setRollupImportError('');
-
-      setRollupAccountAssignments({});
-
-      setRollupPendingNewAccountKey('');
-
-      window.setTimeout(() => {
-
-        mainContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-
-      }, 0);
-
-    } catch (error) {
-
-      console.error('[NetraFlow rollup] Failed to parse rollup import.', error);
-
-      setRollupImportError('汇总 JSON 无法导入，请确认文件内容');
-
-      setRollupImportReview(null);
-
-      setRollupAccountAssignments({});
-
-      setRollupImportHash('');
-
-    }
-
-  };
-
-
-
-  const importRollupFile = (event: ChangeEvent<HTMLInputElement>) => {
-
-    const file = event.target.files?.[0];
-
-    event.target.value = '';
-
-
-
-    if (!file) {
-
-      return;
-
-    }
-
-
-
-    const reader = new FileReader();
-
-
-
-    reader.onload = () => {
-
-      void acceptRollupImportText(String(reader.result ?? ''));
-
-    };
-
-    reader.onerror = () => {
-
-      setRollupImportError('汇总文件读取失败');
-
-    };
-
-    reader.readAsText(file);
-
-  };
-
-
-
-  const importRollupPastedJson = () => {
-
-    void acceptRollupImportText(rollupPasteText);
-
-  };
-
-
-
-  const copyRollupPrompt = () => {
-
-    void navigator.clipboard
-
-      .writeText(ROLLUP_IMPORT_PROMPT)
-
-      .then(() => showToast('提示词已复制', 'success'))
-
-      .catch((error) => {
-
-        console.error('[NetraFlow rollup] Failed to copy prompt.', error);
-
-        showToast('复制失败，请重试', 'error');
-
-      });
-
-  };
-
-
-
-  const assignRollupAccount = (
-
-    keyword: string,
-
-    assignment: RollupAccountAssignment | null
-
-  ) => {
-
-    setRollupAccountAssignments((currentAssignments) => ({
-
-      ...currentAssignments,
-
-      [keyword]: assignment
-
-    }));
-
-  };
-
-
-
-  const selectRollupAccount = (keyword: string, accountId: string) => {
-
-    if (!accountId) {
-
-      assignRollupAccount(keyword, null);
-
-      return;
-
-    }
-
-
-
-    const match = findAccountById(groups, accountId);
-
-
-
-    if (!match || match.account.archived) {
-
-      assignRollupAccount(keyword, null);
-
-      return;
-
-    }
-
-
-
-    assignRollupAccount(keyword, {
-
-      groupId: match.group.id,
-
-      groupName: match.group.name,
-
-      accountId: match.account.id
-
-    });
-
-  };
-
-
-
-  const openRollupNewAccount = (keyword: string) => {
-
-    const firstGroup = groups[0];
-
-
-
-    setRollupPendingNewAccountKey(keyword);
-
-    setIsAddingAccount(true);
-
-    setNewAccountGroupId(firstGroup?.id ?? '');
-
-    setNewAccountTypeInput(firstGroup?.name ?? '');
-
-    setNewAccountName(keyword.trim());
-
-    setNewAccountAmount('0');
-
-    setNewAccountError('');
-
-  };
-
-
-
-  const discardRollupImportReview = () => {
-
-    resetRollupImportReview();
-
-    setRollupPasteText('');
-
-  };
-
-
-
-  const performRollupImportWrite = () => {
-
-    if (!rollupImportReview || !isRollupImportReady) {
-
-      return;
-
-    }
-
-
-
-    const runningAmounts = new Map<string, number>();
-
-    const finalAmounts = new Map<string, number>();
-
-    const recordsWithAccounts = rollupImportReview.records
-
-      .map((record) => {
-
-        const assignment = rollupAccountAssignments[record.accountKeyword];
-
-
-
-        if (!assignment) {
-
-          return null;
-
-        }
-
-
-
-        const match = findAccountById(groups, assignment.accountId);
-
-
-
-        if (!match || match.account.archived) {
-
-          return null;
-
-        }
-
-
-
-        return {
-
-          record,
-
-          groupId: match.group.id,
-
-          groupName: match.group.name,
-
-          account: match.account
-
-        };
-
-      })
-
-      .filter((item): item is {
-
-        record: RollupImportRecord;
-
-        groupId: string;
-
-        groupName: string;
-
-        account: Account;
-
-      } => Boolean(item))
-
-      .sort(
-
-        (left, right) =>
-
-          left.account.id.localeCompare(right.account.id) ||
-
-          left.record.date.localeCompare(right.record.date) ||
-
-          left.record.inputIndex - right.record.inputIndex
-
-      );
-
-
-
-    if (recordsWithAccounts.length !== rollupImportReview.records.length) {
-
-      showToast('仍有账户未确认', 'error');
-
-      return;
-
-    }
-
-
-
-    const rollupHistory = recordsWithAccounts.map((item, index) => {
-
-      const beforeAmount = runningAmounts.get(item.account.id) ?? item.account.amount;
-
-      const afterAmount = roundToMoneyPrecision(
-
-        item.record.mode === 'change'
-
-          ? beforeAmount + item.record.amount
-
-          : toStoredGroupAmount(item.groupId, item.record.amount)
-
-      );
-
-      const recordTime = new Date(`${item.record.date}T12:00:00`);
-
-
-
-      recordTime.setMilliseconds(index);
-
-      runningAmounts.set(item.account.id, afterAmount);
-
-      finalAmounts.set(item.account.id, afterAmount);
-
-
-
-      return createHistoryRecord(
-
-        '修改',
-
-        item.account,
-
-        item.groupName,
-
-        beforeAmount,
-
-        afterAmount,
-
-        recordTime.toISOString(),
-
-        undefined,
-
-        'rollup'
-
-      );
-
-    });
-
-
-
-    const nextAccounts = accounts.map((account) => {
-      const finalAmount = finalAmounts.get(account.id);
-
-      return typeof finalAmount === 'number' ? { ...account, amount: finalAmount } : account;
-    });
-
-    const nextHistory = [...rollupHistory, ...history].sort(compareHistoryByTimeDesc);
-
-
-
-    updateAppData({ groups: assetGroups, accounts: nextAccounts, history: nextHistory });
-
-
-
-    if (rollupImportHash && !isExampleMode) {
-
-      const nextHashes = Array.from(new Set([...rollupImportedHashes, rollupImportHash]));
-
-      setRollupImportedHashes(nextHashes);
-
-      saveRollupImportHashes(nextHashes);
-
-    }
-
-
-
-    closeRollupImport();
-
-    showToast(`已导入 ${rollupHistory.length} 条汇总记录`, 'success');
-
-  };
-
-
-
-  const confirmRollupImportWrite = () => {
-
-    if (!rollupImportReview || !isRollupImportReady) {
-
-      return;
-
-    }
-
-
-
-    performRollupImportWrite();
 
   };
 
@@ -14484,169 +6368,9 @@ function App() {
 
     setIsAccountActionMenuOpen(false);
 
-    setIsDangerActionsOpen(false);
+    closeDangerActions();
 
     openEditor(groupId, account, 'set', 'quick-single-entry');
-
-  };
-
-
-
-  const updateSetAmountDateInput = (value: string) => {
-
-    const today = getAccountOperationTodayDateValue();
-
-    const nextState = resolveProtectedAccountOperationDateInputState(
-
-      value,
-
-      setAmountVisibleMonth,
-
-      today
-
-    );
-
-
-
-    if (nextState.isFutureDate) {
-
-      if (setAmountFutureHintTimerRef.current !== null) {
-
-        window.clearTimeout(setAmountFutureHintTimerRef.current);
-
-      }
-
-
-
-      setSetAmountDateFutureHint(true);
-
-      setSetAmountDateInput('');
-
-      setSetAmountSelectedDate(today);
-
-      setSetAmountVisibleMonth(getAccountOperationCalendarMonth(today));
-
-      setAmountFutureHintTimerRef.current = window.setTimeout(() => {
-
-        setSetAmountDateInput(today);
-
-        setSetAmountDateFutureHint(false);
-
-        setAmountFutureHintTimerRef.current = null;
-
-      }, 900);
-
-      return;
-
-    }
-
-
-
-    setSetAmountDateInput(value);
-
-    setSetAmountSelectedDate(nextState.selectedDate);
-
-    setSetAmountVisibleMonth(nextState.visibleMonth);
-
-  };
-
-
-
-  const selectSetAmountCalendarDate = (dateValue: string) => {
-
-    if (isFutureAccountOperationDateValue(dateValue)) {
-
-      return;
-
-    }
-
-
-
-    setSetAmountDateInput(dateValue);
-
-    setSetAmountSelectedDate(dateValue);
-
-    setSetAmountVisibleMonth(getAccountOperationCalendarMonth(dateValue));
-
-  };
-
-
-
-  const updateAdjustAmountDateInput = (value: string) => {
-
-    const today = getAccountOperationTodayDateValue();
-
-    const nextState = resolveProtectedAccountOperationDateInputState(
-
-      value,
-
-      adjustAmountVisibleMonth,
-
-      today
-
-    );
-
-
-
-    if (nextState.isFutureDate) {
-
-      if (adjustAmountFutureHintTimerRef.current !== null) {
-
-        window.clearTimeout(adjustAmountFutureHintTimerRef.current);
-
-      }
-
-
-
-      setAdjustAmountDateFutureHint(true);
-
-      setAdjustAmountDateInput('');
-
-      setAdjustAmountSelectedDate(today);
-
-      setAdjustAmountVisibleMonth(getAccountOperationCalendarMonth(today));
-
-      adjustAmountFutureHintTimerRef.current = window.setTimeout(() => {
-
-        setAdjustAmountDateInput(today);
-
-        setAdjustAmountDateFutureHint(false);
-
-        adjustAmountFutureHintTimerRef.current = null;
-
-      }, 900);
-
-      return;
-
-    }
-
-
-
-    setAdjustAmountDateInput(value);
-
-    setAdjustAmountSelectedDate(nextState.selectedDate);
-
-    setAdjustAmountVisibleMonth(nextState.visibleMonth);
-
-  };
-
-
-
-  const selectAdjustAmountCalendarDate = (dateValue: string) => {
-
-    if (isFutureAccountOperationDateValue(dateValue)) {
-
-      return;
-
-    }
-
-
-
-    setAdjustAmountDateInput(dateValue);
-
-    setAdjustAmountSelectedDate(dateValue);
-
-    setAdjustAmountVisibleMonth(getAccountOperationCalendarMonth(dateValue));
 
   };
 
@@ -14672,7 +6396,7 @@ function App() {
 
     setArchivedAccountSearchQuery('');
 
-    setRollupPendingNewAccountKey('');
+    rollupImport.clearPendingNewAccount();
 
   };
 
@@ -14700,11 +6424,7 @@ function App() {
 
   const updateNewAccountTypeInput = (value: string) => {
 
-    const exactMatch = groups.find(
-
-      (group) => normalizeTypeSearchText(group.name) === normalizeTypeSearchText(value)
-
-    );
+    const exactMatch = getNewAccountTypeInputMatch(groups, value);
 
 
 
@@ -14748,7 +6468,7 @@ function App() {
 
 
 
-    setConfirmationDialog({
+    showConfirmationDialog({
 
       title: '新增账户类型',
 
@@ -14818,326 +6538,11 @@ function App() {
 
 
 
-  const openAccountInfoEditor = (groupId: string, account: Account) => {
-    const group = groups.find((currentGroup) => currentGroup.id === groupId);
-
-    setIsAccountActionMenuOpen(false);
-
-    setEditingAccountInfo({ groupId, groupName: group?.name, accountId: account.id });
-
-    setAccountNameDraft(account.name);
-
-    setAccountAliasDraft(limitAccountAliasInput(account.alias ?? ''));
-
-    setAccountInfoError('');
-
-  };
-
-
-
-  const closeAccountInfoEditor = () => {
-
-    setEditingAccountInfo(null);
-
-    setAccountNameDraft('');
-
-    setAccountAliasDraft('');
-
-    setAccountInfoError('');
-
-  };
-
-
-
-  const saveAccountInfo = () => {
-
-    if (!editingAccountInfo || !accountInfoEntry) {
-
-      return;
-
-    }
-
-
-
-    const nextName = accountNameDraft.trim();
-
-    const nextAlias = limitAccountAliasInput(accountAliasDraft.trim());
-
-
-
-    if (!nextName) {
-
-      setAccountInfoError('请输入账户名称');
-
-      return;
-
-    }
-
-
-
-    if (hasActiveDuplicateAccountNameExcept(nextName, accountInfoEntry.id)) {
-
-      setAccountInfoError('小类名称必须唯一');
-
-      return;
-
-    }
-
-
-
-    const nextAccounts = accounts.map((account) =>
-      account.id === editingAccountInfo.accountId
-        ? { ...account, name: nextName, alias: nextAlias || undefined }
-        : account
-    );
-
-    const nextHistory = history.map((record) =>
-
-      record.accountId === editingAccountInfo.accountId
-
-        ? { ...record, accountName: nextName }
-
-        : record
-
-    );
-
-
-
-    updateAppData({ groups: assetGroups, accounts: nextAccounts, history: nextHistory });
-
-    closeAccountInfoEditor();
-
-  };
-
-
-
-  const setLastWeekHistoryRange = () => {
-
-    dispatchSearchState({ type: 'clear-navigation' });
-
-    const range = getLastWeekRange();
-
-    setHistoryStartDate(range.start);
-
-    setHistoryEndDate(range.end);
-
-    setHistoryRangeInput(formatDateRangeDisplay(range.start, range.end));
-
-    setCalendarMonth(getHistoryCalendarLeadMonth(range.end));
-
-  };
-
-
-
-  const setRecent7HistoryRange = () => {
-
-    dispatchSearchState({ type: 'clear-navigation' });
-
-    const range = getRecent7DayRange();
-
-    setHistoryStartDate(range.start);
-
-    setHistoryEndDate(range.end);
-
-    setHistoryRangeInput(formatDateRangeDisplay(range.start, range.end));
-
-    setCalendarMonth(getHistoryCalendarLeadMonth(range.end));
-
-  };
-
-
-
-  const handleHistoryRangeInput = (value: string) => {
-
-    dispatchSearchState({ type: 'clear-navigation' });
-
-    setHistoryRangeInput(value);
-
-
-
-    if (!value.trim()) {
-
-      setHistoryStartDate('');
-
-      setHistoryEndDate('');
-
-      return;
-
-    }
-
-
-
-    const tokens = getHistoryRangeTokens(value);
-
-    const firstDate = tokens[0] ? parseDateToken(tokens[0]) : null;
-
-
-
-    if (firstDate) {
-
-      const safeFirstDate = clampHistoryDateValue(firstDate.value);
-
-      setHistoryStartDate(safeFirstDate);
-
-      setHistoryEndDate('');
-
-      setCalendarMonth(getHistoryCalendarLeadMonth(safeFirstDate));
-
-    }
-
-
-
-    const parsedRange = parseHistoryRangeInput(value);
-
-
-
-    if (parsedRange) {
-
-      const safeStartDate = clampHistoryDateValue(parsedRange.start);
-
-      const safeEndDate = clampHistoryDateValue(parsedRange.end);
-
-      const nextStartDate = safeStartDate <= safeEndDate ? safeStartDate : safeEndDate;
-
-      const nextEndDate = safeStartDate <= safeEndDate ? safeEndDate : safeStartDate;
-
-      setHistoryStartDate(nextStartDate);
-
-      setHistoryEndDate(nextEndDate);
-
-      setHistoryRangeInput(formatDateRangeDisplay(nextStartDate, nextEndDate));
-
-      setCalendarMonth(getHistoryCalendarLeadMonth(nextEndDate));
-
-    }
-
-  };
-
-
-
-  const confirmSingleHistoryDate = () => {
-
-    dispatchSearchState({ type: 'clear-navigation' });
-
-    const tokens = getHistoryRangeTokens(historyRangeInput);
-
-    const token = tokens[0];
-
-
-
-    if (tokens.length !== 1) {
-
-      return;
-
-    }
-
-
-
-    const parsedDate = token ? parseDateToken(token) : null;
-
-
-
-    if (!parsedDate) {
-
-      return;
-
-    }
-
-
-
-    const safeDate = clampHistoryDateValue(parsedDate.value);
-
-    setHistoryStartDate(safeDate);
-
-    setHistoryEndDate(safeDate);
-
-    setHistoryRangeInput(formatDateRangeDisplay(safeDate, safeDate));
-
-    setCalendarMonth(getHistoryCalendarLeadMonth(safeDate));
-
-  };
-
-
-
-  const clearHistoryRange = () => {
-
-    dispatchSearchState({ type: 'clear-navigation' });
-
-    setHistoryStartDate('');
-
-    setHistoryEndDate('');
-
-    setHistoryRangeInput('');
-
-    setCalendarMonth(getHistoryCalendarLeadMonth());
-
-  };
-
-
-
-  const resetAutoBackupDraft = () => {
-
-    setAutoBackupDraft(autoBackupSettings);
-
-    setAutoBackupCycleValueInput(String(autoBackupSettings.cycle.value));
-
-  };
-
-
-
-  const clearSearchScrollTargets = () => {
-
-    setHighlightedHistoryRecordId('');
-
-    setHighlightedBackupRecordId('');
-
-  };
-
-
-
-  const requestSearchTargetScroll = (target: SearchNavigationTarget) => {
-
-    if (target.category === 'history') {
-
-      setHighlightedHistoryRecordId(target.recordId);
-
-      setHighlightedBackupRecordId('');
-
-      setSearchTargetScrollKey((currentKey) => currentKey + 1);
-
-      return;
-
-    }
-
-
-
-    if (target.category === 'snapshot') {
-
-      setHighlightedHistoryRecordId('');
-
-      setHighlightedBackupRecordId(target.recordId);
-
-      setSearchTargetScrollKey((currentKey) => currentKey + 1);
-
-      return;
-
-    }
-
-
-
-    clearSearchScrollTargets();
-
-  };
-
-
-
   const prepareSearchNavigation = () => {
-
-    dispatchSearchState({ type: 'hide-for-navigation' });
 
     resetAutoBackupDraft();
 
-    setConfirmationDialog(null);
+    closeConfirmationDialog();
 
     setIsArchivedAccountsOpen(false);
 
@@ -15150,26 +6555,15 @@ function App() {
     setIsGlobalSettingsOpen(false);
 
     setIsRollupImportOpen(false);
-
-    setRollupImportReview(null);
-
-    setRollupImportError('');
-
-    setRollupAccountAssignments({});
-
-    setRollupPendingNewAccountKey('');
+    rollupImport.dismissPage();
 
     setIsAddingAccount(false);
 
     setIsAccountActionMenuOpen(false);
 
-    setIsDangerActionsOpen(false);
+    resetAccountOperations();
 
-    setEditingAccount(null);
-
-    setEditingAccountInfo(null);
-
-    setAccountTypeEditor(null);
+    closeAccountTypeEditor();
 
     setSelectedAccount(null);
 
@@ -15237,41 +6631,27 @@ function App() {
 
     setHistoryPanelView(snapshot.historyPanelView);
 
-    setHistoryStartDate(snapshot.historyStartDate);
+    historyController.restoreHistoryFilterSnapshot({
+      startDate: snapshot.historyStartDate,
+      endDate: snapshot.historyEndDate,
+      rangeInput: snapshot.historyRangeInput,
+      calendarMonth: snapshot.calendarMonth
+    });
 
-    setHistoryEndDate(snapshot.historyEndDate);
-
-    setHistoryRangeInput(snapshot.historyRangeInput);
-
-    setCalendarMonth(new Date(snapshot.calendarMonth));
-
-    setConfirmationDialog(null);
+    closeConfirmationDialog();
 
     setIsQuickSingleEntryAccountPickerOpen(false);
 
     setIsRollupImportOpen(false);
-
-    setRollupImportReview(null);
-
-    setRollupImportError('');
-
-    setRollupAccountAssignments({});
-
-    setRollupPendingNewAccountKey('');
+    rollupImport.dismissPage();
 
     setIsAddingAccount(false);
 
     setIsAccountActionMenuOpen(false);
 
-    setIsDangerActionsOpen(false);
+    resetAccountOperations();
 
-    setEditingAccount(null);
-
-    setAccountOperationEntrySource('account-detail');
-
-    setEditingAccountInfo(null);
-
-    setAccountTypeEditor(null);
+    closeAccountTypeEditor();
 
     resetAutoBackupDraft();
 
@@ -15287,55 +6667,19 @@ function App() {
 
 
 
-  const findSearchNavigationTarget = (target: SearchNavigationTarget) => {
-
-    if (target.category === 'account') {
-
-      const group = groups.find((currentGroup) => currentGroup.id === target.groupId);
-
-      const account = group?.accounts.find(
-
-        (currentAccount) => currentAccount.id === target.accountId
-
-      );
-
-
-
-      return group && account ? { group, account } : null;
-
-    }
-
-
-
-    if (target.category === 'history') {
-
-      return sortedHistory.find((record) => record.id === target.recordId) ?? null;
-
-    }
-
-
-
-    if (target.category === 'snapshot') {
-
-      return backupRecords.find((record) => record.id === target.recordId) ?? null;
-
-    }
-
-
-
-    return GLOBAL_SETTINGS_SEARCH_ITEMS.find((item) => item.id === target.settingsId) ?? null;
-
-  };
-
-
-
   const navigateToSearchTarget = (target: SearchNavigationTarget) => {
 
-    const foundTarget = findSearchNavigationTarget(target);
+    const intent = resolveSearchNavigationTarget<GlobalSettingsSection>(target, {
+      groups,
+      historyRecords: sortedHistory,
+      backupRecords,
+      settingsItems: GLOBAL_SETTINGS_SEARCH_ITEMS,
+      defaultSettingsSection: 'appearance',
+      isSettingsSection: isGlobalSettingsSection,
+      getHistoryRecordDate: (record) => toDateInputValue(new Date(record.time))
+    });
 
-
-
-    if (!foundTarget) {
+    if (intent.type === 'none') {
 
       return;
 
@@ -15343,7 +6687,7 @@ function App() {
 
 
 
-    if (target.category === 'settings' && target.blockId) {
+    if (intent.type === 'settings' && intent.blockId) {
 
       skipNextMainScrollResetRef.current = true;
 
@@ -15355,9 +6699,9 @@ function App() {
 
 
 
-    if (target.category === 'account') {
+    if (intent.type === 'account') {
 
-      const { group, account } = foundTarget as { group: AssetGroupWithAccounts; account: Account };
+      const { group, account } = intent;
 
 
 
@@ -15379,27 +6723,13 @@ function App() {
 
 
 
-    if (target.category === 'settings') {
+    if (intent.type === 'settings') {
 
-      const item = foundTarget as SettingsSearchItem;
-
-      const nextSection = isGlobalSettingsSection(item.section)
-
-        ? item.section
-
-        : isGlobalSettingsSection(target.settingsSection)
-
-          ? target.settingsSection
-
-          : 'appearance';
-
-
-
-      setGlobalSettingsSection(nextSection);
+      setGlobalSettingsSection(intent.section);
 
       setIsGlobalSettingsOpen(true);
 
-      scrollGlobalSettingsTargetIntoView(target.blockId);
+      scrollGlobalSettingsTargetIntoView(intent.blockId);
 
       return;
 
@@ -15407,22 +6737,9 @@ function App() {
 
 
 
-    if (target.category === 'history') {
+    if (intent.type === 'history') {
 
-      const record = foundTarget as HistoryRecord;
-      const group =
-        groups.find((currentGroup) =>
-          currentGroup.accounts.some((account) => account.id === record.accountId)
-        ) ?? groups.find((currentGroup) => currentGroup.name === record.groupName);
-      const account = group?.accounts.find(
-        (currentAccount) => currentAccount.id === record.accountId
-      );
-
-      if (!group || !account) {
-        return;
-      }
-
-      const recordDate = toDateInputValue(new Date(record.time));
+      const { group, account, recordDate } = intent;
 
       setExpandedGroupIds((currentNames) =>
         currentNames.includes(group.id) ? currentNames : [...currentNames, group.id]
@@ -15438,7 +6755,7 @@ function App() {
 
 
 
-      requestSearchTargetScroll(target);
+      searchTargetHighlight.requestSearchTargetScroll(intent.target);
 
       return;
 
@@ -15450,45 +6767,7 @@ function App() {
 
     setIsHistoryOpen(true);
 
-    requestSearchTargetScroll(target);
-
-  };
-
-
-
-  const startSearchNavigation = (target: SearchNavigationTarget) => {
-
-    const targets = strongSearchNavigationTargets.some(
-
-      (currentTarget) => currentTarget.key === target.key
-
-    )
-
-      ? strongSearchNavigationTargets
-
-      : [target];
-
-
-
-    dispatchSearchState({
-
-      type: 'set-navigation',
-
-      navigation: {
-
-        returnSnapshot: createSearchNavigationSnapshot(),
-
-        targets,
-
-        currentTargetKey: target.key
-
-      },
-
-      openedResultId: target.key
-
-    });
-
-    navigateToSearchTarget(target);
+    searchTargetHighlight.requestSearchTargetScroll(intent.target);
 
   };
 
@@ -15496,7 +6775,7 @@ function App() {
 
   const closeHistoryPanel = () => {
 
-    dispatchSearchState({ type: 'clear-navigation' });
+    globalSearch.clearNavigation();
 
     setIsHistoryOpen(false);
 
@@ -15504,9 +6783,7 @@ function App() {
 
     setBackupReturnTarget('history');
 
-    setHighlightedHistoryRecordId('');
-
-    setHighlightedBackupRecordId('');
+    searchTargetHighlight.clearSearchScrollTargets();
 
     resetAutoBackupDraft();
 
@@ -15516,11 +6793,9 @@ function App() {
 
   const openHistoryPanel = () => {
 
-    dispatchSearchState({ type: 'clear-navigation' });
+    globalSearch.clearNavigation();
 
-    setHighlightedHistoryRecordId('');
-
-    setHighlightedBackupRecordId('');
+    searchTargetHighlight.clearSearchScrollTargets();
 
     setHistoryPanelView('history');
 
@@ -15532,11 +6807,9 @@ function App() {
 
   const openBackupPanel = () => {
 
-    dispatchSearchState({ type: 'clear-navigation' });
+    globalSearch.clearNavigation();
 
-    setHighlightedHistoryRecordId('');
-
-    setHighlightedBackupRecordId('');
+    searchTargetHighlight.clearSearchScrollTargets();
 
     resetAutoBackupDraft();
 
@@ -15552,11 +6825,9 @@ function App() {
 
   const openBackupPanelFromGlobalSettings = () => {
 
-    dispatchSearchState({ type: 'clear-navigation' });
+    globalSearch.clearNavigation();
 
-    setHighlightedHistoryRecordId('');
-
-    setHighlightedBackupRecordId('');
+    searchTargetHighlight.clearSearchScrollTargets();
 
     resetAutoBackupDraft();
 
@@ -15595,1397 +6866,6 @@ function App() {
 
 
     setHistoryPanelView('history');
-
-  };
-
-
-
-  const updateAutoBackupEnabled = (enabled: boolean) => {
-
-    if (isExampleMode) {
-
-      return;
-
-    }
-
-
-
-    if (enabled && !autoBackupDraft.enabled && globalSettings.snapshotEncryptionEnabled) {
-
-      setConfirmationDialog({
-
-        title: '自动快照将使用快照密码加密',
-
-        message: (
-
-          <>
-
-            <p>忘记快照密码将无法恢复自动生成的加密快照</p>
-
-            <strong>是否继续？</strong>
-
-          </>
-
-        ),
-
-        confirmLabel: '继续开启',
-
-        onConfirm: () =>
-
-          setAutoBackupDraft((currentSettings) =>
-
-            normalizeAutoBackupSettings({
-
-              ...currentSettings,
-
-              enabled: true
-
-            })
-
-          )
-
-      });
-
-      return;
-
-    }
-
-
-
-    setAutoBackupDraft((currentSettings) =>
-
-      normalizeAutoBackupSettings({
-
-        ...currentSettings,
-
-        enabled
-
-      })
-
-    );
-
-  };
-
-
-
-  const updateAutoBackupCycleValue = (value: string) => {
-
-    if (isExampleMode) {
-
-      return;
-
-    }
-
-
-
-    const nextValue = value.replace(/[^\d]/g, '');
-
-    setAutoBackupCycleValueInput(nextValue);
-
-
-
-    if (!nextValue) {
-
-      return;
-
-    }
-
-
-
-    setAutoBackupDraft((currentSettings) =>
-
-      normalizeAutoBackupSettings({
-
-        ...currentSettings,
-
-        cycle: {
-
-          ...currentSettings.cycle,
-
-          value: Number(nextValue)
-
-        }
-
-      })
-
-    );
-
-  };
-
-
-
-  const adjustAutoBackupCycleValue = (direction: 1 | -1) => {
-
-    setAutoBackupDraft((currentSettings) =>
-
-      normalizeAutoBackupSettings({
-
-        ...currentSettings,
-
-        cycle: {
-
-          ...currentSettings.cycle,
-
-          value: Math.max(1, currentSettings.cycle.value + direction)
-
-        }
-
-      })
-
-    );
-
-  };
-
-
-
-  const updateAutoBackupCycleUnit = (unit: BackupCycleUnit) => {
-
-    if (isExampleMode) {
-
-      return;
-
-    }
-
-
-
-    setAutoBackupDraft((currentSettings) =>
-
-      normalizeAutoBackupSettings({
-
-        ...currentSettings,
-
-        cycle: {
-
-          ...currentSettings.cycle,
-
-          unit
-
-        }
-
-      })
-
-    );
-
-  };
-
-
-
-  const selectAutoBackupDirectory = async () => {
-
-    if (isExampleMode) {
-
-      return;
-
-    }
-
-
-
-    if (!autoBackupDraft.enabled) {
-
-      return;
-
-    }
-
-
-
-    const api = window.electronAPI ?? window.electronWindow;
-
-
-
-    if (!api?.selectDirectory) {
-
-      window.alert('当前环境不支持选择目录');
-
-      return;
-
-    }
-
-
-
-    try {
-
-      const selectedDirectory = await api.selectDirectory();
-
-
-
-      if (!selectedDirectory) {
-
-        return;
-
-      }
-
-
-
-      setAutoBackupDraft((currentSettings) =>
-
-        normalizeAutoBackupSettings({
-
-          ...currentSettings,
-
-          directory: selectedDirectory
-
-        })
-
-      );
-
-    } catch (error) {
-
-      console.error('[NetraFlow snapshot] Failed to select auto snapshot directory.', error);
-
-      window.alert('目录选择失败，请稍后再试');
-
-    }
-
-  };
-
-
-
-  const saveAutoBackupDraft = () => {
-
-    if (isExampleMode || !canSaveAutoBackupSettings) {
-
-      return;
-
-    }
-
-
-
-    const nextSettings = normalizeAutoBackupSettings(autoBackupDraft);
-
-
-
-    dispatchSearchState({ type: 'clear-navigation' });
-
-    setAutoBackupSettings(nextSettings);
-
-    setAutoBackupDraft(nextSettings);
-
-    setAutoBackupCycleValueInput(String(nextSettings.cycle.value));
-
-    saveAutoBackupSettings(nextSettings);
-
-    cancelPendingFirstWelcomeForRealChange();
-
-  };
-
-
-
-  const createBackupRecord = (backedUpAt: string, method: BackupMethod): BackupRecord => ({
-
-    id: createId('backup-record'),
-
-    backedUpAt,
-
-    historyCount: history.length,
-
-    incrementCount: Math.max(0, history.length - lastBackupHistoryCount),
-
-    method
-
-  });
-
-
-
-  const createBackupPayload = (
-
-    backupAt: string,
-
-    backupRecord: BackupRecord,
-
-    nextBackupRecords: BackupRecord[],
-
-    settings: AutoBackupSettings = autoBackupSettings
-
-  ) => ({
-
-    app: PRODUCT_NAME_EN,
-
-    schemaVersion: 1,
-
-    exportedAt: backupAt,
-
-    lastBackupAt: backupAt,
-
-    lastBackupHistoryCount: backupRecord.historyCount,
-
-    backupRecords: nextBackupRecords,
-
-    autoBackupSettings: settings,
-
-    groups: assetGroups,
-    accounts,
-
-    history
-
-  });
-
-
-
-  const getBackupFileName = (backupAt: string, encrypted: boolean) =>
-
-    `netraflow-snapshot-${formatBackupFileTimestamp(new Date(backupAt))}${
-
-      encrypted ? '.encrypted' : ''
-
-    }.json`;
-
-
-
-  const createBackupFileContent = async (
-
-    backupPayload: unknown,
-
-    snapshotPassword: string | null
-
-  ) => {
-
-    if (!snapshotPassword) {
-
-      return JSON.stringify(backupPayload, null, 2);
-
-    }
-
-
-
-    const encryptedSnapshot = await encryptSnapshotPayload(backupPayload, snapshotPassword);
-
-
-
-    return JSON.stringify(encryptedSnapshot, null, 2);
-
-  };
-
-
-
-  const requestVerifiedSnapshotPassword = async (
-
-    promptMessage: string,
-
-    invalidMessage = '快照密码不正确',
-
-    snapshotPasswordHash = globalSettings.snapshotPasswordHash
-
-  ) => {
-
-    if (!snapshotPasswordHash) {
-
-      window.alert('请先设置快照密码');
-
-      return null;
-
-    }
-
-
-
-    const snapshotPassword = window.prompt(promptMessage);
-
-
-
-    if (snapshotPassword === null) {
-
-      return null;
-
-    }
-
-
-
-    const isPasswordValid = await verifyPassword(snapshotPassword, snapshotPasswordHash);
-
-
-
-    if (!isPasswordValid) {
-
-      window.alert(invalidMessage);
-
-      return null;
-
-    }
-
-
-
-    return snapshotPassword;
-
-  };
-
-
-
-  const saveBackupSuccess = (backupRecord: BackupRecord, nextBackupRecords: BackupRecord[]) => {
-
-    dispatchSearchState({ type: 'clear-navigation' });
-
-    setBackupRecords(nextBackupRecords);
-
-    setLastBackupAt(backupRecord.backedUpAt);
-
-    setLastBackupHistoryCount(backupRecord.historyCount);
-
-
-
-    if (isExampleMode) {
-
-      return;
-
-    }
-
-
-
-    saveBackupRecords(nextBackupRecords);
-
-    saveLastBackupAt(backupRecord.backedUpAt);
-
-    saveLastBackupHistoryCount(backupRecord.historyCount);
-
-  };
-
-
-
-  const exportBackup = async () => {
-
-    const api = window.electronAPI ?? window.electronWindow;
-
-    let snapshotPassword: string | null = null;
-
-
-
-    if (!api?.selectDirectory || !api?.writeSnapshotFile) {
-
-      window.alert('当前环境不支持导出快照');
-
-      return;
-
-    }
-
-
-
-    if (globalSettings.snapshotEncryptionEnabled) {
-
-      const shouldContinue = await requestConfirmationDialog({
-
-        title: '导出加密快照',
-
-        message: '已启用快照加密，导出的快照文件将使用快照密码加密，忘记快照密码将无法恢复',
-
-        confirmLabel: '继续导出',
-
-        cancelLabel: '取消',
-
-        eyebrow: '快照导出'
-
-      });
-
-
-
-      if (!shouldContinue) {
-
-        return;
-
-      }
-
-    }
-
-
-
-    let selectedDirectory = '';
-
-
-
-    try {
-
-      selectedDirectory = await api.selectDirectory();
-
-    } catch (error) {
-
-      console.error('[NetraFlow snapshot] Failed to select manual snapshot directory.', error);
-
-      window.alert('目录选择失败，请稍后再试');
-
-      return;
-
-    }
-
-
-
-    if (!selectedDirectory) {
-
-      return;
-
-    }
-
-
-
-    if (globalSettings.snapshotEncryptionEnabled) {
-
-      snapshotPassword = await requestVerifiedSnapshotPassword(
-
-        '请输入快照密码，用于加密本次导出的快照'
-
-      );
-
-
-
-      if (!snapshotPassword) {
-
-        return;
-
-      }
-
-    }
-
-
-
-    const backupAt = new Date().toISOString();
-
-    const backupRecord = createBackupRecord(backupAt, 'manual');
-
-    const nextBackupRecords = mergeBackupRecords(backupRecords, [backupRecord]);
-
-    const backupPayload = createBackupPayload(backupAt, backupRecord, nextBackupRecords);
-
-    let fileContent = '';
-
-
-
-    try {
-
-      fileContent = await createBackupFileContent(backupPayload, snapshotPassword);
-
-    } catch (error) {
-
-      console.error('[NetraFlow snapshot] Failed to encrypt manual snapshot.', error);
-
-      window.alert('快照加密失败，请稍后再试');
-
-      return;
-
-    }
-
-
-
-    try {
-
-      await api.writeSnapshotFile({
-
-        directory: selectedDirectory,
-
-        fileName: getBackupFileName(backupAt, snapshotPassword !== null),
-
-        content: fileContent
-
-      });
-
-      saveBackupSuccess(backupRecord, nextBackupRecords);
-
-      showToast('手动快照已导出', 'success');
-
-    } catch (error) {
-
-      console.error('[NetraFlow snapshot] Manual snapshot failed.', error);
-
-      showToast('手动快照导出失败，请检查目录', 'error');
-
-    }
-
-  };
-
-
-
-  const runStartupAutoBackup = async () => {
-
-    const settings = loadAutoBackupSettings();
-
-    const currentGlobalSettings = loadGlobalSettings();
-
-
-
-    if (!settings.enabled) {
-
-      return;
-
-    }
-
-
-
-    const directory = settings.directory.trim();
-
-
-
-    if (!directory) {
-
-      console.warn('[NetraFlow snapshot] Auto snapshot directory is not configured.');
-
-      showToast('自动快照目录未设置', 'error');
-
-      return;
-
-    }
-
-
-
-    const lastBackupTimestamp = getValidTimestamp(loadLastBackupAt());
-
-    const cycleDays = getBackupCycleDays(settings.cycle);
-
-    const shouldRun =
-
-      lastBackupTimestamp === null || Date.now() - lastBackupTimestamp >= cycleDays * DAY_MS;
-
-
-
-    if (!shouldRun) {
-
-      return;
-
-    }
-
-
-
-    const api = window.electronAPI ?? window.electronWindow;
-
-
-
-    if (!api?.writeSnapshotFile) {
-
-      console.error('[NetraFlow snapshot] Snapshot file writer is not available.');
-
-      showToast('自动快照无法写入文件', 'error');
-
-      return;
-
-    }
-
-
-
-    let snapshotPassword: string | null = null;
-
-
-
-    if (currentGlobalSettings.snapshotEncryptionEnabled) {
-
-      snapshotPassword = await requestVerifiedSnapshotPassword(
-
-        '自动快照文件将使用快照密码加密，请输入快照密码',
-
-        '自动快照已跳过：快照密码不正确',
-
-        currentGlobalSettings.snapshotPasswordHash
-
-      );
-
-
-
-      if (!snapshotPassword) {
-
-        showToast('自动快照已跳过', 'info');
-
-        return;
-
-      }
-
-    }
-
-
-
-    const progressToastId = showToast('自动快照进行中');
-
-    await new Promise<void>((resolve) => {
-
-      window.setTimeout(resolve, 120);
-
-    });
-
-
-
-    const backupAt = new Date().toISOString();
-
-    const backupRecord = createBackupRecord(backupAt, 'auto');
-
-    const latestBackupRecords = loadBackupRecords();
-
-    const nextBackupRecords = mergeBackupRecords(latestBackupRecords, [backupRecord]);
-
-    const backupPayload = createBackupPayload(
-
-      backupAt,
-
-      backupRecord,
-
-      nextBackupRecords,
-
-      settings
-
-    );
-
-    let fileContent = '';
-
-
-
-    try {
-
-      fileContent = await createBackupFileContent(backupPayload, snapshotPassword);
-
-      await api.writeSnapshotFile({
-
-        directory,
-
-        fileName: getBackupFileName(backupAt, snapshotPassword !== null),
-
-        content: fileContent
-
-      });
-
-      dismissToast(progressToastId);
-
-      saveBackupSuccess(backupRecord, nextBackupRecords);
-
-      setAutoBackupSettings(settings);
-
-      setAutoBackupDraft(settings);
-
-      setAutoBackupCycleValueInput(String(settings.cycle.value));
-
-      showToast('自动快照已完成', 'success');
-
-    } catch (error) {
-
-      console.error('[NetraFlow snapshot] Auto snapshot failed.', error);
-
-      dismissToast(progressToastId);
-
-      showToast('自动快照失败，请检查目录', 'error');
-
-    }
-
-  };
-
-
-
-  useEffect(() => {
-
-    const timerId = window.setTimeout(() => {
-
-      if (hasCheckedStartupAutoBackup) {
-
-        return;
-
-      }
-
-
-
-      hasCheckedStartupAutoBackup = true;
-
-      void runStartupAutoBackup();
-
-    }, 0);
-
-
-
-    return () => window.clearTimeout(timerId);
-
-  }, []);
-
-
-
-  const importBackupData = (value: unknown) => {
-
-    const importedAccountData = getBackupAccountData(value);
-    const hasImportedAccountData =
-      importedAccountData.groups.length > 0 || importedAccountData.accounts.length > 0;
-
-    const groupsAfterImport =
-
-      importedAccountData.groups.length > 0
-        ? mergeGroups(assetGroups, importedAccountData.groups)
-        : assetGroups;
-    const accountsAfterImport = hasImportedAccountData
-      ? mergeAccounts(accounts, importedAccountData.accounts)
-      : accounts;
-    const groupsWithAccountsAfterImport = deriveGroupsWithAccounts(
-      groupsAfterImport,
-      accountsAfterImport
-    );
-
-    const importedHistory = getBackupHistory(value, groupsWithAccountsAfterImport);
-
-
-
-    if (!hasImportedAccountData && importedHistory.length === 0) {
-
-      throw new Error('No supported snapshot data found.');
-
-    }
-
-
-
-    if (isExampleMode) {
-
-      const sandboxGroups = hasImportedAccountData ? importedAccountData.groups : assetGroups;
-      const sandboxAccounts = hasImportedAccountData ? importedAccountData.accounts : accounts;
-
-      const sandboxHistory = importedHistory.length > 0 ? importedHistory : history;
-
-
-
-      updateAppData({
-
-        groups: sandboxGroups,
-        accounts: sandboxAccounts,
-
-        history: sandboxHistory
-
-      });
-
-
-
-      const importedBackupRecords = normalizeBackupRecords(
-
-        getBackupFieldValue(value, ['backupRecords'])
-
-      );
-
-      const importedLastBackupAt = getBackupFieldValue(value, ['lastBackupAt']);
-
-      const importedLastBackupHistoryCount = getBackupFieldValue(value, [
-
-        'lastBackupHistoryCount'
-
-      ]);
-
-      const importedHistoryCountNumber =
-
-        typeof importedLastBackupHistoryCount === 'number'
-
-          ? importedLastBackupHistoryCount
-
-          : typeof importedLastBackupHistoryCount === 'string'
-
-            ? Number(importedLastBackupHistoryCount)
-
-            : NaN;
-
-
-
-      applyBackupState(
-
-        importedBackupRecords.length > 0 ? importedBackupRecords : backupRecords,
-
-        typeof importedLastBackupAt === 'string' &&
-
-          getValidTimestamp(importedLastBackupAt) !== null
-
-          ? importedLastBackupAt
-
-          : lastBackupAt,
-
-        Number.isFinite(importedHistoryCountNumber)
-
-          ? Math.max(0, Math.floor(importedHistoryCountNumber))
-
-          : sandboxHistory.length,
-
-        false
-
-      );
-
-      return;
-
-    }
-
-
-
-    updateAppData({
-
-      groups: groupsAfterImport,
-      accounts: accountsAfterImport,
-
-      history:
-
-        importedHistory.length > 0
-
-          ? mergeHistoryRecords(history, importedHistory)
-
-          : history
-
-    });
-
-
-
-    const importedLastBackupAt = getBackupFieldValue(value, ['lastBackupAt']);
-
-
-
-    if (
-
-      typeof importedLastBackupAt === 'string' &&
-
-      getValidTimestamp(importedLastBackupAt) !== null
-
-    ) {
-
-      setLastBackupAt(importedLastBackupAt);
-
-      saveLastBackupAt(importedLastBackupAt);
-
-    }
-
-
-
-    const importedLastBackupHistoryCount = getBackupFieldValue(value, [
-
-      'lastBackupHistoryCount'
-
-    ]);
-
-    const importedHistoryCountNumber =
-
-      typeof importedLastBackupHistoryCount === 'number'
-
-        ? importedLastBackupHistoryCount
-
-        : typeof importedLastBackupHistoryCount === 'string'
-
-          ? Number(importedLastBackupHistoryCount)
-
-          : NaN;
-
-
-
-    if (Number.isFinite(importedHistoryCountNumber)) {
-
-      const nextHistoryCount = Math.max(0, Math.floor(importedHistoryCountNumber));
-
-
-
-      setLastBackupHistoryCount(nextHistoryCount);
-
-      saveLastBackupHistoryCount(nextHistoryCount);
-
-    }
-
-
-
-    const importedBackupRecords = normalizeBackupRecords(
-
-      getBackupFieldValue(value, ['backupRecords'])
-
-    );
-
-
-
-    if (importedBackupRecords.length > 0) {
-
-      const nextBackupRecords = mergeBackupRecords(backupRecords, importedBackupRecords);
-
-
-
-      setBackupRecords(nextBackupRecords);
-
-      saveBackupRecords(nextBackupRecords);
-
-    }
-
-
-
-    const importedAutoBackupSettings = getBackupFieldValue(value, ['autoBackupSettings']);
-
-
-
-    if (importedAutoBackupSettings !== undefined) {
-
-      const nextAutoBackupSettings = normalizeAutoBackupSettings(importedAutoBackupSettings);
-
-
-
-      setAutoBackupSettings(nextAutoBackupSettings);
-
-      setAutoBackupDraft(nextAutoBackupSettings);
-
-      setAutoBackupCycleValueInput(String(nextAutoBackupSettings.cycle.value));
-
-      saveAutoBackupSettings(nextAutoBackupSettings);
-
-    }
-
-  };
-
-
-
-  const readImportSnapshotData = async (value: unknown) => {
-
-    if (isPlainObject(value) && value.type === 'netraflow-encrypted-snapshot') {
-
-      if (!isEncryptedSnapshotFile(value)) {
-
-        throw new Error(SNAPSHOT_DECRYPTION_ERROR_MESSAGE);
-
-      }
-
-
-
-      const snapshotPassword = window.prompt('该快照已加密，请输入快照密码');
-
-
-
-      if (snapshotPassword === null) {
-
-        return null;
-
-      }
-
-
-
-      return decryptSnapshotPayload(value, snapshotPassword);
-
-    }
-
-
-
-    return value;
-
-  };
-
-
-
-  const importBackup = (event: ChangeEvent<HTMLInputElement>) => {
-
-    const file = event.target.files?.[0];
-
-    event.target.value = '';
-
-
-
-    if (!file) {
-
-      return;
-
-    }
-
-
-
-    const reader = new FileReader();
-
-
-
-    reader.onload = () => {
-
-      void (async () => {
-
-        try {
-
-          const parsedSnapshot = JSON.parse(String(reader.result ?? ''));
-
-          const snapshotData = await readImportSnapshotData(parsedSnapshot);
-
-
-
-          if (snapshotData === null) {
-
-            return;
-
-          }
-
-
-
-          importBackupData(snapshotData);
-
-          window.alert('快照已导入，现有数据已按字段合并');
-
-        } catch (error) {
-
-          console.error('[NetraFlow snapshot] Failed to import snapshot.', error);
-
-          window.alert(
-
-            error instanceof Error && error.message === SNAPSHOT_DECRYPTION_ERROR_MESSAGE
-
-              ? SNAPSHOT_DECRYPTION_ERROR_MESSAGE
-
-              : '快照文件无法导入，请确认文件内容'
-
-          );
-
-        }
-
-      })();
-
-    };
-
-    reader.onerror = () => {
-
-      window.alert('快照文件读取失败');
-
-    };
-
-    reader.readAsText(file);
-
-  };
-
-
-
-  const selectCalendarDate = (date: Date) => {
-
-    dispatchSearchState({ type: 'clear-navigation' });
-
-    const selectedDate = toDateInputValue(date);
-
-    if (isFutureDateKey(selectedDate)) {
-
-      return;
-
-    }
-
-
-
-    if (!historyStartDate || historyEndDate) {
-
-      setHistoryStartDate(selectedDate);
-
-      setHistoryEndDate('');
-
-      setHistoryRangeInput(selectedDate);
-
-      setCalendarMonth(getHistoryCalendarLeadMonth(selectedDate));
-
-      return;
-
-    }
-
-
-
-    const nextStartDate = historyStartDate <= selectedDate ? historyStartDate : selectedDate;
-
-    const nextEndDate = historyStartDate <= selectedDate ? selectedDate : historyStartDate;
-
-
-
-    setHistoryStartDate(nextStartDate);
-
-    setHistoryEndDate(nextEndDate);
-
-    setHistoryRangeInput(formatDateRangeDisplay(nextStartDate, nextEndDate));
-
-  };
-
-
-
-  const isLargeAmountChange = (beforeAmount: number, afterAmount: number) => {
-
-    const delta = Math.abs(afterAmount - beforeAmount);
-
-
-
-    if (delta === 0) {
-
-      return false;
-
-    }
-
-
-
-    return beforeAmount === 0 ? afterAmount > 0 : delta / beforeAmount > 0.5;
-
-  };
-
-
-
-  const performSaveAmount = (editableAmount: number, savedDate: string, note?: string) => {
-
-    if (!editingAccount || !currentAccount || !currentGroup) {
-
-      return;
-
-    }
-
-
-
-    if (
-
-      currentAccount.archived &&
-
-      hasActiveDuplicateAccountNameExcept(currentAccount.name, currentAccount.id)
-
-    ) {
-
-      window.alert('已有同名启用账户，请先处理后再重新启用');
-
-      return;
-
-    }
-
-
-
-    const nextAmount = roundToMoneyPrecision(
-
-      toStoredGroupAmount(editingAccount.groupId, editableAmount)
-
-    );
-
-    const savedAt = toAccountOperationIsoTime(savedDate);
-
-    const nextAccounts = accounts.map((account) =>
-
-      account.id === editingAccount.accountId
-
-        ? {
-
-            ...account,
-
-            amount: nextAmount,
-
-            ...(currentAccount.archived ? { archived: false, archivedAt: undefined } : {})
-
-          }
-
-        : account
-
-    );
-
-    const groupName = currentGroup.name;
-
-    const nextHistory = [
-
-      createHistoryRecord(
-
-        '\u4fee\u6539',
-
-        currentAccount,
-
-        groupName,
-
-        currentAccount.amount,
-
-        nextAmount,
-
-        savedAt,
-
-        undefined,
-
-        undefined,
-
-        note
-
-      ),
-
-      ...(currentAccount.archived
-
-        ? [
-
-            createHistoryRecord(
-
-              '\u91cd\u65b0\u542f\u7528',
-
-              currentAccount,
-
-              groupName,
-
-              currentAccount.amount,
-
-              currentAccount.amount,
-
-              savedAt
-
-            )
-
-          ]
-
-        : []),
-
-      ...history
-
-    ];
-
-
-
-    updateAppData({ groups: assetGroups, accounts: nextAccounts, history: nextHistory });
-
-    closeEditor();
-
-  };
-
-
-
-  const saveAmount = () => {
-
-    if (!editingAccount || !currentAccount) {
-
-      return;
-
-    }
-
-
-
-    const editableAmount =
-
-      editMode === 'set' ? parseNonNegativeAmount(draftAmount) : nextAdjustedEditableAmount;
-
-
-
-    if (editableAmount === null || isAdjustAmountInvalid || !activeAmountEditDate) {
-
-      return;
-
-    }
-
-
-
-    if (
-
-      currentAccount.archived &&
-
-      hasActiveDuplicateAccountNameExcept(currentAccount.name, currentAccount.id)
-
-    ) {
-
-      window.alert('已有同名启用账户，请先处理后再重新启用');
-
-      return;
-
-    }
-
-
-
-    const nextAmount = roundToMoneyPrecision(
-
-      toStoredGroupAmount(editingAccount.groupId, editableAmount)
-
-    );
-
-
-
-    if (isLargeAmountChange(currentEditableAmount, editableAmount)) {
-
-      const savedDate = activeAmountEditDate;
-
-      const note = activeAmountEditNote.trim() ? activeAmountEditNote : undefined;
-
-
-
-      setConfirmationDialog({
-
-        title: editMode === 'set' ? '确认修改余额' : '确认调整余额',
-
-        message: `${currentAccount.name}：${formatMoney(currentAccount.amount)} → ${formatMoney(nextAmount)}`,
-
-        confirmLabel: '确认',
-
-        onConfirm: () => performSaveAmount(editableAmount, savedDate, note)
-
-      });
-
-      return;
-
-    }
-
-
-
-    performSaveAmount(
-
-      editableAmount,
-
-      activeAmountEditDate,
-
-      activeAmountEditNote.trim() ? activeAmountEditNote : undefined
-
-    );
 
   };
 
@@ -17030,7 +6910,7 @@ function App() {
 
 
 
-    if (hasActiveDuplicateAccountName(nextName)) {
+    if (hasActiveDuplicateAccountName(groups, nextName)) {
 
       setNewAccountError('账户名称已存在');
 
@@ -17040,13 +6920,13 @@ function App() {
 
 
 
-    const archivedMatch = findArchivedAccountByName(nextName);
+    const archivedMatch = findArchivedAccountByName(archivedAccounts, nextName);
 
 
 
     if (archivedMatch) {
 
-      setConfirmationDialog({
+      showConfirmationDialog({
 
         title: '重新启用账户',
 
@@ -17082,51 +6962,24 @@ function App() {
 
 
 
-    const createdAt = new Date().toISOString();
+    const result = createNewAccountInAppData({
+      appData: { groups: assetGroups, accounts, history },
+      groups,
+      archivedAccounts,
+      groupId: newAccountGroupId,
+      accountTypeInput: newAccountTypeInput,
+      accountNameInput: newAccountName,
+      amountInput: newAccountAmount,
+      createdAt: new Date().toISOString(),
+      historyRecordId: createId('history')
+    });
 
-    const nextAccount: Account = {
+    if (!result.ok) {
+      setNewAccountError('error' in result ? result.error : '');
+      return;
+    }
 
-      id: createStableAccountId(accounts.map((account) => account.id)),
-
-      groupId: selectedNewAccountGroup.id,
-
-      name: nextName,
-
-      amount: roundToMoneyPrecision(
-
-        toStoredGroupAmount(selectedNewAccountGroup.id, editableAmount)
-
-      ),
-
-      createdAt
-
-    };
-
-    const nextHistory = [
-
-      createHistoryRecord(
-
-        '\u65b0\u589e',
-
-        nextAccount,
-
-        selectedNewAccountGroup.name,
-
-        null,
-
-        nextAccount.amount,
-
-        createdAt
-
-      ),
-
-      ...history
-
-    ];
-
-
-
-    updateAppData({ groups: assetGroups, accounts: [...accounts, nextAccount], history: nextHistory });
+    updateAppData(result.nextData);
 
     updateAssetChartSettings((currentSettings) => ({
 
@@ -17136,7 +6989,7 @@ function App() {
 
         ...currentSettings.accountDetailById,
 
-        [nextAccount.id]: normalizeAccountDetailChartSettings(
+        [result.account.id]: normalizeAccountDetailChartSettings(
 
           getGlobalAccountDetailChartSettings(currentSettings.trend),
 
@@ -17150,294 +7003,16 @@ function App() {
 
 
 
-    if (rollupPendingNewAccountKey) {
-
-      assignRollupAccount(rollupPendingNewAccountKey, {
-
-        groupId: selectedNewAccountGroup.id,
-
-        groupName: selectedNewAccountGroup.name,
-
-        accountId: nextAccount.id
-
-      });
-
-      setRollupPendingNewAccountKey('');
-
-    }
+    rollupImport.completePendingNewAccount({
+      groupId: result.group.id,
+      groupName: result.group.name,
+      accountId: result.account.id
+    });
 
 
 
     closeAddAccount();
 
-  };
-
-
-
-  const performDeleteAccount = (groupId: string, account: Account) => {
-
-    const groupName = getGroupName(groupId);
-
-
-
-    if (!groupName) {
-
-      return;
-
-    }
-
-
-
-    const deletedAt = new Date().toISOString();
-
-    const nextAccounts = accounts.filter((currentAccount) => currentAccount.id !== account.id);
-
-    const existingCreateRecord = history.find(
-
-      (record) => record.accountId === account.id && record.type === '\u65b0\u589e'
-
-    );
-
-    const createdAt = existingCreateRecord?.time ?? account.createdAt;
-
-    const createRecord: HistoryRecord = {
-
-      ...(existingCreateRecord ??
-
-        createHistoryRecord('\u65b0\u589e', account, groupName, null, account.amount, createdAt)),
-
-      relatedTime: deletedAt
-
-    };
-
-    const deleteRecord = createHistoryRecord(
-
-      '\u5220\u9664',
-
-      account,
-
-      groupName,
-
-      account.amount,
-
-      null,
-
-      deletedAt,
-
-      createdAt
-
-    );
-
-    const unrelatedHistory = history.filter((record) => record.accountId !== account.id);
-
-
-
-    updateAppData({
-
-      groups: assetGroups,
-
-      accounts: nextAccounts,
-
-      history: [deleteRecord, createRecord, ...unrelatedHistory]
-
-    });
-
-    closeAccountDetail();
-
-  };
-
-
-
-  const deleteAccount = (groupId: string, account: Account) => {
-
-    setConfirmationDialog({
-
-      title: '删除账户',
-
-      message: (
-
-        <>
-
-          <p>确定删除 {account.name}</p>
-
-          <p>删除后不可恢复</p>
-
-        </>
-
-      ),
-
-      confirmLabel: '删除',
-
-      tone: 'danger',
-
-      onConfirm: () => performDeleteAccount(groupId, account)
-
-    });
-
-  };
-
-
-
-  const performArchiveAccount = (groupId: string, account: Account) => {
-
-    const groupName = getGroupName(groupId);
-
-
-
-    if (!groupName) {
-
-      return;
-
-    }
-
-
-
-    const archivedAt = new Date().toISOString();
-
-    const nextAccounts = accounts.map((currentAccount) =>
-
-      currentAccount.id === account.id
-
-        ? { ...currentAccount, archived: true, archivedAt }
-
-        : currentAccount
-
-    );
-
-    const nextHistory = [
-
-      createHistoryRecord('\u5f52\u6863', account, groupName, account.amount, account.amount, archivedAt),
-
-      ...history
-
-    ];
-
-
-
-    updateAppData({ groups: assetGroups, accounts: nextAccounts, history: nextHistory });
-
-    closeAccountDetail();
-
-  };
-
-
-
-  const archiveAccount = (groupId: string, account: Account) => {
-
-    setConfirmationDialog({
-
-      title: '归档账户',
-
-      message: (
-
-        <>
-
-          {account.amount !== 0 ? <p>账户余额不为 0</p> : null}
-
-          <p>确定归档 {account.name}</p>
-
-          <p>归档后可在账户新增 / 恢复中重新启用</p>
-
-        </>
-
-      ),
-
-      confirmLabel: '归档',
-
-      onConfirm: () => performArchiveAccount(groupId, account)
-
-    });
-
-  };
-
-
-
-  const completeArchivedRestoreSource = (source: ArchivedRestoreSource) => {
-    if (source === 'account-restore-dialog' || source === 'same-name-account') {
-      closeAddAccount();
-    }
-  };
-
-
-
-  const performRestoreAccountToGroup = (account: Account, targetGroup: AssetGroup) => {
-
-    if (hasActiveDuplicateAccountNameExcept(account.name, account.id)) {
-
-      window.alert('已有同名启用账户，请先处理后再重新启用');
-
-      return false;
-
-    }
-
-
-
-    const restoredAt = new Date().toISOString();
-
-    const nextData = restoreArchivedAccountToGroup(
-      { groups: assetGroups, accounts, history },
-      account.id,
-      targetGroup.id,
-      restoredAt,
-      createId('history')
-    );
-
-    if (!nextData) {
-      return false;
-    }
-
-    updateAppData(nextData);
-
-    return true;
-
-  };
-
-
-
-  const restoreAccount = (
-    groupId: string,
-    account: Account,
-    source: ArchivedRestoreSource = 'account-detail'
-  ) => {
-    const restoreGroup = getArchivedAccountRestoreGroup({ groupId }, assetGroups);
-
-    if (!restoreGroup) {
-      setPendingArchivedRestore({ accountId: account.id, source });
-      return false;
-    }
-
-    return performRestoreAccountToGroup(account, restoreGroup);
-  };
-
-
-
-  const cancelPendingArchivedRestore = () => {
-    setPendingArchivedRestore(null);
-  };
-
-
-
-  const choosePendingArchivedRestoreGroup = (groupId: string) => {
-    if (!pendingArchivedRestore) {
-      return;
-    }
-
-    const account = accounts.find(
-      (currentAccount) => currentAccount.id === pendingArchivedRestore.accountId
-    );
-    const targetGroup = assetGroups.find((group) => group.id === groupId);
-
-    if (!account || !targetGroup) {
-      setPendingArchivedRestore(null);
-      return;
-    }
-
-    if (performRestoreAccountToGroup(account, targetGroup)) {
-      const { source } = pendingArchivedRestore;
-
-      setPendingArchivedRestore(null);
-      completeArchivedRestoreSource(source);
-    }
   };
 
 
@@ -17463,7 +7038,7 @@ function App() {
       setIsAccountChartsOpen(false);
       setExpandedDetailDates([]);
       setIsAccountActionMenuOpen(false);
-      setIsDangerActionsOpen(false);
+      closeDangerActions();
     }
 
     if (editingAccount?.groupId === groupId) {
@@ -17474,9 +7049,8 @@ function App() {
       closeAccountInfoEditor();
     }
 
-    if (flashNoteAccount?.groupId === groupId) {
-      setFlashNoteAccount(null);
-      resetFlashNoteDraft(false);
+    if (flashNote.selectedAccount?.groupId === groupId) {
+      flashNote.close();
     }
 
     if (accountTypeEditor?.mode === 'edit' && accountTypeEditor.groupId === groupId) {
@@ -17493,21 +7067,7 @@ function App() {
       return shouldClearCurrentInput ? '' : currentInput;
     });
     setNewAccountError('');
-    setRollupAccountAssignments((currentAssignments) => {
-      let changed = false;
-      const nextAssignments: Record<string, RollupAccountAssignment | null> = {};
-
-      Object.entries(currentAssignments).forEach(([keyword, assignment]) => {
-        if (assignment?.groupId === groupId) {
-          changed = true;
-          return;
-        }
-
-        nextAssignments[keyword] = assignment;
-      });
-
-      return changed ? nextAssignments : currentAssignments;
-    });
+    rollupImport.removeAssignmentsForGroup(groupId);
   };
 
   const deleteAssetGroup = (groupId: string) => {
@@ -17537,207 +7097,132 @@ function App() {
 
 
 
-  const searchIndex = useMemo(
+  const searchTargetHighlight = useSearchTargetHighlightController({
+    canScrollHistoryTarget: Boolean(
+      (isHistoryOpen && historyPanelView === 'history') ||
+        (selectedAccount && selectedAccountEntry)
+    ),
+    canScrollBackupTarget: isHistoryOpen && historyPanelView === 'backup',
+    historyRenderKey: [
+      filteredHistory.length,
+      selectedAccount?.groupId ?? '',
+      selectedAccount?.accountId ?? '',
+      selectedAccountEntry?.id ?? '',
+      expandedDetailDates.join('|')
+    ].join(':'),
+    backupRenderKey: backupRecords.length
+  });
 
-    () =>
-
-      createGlobalSearchIndex(groups, sortedHistory, backupRecords, {
-
-        getAccountNatureLabel,
-
-        getHistoryTypeLabel,
-
-        getBackupMethodLabel,
-
-        getAccountMark,
-
-        getHistoryChangeLabel: (record) => getAmountChange(record).label,
-
-        formatMoney,
-
-        formatShortTime: formatHistoryRecordDate,
-
-        formatPreciseBackupTime,
-
-        settingsItems: GLOBAL_SETTINGS_SEARCH_ITEMS
-
-      }),
-
-    [groups, sortedHistory, backupRecords]
-
+  const searchIndexOptions = useMemo<CreateSearchIndexOptions>(
+    () => ({
+      getAccountNatureLabel,
+      getHistoryTypeLabel,
+      getBackupMethodLabel,
+      getAccountMark,
+      getHistoryChangeLabel: (record) => getAmountChange(record).label,
+      formatMoney,
+      formatShortTime: formatHistoryRecordDate,
+      formatPreciseBackupTime,
+      settingsItems: GLOBAL_SETTINGS_SEARCH_ITEMS
+    }),
+    []
   );
 
-  const searchOutput = useMemo(
+  const globalSearch = useGlobalSearchController<SearchNavigationSnapshot>({
+    groups,
+    historyRecords: sortedHistory,
+    backupRecords,
+    createIndexOptions: searchIndexOptions,
+    searchLogicMode: globalSettings.searchLogicMode,
+    createNavigationSnapshot: createSearchNavigationSnapshot,
+    restoreNavigationSnapshot: restoreSearchNavigationSnapshot,
+    navigateToTarget: navigateToSearchTarget,
+    onExitNavigation: searchTargetHighlight.clearSearchScrollTargets
+  });
 
-    () =>
+  globalSearchControllerRef.current = globalSearch;
 
-      runGlobalSearch(searchIndex, searchState.query, {
+  const mainPageKey = flashNote.isOpen
 
-        selectedCategory: searchState.selectedCategory,
+    ? 'flash-note'
 
-        searchLogicMode: globalSettings.searchLogicMode
+    : isRollupImportOpen
 
-      }),
+      ? 'rollup-import'
 
-    [searchIndex, searchState.query, searchState.selectedCategory, globalSettings.searchLogicMode]
+      : isGlobalSettingsOpen
 
-  );
+        ? 'global-settings'
 
+        : isTotalChartsOpen
 
+          ? 'total-charts'
 
-  useEffect(() => {
+          : isAccountChartsOpen && selectedAccount && selectedAccountEntry
 
-    if (searchState.weakMode !== searchOutput.weakMode) {
+            ? `account-charts:${selectedAccountEntry.id}`
 
-      dispatchSearchState({ type: 'set-weak-mode', weakMode: searchOutput.weakMode });
+            : selectedGroupDetail
 
-    }
+              ? `group-detail:${selectedGroupDetail.id}`
 
-  }, [searchOutput.weakMode, searchState.weakMode]);
+              : selectedAccount && selectedAccountEntry
 
+                ? `account-detail:${selectedAccountEntry.id}`
 
+                : 'home';
 
-  const strongSearchNavigationTargets = searchOutput.strongNavigationTargets;
+  const leftLayerKey = isHistoryOpen
 
-  const currentSearchNavigationTarget = searchState.floatingNavigation?.targets.find(
+    ? `history:${historyPanelView}`
 
-    (target) => target.key === searchState.floatingNavigation?.currentTargetKey
+    : isArchivedAccountsOpen
 
-  );
+      ? 'archived-accounts'
 
-  const searchNavigationCycle = getSearchNavigationCycle(
+      : '';
 
-    searchState.floatingNavigation?.targets ?? [],
+  const rightPanelKey = globalSearch.isOpen
 
-    currentSearchNavigationTarget ?? null
+    ? 'search'
 
-  );
+    : isRollupImportOpen
 
-  const canMoveSearchNavigation = searchNavigationCycle.length > 1;
+      ? 'rollup-import'
 
-  const activeSearchResults = getSearchResultsForCategory(
+      : isDangerActionsOpen && selectedAccount && selectedAccountEntry
 
-    searchOutput,
+        ? `account-danger:${selectedAccountEntry.id}`
 
-    searchState.selectedCategory
+        : isAccountChartsOpen && selectedAccount && selectedAccountEntry
 
-  );
+          ? `account-chart-settings:${selectedAccountEntry.id}`
 
-  const focusedSearchResult =
+          : selectedAccount && selectedAccountEntry
 
-    activeSearchResults.find(
+            ? `account-actions:${selectedAccountEntry.id}`
 
-      (result) => getSearchResultItemId(result.target) === searchState.hoveredResultId
+            : isHistoryOpen
 
-    ) ??
+              ? `history-actions:${historyPanelView}`
 
-    activeSearchResults.find(
+              : isArchivedAccountsOpen
 
-      (result) => getSearchResultItemId(result.target) === searchState.focusedResultId
+                ? 'archived-actions'
 
-    ) ??
+                : isTotalChartsOpen
 
-    activeSearchResults[0] ??
+                  ? 'chart-settings'
 
-    null;
+                  : selectedGroupDetail
 
+                    ? `group-detail-actions:${selectedGroupDetail.id}`
 
+                    : isGlobalSettingsOpen
 
-  const markSearchUserInteraction = () => {
+                      ? `global-settings:${globalSettingsSection}`
 
-    searchInteractionHoldUntilRef.current = Date.now() + 650;
-
-  };
-
-
-
-  const handleSearchResultOpen = (result: GlobalSearchResult) => {
-
-    startSearchNavigation(result.target);
-
-  };
-
-
-
-  const moveSearchNavigation = (direction: 1 | -1) => {
-
-    if (!searchState.floatingNavigation || !currentSearchNavigationTarget) {
-
-      return;
-
-    }
-
-
-
-    const nextTarget = getNextSearchNavigationTarget(
-
-      searchNavigationCycle,
-
-      currentSearchNavigationTarget,
-
-      direction
-
-    );
-
-
-
-    if (!nextTarget) {
-
-      return;
-
-    }
-
-
-
-    dispatchSearchState({
-
-      type: 'update-navigation-target',
-
-      currentTargetKey: nextTarget.key
-
-    });
-
-    navigateToSearchTarget(nextTarget);
-
-  };
-
-
-
-  const returnFromSearchNavigation = () => {
-
-    const navigationState = searchState.floatingNavigation;
-
-
-
-    if (!navigationState) {
-
-      return;
-
-    }
-
-
-
-    const snapshot = navigationState.returnSnapshot;
-
-
-
-    dispatchSearchState({ type: 'return-from-navigation' });
-
-    restoreSearchNavigationSnapshot(snapshot);
-
-
-
-  };
-
-
-
-  const exitSearchNavigation = () => {
-
-    dispatchSearchState({ type: 'clear-navigation' });
-
-    clearSearchScrollTargets();
-
-  };
+                      : 'home-actions';
 
 
 
@@ -17967,152 +7452,33 @@ function App() {
 
 
 
-  const latestHistoryCalendarLeadMonth = getHistoryCalendarLeadMonth();
-
-  const isHistoryCalendarNextDisabled =
-
-    calendarMonth.getFullYear() > latestHistoryCalendarLeadMonth.getFullYear() ||
-
-    (calendarMonth.getFullYear() === latestHistoryCalendarLeadMonth.getFullYear() &&
-
-      calendarMonth.getMonth() >= latestHistoryCalendarLeadMonth.getMonth());
-
-
-
-  const getHistoryCalendarDateState = (date: Date, monthDate: Date) => {
-
-    const dateValue = toDateInputValue(date);
-
-
-
-    return {
-
-      isCurrentMonth: date.getMonth() === monthDate.getMonth(),
-
-      isBoundary: dateValue === historyStartDate || dateValue === historyEndDate,
-
-      isInsideRange:
-
-        Boolean(historyStartDate && historyEndDate) &&
-
-        dateValue > historyStartDate &&
-
-        dateValue < historyEndDate,
-
-      isFuture: isFutureDateKey(dateValue),
-
-      recordCount: historyDateCounts[dateValue] ?? 0
-
-    };
-
-  };
-
-
-
-  const historyRecordListProps = {
-
-    compareRecords: compareHistoryByTimeDesc,
-
+  const historyRecordListProps = createHistoryRecordListProps<HistoryRecord>({
     getTypeLabel: getHistoryTypeLabel,
-
     getTone: getHistoryTone,
-
     getAmountChange,
-
     formatAmount: formatHistoryAmount,
-
     formatShortTime: formatHistoryRecordDate,
-
     renderFlashSourceIcon: renderFlashLightningIcon
+  });
 
-  };
+  const accountHistoryRecordListProps =
+    createAccountHistoryRecordListProps(historyRecordListProps);
 
 
-
-  const hasAmountEditorMetadataUnsavedChanges = Boolean(
-
-    accountEditInitialDate &&
-
-      (setAmountDateInput !== accountEditInitialDate ||
-
-        adjustAmountDateInput !== accountEditInitialDate ||
-
-        setAmountNoteInput !== '' ||
-
-        adjustAmountNoteInput !== '')
-
-  );
-
-  const hasAmountEditorUnsavedChanges = Boolean(
-
-    editingAccount &&
-
-      currentAccount &&
-
-      ((editMode === 'set'
-
-        ? draftAmount !== formatMoneyInputValue(currentEditableAmount)
-
-        : adjustAmountInput.trim() !== '') ||
-
-        hasAmountEditorMetadataUnsavedChanges)
-
-  );
-
-  const hasAccountInfoUnsavedChanges = Boolean(
-
-    editingAccountInfo &&
-
-      accountInfoEntry &&
-
-      (accountNameDraft !== accountInfoEntry.name ||
-
-        accountAliasDraft !== limitAccountAliasInput(accountInfoEntry.alias ?? ''))
-
-  );
 
   const firstGroupName = groups[0]?.name ?? '';
   const firstGroupId = groups[0]?.id ?? '';
 
-  const hasAddAccountUnsavedChanges = Boolean(
-
-    isAddingAccount &&
-
-      (newAccountName.trim() ||
-
-        newAccountAmount.trim() ||
-
-        newAccountError ||
-
-        newAccountTypeInput !== firstGroupName ||
-
-        newAccountGroupId !== firstGroupId)
-
-  );
-
-  const hasAccountTypeUnsavedChanges = Boolean(
-
-    accountTypeEditor?.mode === 'create'
-
-      ? accountTypeNameDraft.trim() ||
-
-          accountTypeNatureDraft !== 'asset' ||
-
-          accountTypeStatsDraft !== true ||
-
-          accountTypeError
-
-      : accountTypeEditorGroup &&
-
-          (accountTypeNameDraft !== accountTypeEditorGroup.name ||
-
-            accountTypeNatureDraft !== accountTypeEditorGroup.nature ||
-
-            accountTypeStatsDraft !== accountTypeEditorGroup.includeInStats ||
-
-            accountTypeError)
-
-  );
+  const hasAddAccountUnsavedChanges = getAddAccountUnsavedChanges({
+    isAddingAccount,
+    newAccountName,
+    newAccountAmount,
+    newAccountError,
+    newAccountTypeInput,
+    newAccountGroupId,
+    firstGroupName,
+    firstGroupId
+  });
 
   const hasSnapshotUnsavedChanges =
 
@@ -18132,7 +7498,7 @@ function App() {
 
 
 
-    setConfirmationDialog({
+    showConfirmationDialog({
 
       title: '放弃当前编辑',
 
@@ -18156,18 +7522,6 @@ function App() {
 
 
 
-  const requestCloseAccountInfoEditor = () =>
-
-    requestDiscardableBack(hasAccountInfoUnsavedChanges, closeAccountInfoEditor);
-
-
-
-  const requestCloseEditor = () =>
-
-    requestDiscardableBack(hasAmountEditorUnsavedChanges, closeEditor);
-
-
-
   const requestCloseAddAccount = () =>
 
     requestDiscardableBack(hasAddAccountUnsavedChanges, closeAddAccount);
@@ -18182,7 +7536,7 @@ function App() {
 
   const requestReturnFromSearchNavigation = () =>
 
-    requestDiscardableBack(hasSnapshotUnsavedChanges, returnFromSearchNavigation);
+    requestDiscardableBack(hasSnapshotUnsavedChanges, globalSearch.returnFromNavigation);
 
 
 
@@ -18222,9 +7576,9 @@ function App() {
 
 
 
-    if (searchState.isOpen) {
+    if (globalSearch.isOpen) {
 
-      return closeSearch;
+      return globalSearch.closeSearch;
 
     }
 
@@ -18246,33 +7600,33 @@ function App() {
 
 
 
-    if (isFlashExitConfirmOpen) {
+    if (flashNote.isExitConfirmOpen) {
 
-      return () => setIsFlashExitConfirmOpen(false);
-
-    }
-
-
-
-    if (isFlashReturnDateConfirmOpen) {
-
-      return () => setIsFlashReturnDateConfirmOpen(false);
+      return flashNote.dismissExitConfirm;
 
     }
 
 
 
-    if (flashEditingDate) {
+    if (flashNote.isReturnDateConfirmOpen) {
 
-      return cancelFlashCellEdit;
+      return flashNote.dismissReturnDateConfirm;
 
     }
 
 
 
-    if (isFlashNoteOpen) {
+    if (flashNote.editingDate) {
 
-      return requestCloseFlashNote;
+      return flashNote.cancelCellEdit;
+
+    }
+
+
+
+    if (flashNote.isOpen) {
+
+      return flashNote.requestClose;
 
     }
 
@@ -18374,7 +7728,7 @@ function App() {
 
 
 
-    if (searchState.floatingNavigation) {
+    if (globalSearch.hasFloatingNavigation) {
 
       return requestReturnFromSearchNavigation;
 
@@ -18676,116 +8030,6 @@ function App() {
 
   useEffect(() => {
 
-    const canScrollHistoryPanel = isHistoryOpen && historyPanelView === 'history';
-    const canScrollAccountDetail = Boolean(selectedAccount && selectedAccountEntry);
-
-    if (!highlightedHistoryRecordId || (!canScrollHistoryPanel && !canScrollAccountDetail)) {
-
-      return;
-
-    }
-
-
-
-    const scrollTimer = window.setTimeout(() => {
-
-      document
-
-        .getElementById(`history-record-${highlightedHistoryRecordId}`)
-
-        ?.scrollIntoView({ block: SEARCH_SCROLL_BLOCK, behavior: 'smooth' });
-
-    }, 80);
-
-
-
-    return () => {
-
-      window.clearTimeout(scrollTimer);
-
-    };
-
-  }, [
-    highlightedHistoryRecordId,
-    searchTargetScrollKey,
-    isHistoryOpen,
-    historyPanelView,
-    filteredHistory.length,
-    selectedAccount,
-    selectedAccountEntry,
-    expandedDetailDates
-  ]);
-
-
-
-  useEffect(() => {
-
-    if (!highlightedBackupRecordId || !isHistoryOpen || historyPanelView !== 'backup') {
-
-      return;
-
-    }
-
-
-
-    const scrollTimer = window.setTimeout(() => {
-
-      document
-
-        .getElementById(`backup-record-${highlightedBackupRecordId}`)
-
-        ?.scrollIntoView({ block: SEARCH_SCROLL_BLOCK, behavior: 'smooth' });
-
-    }, 80);
-
-
-
-    return () => {
-
-      window.clearTimeout(scrollTimer);
-
-    };
-
-  }, [
-    highlightedBackupRecordId,
-    searchTargetScrollKey,
-    isHistoryOpen,
-    historyPanelView,
-    backupRecords.length
-  ]);
-
-
-
-  useEffect(() => {
-
-    if (
-
-      !isFlashNoteOpen ||
-
-      flashNoteStage !== 'select' ||
-
-      !flashActiveDateRule ||
-
-      !flashStartDate ||
-
-      flashEndDate
-
-    ) {
-
-      return;
-
-    }
-
-
-
-    applyFlashDateRule(flashActiveDateRule);
-
-  }, [flashVisibleMonth]);
-
-
-
-  useEffect(() => {
-
     const handleEscapeKeyDown = (event: globalThis.KeyboardEvent) => {
 
       if (event.key !== 'Escape') {
@@ -18810,7 +8054,7 @@ function App() {
 
 
 
-      if (searchState.isOpen) {
+      if (globalSearch.isOpen) {
 
         event.preventDefault();
 
@@ -18818,21 +8062,7 @@ function App() {
 
 
 
-        const searchEscapeAction = getSearchEscapeAction(searchState);
-
-
-
-        if (searchEscapeAction) {
-
-          dispatchSearchState(searchEscapeAction);
-
-          if (searchEscapeAction.type !== 'close-and-reset') {
-
-            searchInputRef.current?.focus();
-
-          }
-
-        }
+        globalSearch.handleEscape();
 
 
 
@@ -18894,13 +8124,9 @@ function App() {
 
     currentLayerBack,
 
-    searchState.categoryLockedByUser,
+    globalSearch.handleEscape,
 
-    searchState.isOpen,
-
-    searchState.query,
-
-    searchState.selectedCategory
+    globalSearch.isOpen
 
   ]);
 
@@ -19360,11 +8586,11 @@ function App() {
 
   const renderSearchPreview = () => (
     <SearchPreviewPanel
-      hasQuery={searchOutput.hasQuery}
-      focusedResult={focusedSearchResult}
+      hasQuery={globalSearch.output.hasQuery}
+      focusedResult={globalSearch.focusedResult}
       sortedHistory={sortedHistory}
-      onOpenResult={handleSearchResultOpen}
-      onCloseSearch={closeSearch}
+      onOpenResult={globalSearch.openResult}
+      onCloseSearch={globalSearch.closeSearch}
       formatMoney={formatMoney}
       formatShortTime={formatHistoryRecordDate}
       getAmountChange={getAmountChange}
@@ -19376,7 +8602,7 @@ function App() {
 
   const renderAccountActions = () => {
 
-    if (!selectedAccount || !selectedAccountEntry) {
+    if (!accountActionsPanelProps) {
 
       return null;
 
@@ -19384,20 +8610,7 @@ function App() {
 
 
 
-    return (
-      <AccountActionsPanel
-        isArchived={selectedAccountIsArchived}
-        onEditBalance={() => openEditor(selectedAccount.groupId, selectedAccountEntry, 'set')}
-        onEditAccount={() => openAccountInfoEditor(selectedAccount.groupId, selectedAccountEntry)}
-        onRestoreAccount={
-          selectedAccountIsArchived
-            ? () => restoreAccount(selectedAccount.groupId, selectedAccountEntry, 'account-detail')
-            : undefined
-        }
-        onOpenDangerActions={openDangerActions}
-        onBack={() => currentLayerBack?.()}
-      />
-    );
+    return <AccountActionsPanel {...accountActionsPanelProps} />;
 
   };
 
@@ -19435,7 +8648,7 @@ function App() {
 
   const renderDangerActions = () => {
 
-    if (!selectedAccount || !selectedAccountEntry) {
+    if (!accountDangerActionsPanelProps) {
 
       return null;
 
@@ -19443,14 +8656,7 @@ function App() {
 
 
 
-    return (
-      <AccountDangerActionsPanel
-        isArchived={selectedAccountIsArchived}
-        onArchiveAccount={() => archiveAccount(selectedAccount.groupId, selectedAccountEntry)}
-        onDeleteAccount={() => deleteAccount(selectedAccount.groupId, selectedAccountEntry)}
-        onBackToAccountDetail={closeDangerActions}
-      />
-    );
+    return <AccountDangerActionsPanel {...accountDangerActionsPanelProps} />;
 
   };
 
@@ -19745,30 +8951,6 @@ function App() {
 
             {renderChartSegmentedControl(
 
-              '类型属性',
-
-              accountTypeNatureOptions.map((option) => ({
-
-                value: option.value,
-
-                label: option.label
-
-              })),
-
-              groupDetailNatureDraft,
-
-              (value) => {
-
-                setGroupDetailNatureDraft(value as AccountTypeNature);
-
-                setGroupDetailError('');
-
-              }
-
-            )}
-
-            {renderChartSegmentedControl(
-
               '参与统计',
 
               [
@@ -19921,336 +9103,6 @@ function App() {
 
 
 
-  const renderGlobalSettingsSegmented = (
-
-    label: string,
-
-    options: Array<{ value: string; label: string }>,
-
-    currentValue: string,
-
-    note?: ReactNode,
-
-    onChange?: (value: string) => void,
-
-    statusLabel?: ReactNode | null,
-
-    fieldClassName = ''
-
-  ) => {
-
-    const isEnabled = Boolean(onChange);
-
-    const resolvedStatusLabel =
-
-      statusLabel === undefined ? (isEnabled ? null : '稍后开放') : statusLabel;
-
-
-
-    return (
-
-      <section
-
-        className={`global-settings-field${fieldClassName ? ` ${fieldClassName}` : ''}`}
-
-      >
-
-        <div className="global-settings-field__header">
-
-          <h3>{label}</h3>
-
-          {resolvedStatusLabel ? <span>{resolvedStatusLabel}</span> : null}
-
-        </div>
-
-        <div
-
-          className="segmented-control global-settings-segmented"
-
-          style={getSegmentedControlStyle(options.length)}
-
-          aria-label={label}
-
-          aria-disabled={isEnabled ? undefined : 'true'}
-
-        >
-
-          {options.map((option) => (
-
-            <button
-
-              key={option.value}
-
-              type="button"
-
-              disabled={!isEnabled}
-
-              className={currentValue === option.value ? 'is-selected' : undefined}
-
-              onClick={() => onChange?.(option.value)}
-
-            >
-
-              {option.label}
-
-            </button>
-
-          ))}
-
-        </div>
-
-        {note ? <p className="global-settings-note">{note}</p> : null}
-
-      </section>
-
-    );
-
-  };
-
-
-
-  const renderGlobalSettingsControl = (
-
-    label: string,
-
-    options: Array<{ value: string; label: string }>,
-
-    currentValue: string,
-
-    onChange: (value: string) => void
-
-  ) => (
-
-    <div className="global-settings-control-row">
-
-      <span className="global-settings-control-label">{label}</span>
-
-      <div
-
-        className="segmented-control global-settings-segmented"
-
-        style={getSegmentedControlStyle(options.length)}
-
-        aria-label={label}
-
-      >
-
-        {options.map((option) => (
-
-          <button
-
-            key={option.value}
-
-            type="button"
-
-            className={currentValue === option.value ? 'is-selected' : undefined}
-
-            onClick={() => onChange(option.value)}
-
-          >
-
-            {option.label}
-
-          </button>
-
-        ))}
-
-      </div>
-
-    </div>
-
-  );
-
-
-
-  const renderGlobalSettingsActionControl = (label: string, children: ReactNode) => (
-
-    <div className="global-settings-control-row">
-
-      <span className="global-settings-control-label">{label}</span>
-
-      <div className="global-settings-action-cell">{children}</div>
-
-    </div>
-
-  );
-
-
-
-  const renderGlobalSettingsFieldGroup = (
-
-    title: string,
-
-    children: ReactNode,
-
-    note?: ReactNode
-
-  ) => (
-
-    <section className="global-settings-field global-settings-field--chart-group">
-
-      <div className="global-settings-field__header">
-
-        <h3>{title}</h3>
-
-      </div>
-
-      <div className="global-settings-control-stack">{children}</div>
-
-      {note ? <p className="global-settings-note">{note}</p> : null}
-
-    </section>
-
-  );
-
-
-
-  const renderSecuritySettingsContentInner = () => (
-
-    <>
-
-      {renderGlobalSettingsFieldGroup(
-
-        '登陆密码保护',
-
-        <>
-
-          {renderGlobalSettingsControl(
-
-            '是否开启登陆密码保护',
-
-            [
-
-              { value: 'yes', label: '是' },
-
-              { value: 'no', label: '否' }
-
-            ],
-
-            globalSettings.passwordProtectionEnabled ? 'yes' : 'no',
-
-            updatePasswordProtection
-
-          )}
-
-          {renderGlobalSettingsActionControl(
-
-            '设置登录密码',
-
-            <button
-
-              type="button"
-
-              className="global-settings-reserved-button"
-
-              onClick={requestOpenPasswordEditor}
-
-            >
-
-              {globalSettings.passwordHash ? '修改登录密码' : '设置登录密码'}
-
-            </button>
-
-          )}
-
-          {renderGlobalSettingsActionControl(
-
-            '自动锁定时间',
-
-            <label className="global-settings-inline-input">
-
-              <input
-
-                type="text"
-
-                inputMode="numeric"
-
-                pattern="[0-9]*"
-
-                value={autoLockMinutesInput}
-
-                onChange={(event) => updateAutoLockMinutesInput(event.target.value)}
-
-                onBlur={resetInvalidAutoLockMinutesInput}
-
-              />
-
-              <span>分钟</span>
-
-            </label>
-
-          )}
-
-          {!globalSettings.passwordProtectionEnabled ? (
-
-            <p className="global-settings-note">开启密码保护后生效</p>
-
-          ) : null}
-
-        </>
-
-      )}
-
-      {renderGlobalSettingsFieldGroup(
-
-        '快照加密',
-
-        <>
-
-          {renderGlobalSettingsControl(
-
-            '是否启用快照加密',
-
-            [
-
-              { value: 'yes', label: '是' },
-
-              { value: 'no', label: '否' }
-
-            ],
-
-            globalSettings.snapshotEncryptionEnabled ? 'yes' : 'no',
-
-            updateSnapshotEncryption
-
-          )}
-
-          {renderGlobalSettingsActionControl(
-
-            '设置快照密码',
-
-            <button
-
-              type="button"
-
-              className="global-settings-reserved-button"
-
-              onClick={requestOpenSnapshotPasswordEditor}
-
-            >
-
-              {globalSettings.snapshotPasswordHash ? '修改快照密码' : '设置快照密码'}
-
-            </button>
-
-          )}
-
-        </>,
-
-        '仅加密手动导出和自动生成的快照文件，不加密本地当前数据。'
-
-      )}
-
-    </>
-
-  );
-
-
-
-  const renderSecuritySettingsContent = () => renderSecuritySettingsContentInner();
-
-
-
   const renderPasswordEditor = () => {
 
     if (!passwordEditorMode) {
@@ -20327,850 +9179,13 @@ function App() {
 
 
 
-  const renderGlobalSettingsContent = () => {
-
-    if (globalSettingsSection === 'appearance') {
-
-      return (
-
-        <AppearanceSettingsPanel
-          positiveNegativeColorMode={globalSettings.positiveNegativeColorMode}
-          homeAssetStatMetric={globalSettings.homeAssetStatMetric}
-          homeAssetStatLabelMode={globalSettings.homeAssetStatLabelMode}
-          homeAssetStatCompact={globalSettings.homeAssetStatCompact}
-          themeMode={globalSettings.themeMode}
-          themeStyle={globalSettings.themeStyle}
-          nyaaThemeUnlocked={globalSettings.nyaaThemeUnlocked}
-          pagePositionMemoryMode={globalSettings.pagePositionMemoryMode}
-          onPositiveNegativeColorModeChange={updatePositiveNegativeColorMode}
-          onHomeAssetStatMetricChange={updateHomeAssetStatMetric}
-          onHomeAssetStatLabelModeChange={updateHomeAssetStatLabelMode}
-          onHomeAssetStatCompactChange={updateHomeAssetStatCompact}
-          onThemeModeChange={updateThemeMode}
-          onThemeStyleChange={updateThemeStyle}
-          onPagePositionMemoryModeChange={updatePagePositionMemoryMode}
-        />
-
-      );
-
-    }
-
-
-
-    if (globalSettingsSection === 'charts') {
-
-      return (
-
-        <>
-
-          {renderGlobalSettingsSegmented(
-
-            '图表配色遵循',
-
-            [
-
-              { value: 'createdAt', label: '创建时间优先（固定）' },
-
-              { value: 'share', label: '占比优先（动态）' }
-
-            ],
-
-            globalSettings.chartColorAssignmentMode,
-
-            undefined,
-
-            updateChartColorAssignmentMode,
-
-            null
-
-          )}
-
-          {renderGlobalSettingsFieldGroup(
-
-            '首页缩略图表',
-
-            <>
-
-              {renderGlobalSettingsControl(
-
-                '资产结构显示',
-
-                [
-
-                  { value: 'on', label: '开' },
-
-                  { value: 'off', label: '关' }
-
-                ],
-
-                assetChartSettings.l0.showStructure ? 'on' : 'off',
-
-                (value) =>
-
-                  updateHomeThumbnailChartSettings((currentSettings) => ({
-
-                    ...currentSettings,
-
-                    showStructure: value === 'on'
-
-                  }))
-
-              )}
-
-              {renderGlobalSettingsControl(
-
-                '资产趋势显示',
-
-                [
-
-                  { value: 'on', label: '开' },
-
-                  { value: 'off', label: '关' }
-
-                ],
-
-                assetChartSettings.l0.showTrend ? 'on' : 'off',
-
-                (value) =>
-
-                  updateHomeThumbnailChartSettings((currentSettings) => ({
-
-                    ...currentSettings,
-
-                    showTrend: value === 'on'
-
-                  }))
-
-              )}
-
-              {renderGlobalSettingsControl(
-
-                '横轴范围显示',
-
-                [
-
-                  { value: '1m', label: '近 1 月' },
-
-                  { value: '3m', label: '近 3 月' },
-
-                  { value: '6m', label: '近 6 月' },
-
-                  { value: '1y', label: '近 1 年' }
-
-                ],
-
-                assetChartSettings.l0.xAxisRange,
-
-                (value) =>
-
-                  updateHomeThumbnailChartSettings((currentSettings) => ({
-
-                    ...currentSettings,
-
-                    xAxisRange: value as TrendXAxisRange
-
-                  }))
-
-              )}
-
-            </>
-
-          )}
-
-          {renderGlobalSettingsFieldGroup(
-
-            '全局图表控制',
-
-            <>
-
-              {renderGlobalSettingsControl(
-
-                '控制模式',
-
-                [
-
-                  { value: 'peer', label: '平级设定' },
-
-                  { value: 'locked', label: '全局锁定' }
-
-                ],
-
-                assetChartSettings.globalChartControlMode,
-
-                updateGlobalChartControlMode
-
-              )}
-
-            </>
-
-          )}
-
-          {renderGlobalSettingsFieldGroup(
-
-            '总资产图表设置',
-
-            <>
-
-              {renderGlobalSettingsControl(
-
-                '资产结构显示',
-
-                [
-
-                  { value: 'positive', label: '正资产' },
-
-                  { value: 'negative', label: '负资产' },
-
-                  { value: 'both', label: '正负资产' }
-
-                ],
-
-                assetChartSettings.structure.assetDisplay,
-
-                (value) =>
-
-                  updateAssetChartSettings((currentSettings) => ({
-
-                    ...currentSettings,
-
-                    structure: {
-
-                      ...currentSettings.structure,
-
-                      assetDisplay: value as StructureAssetDisplay
-
-                    }
-
-                  }))
-
-              )}
-
-              {renderGlobalSettingsControl(
-
-                '多重叠加数字',
-
-                [
-
-                  { value: 'yes', label: '是' },
-
-                  { value: 'no', label: '否' }
-
-                ],
-
-                assetChartSettings.structure.showDebtMultiple ? 'yes' : 'no',
-
-                (value) =>
-
-                  updateAssetChartSettings((currentSettings) => ({
-
-                    ...currentSettings,
-
-                    structure: {
-
-                      ...currentSettings.structure,
-
-                      showDebtMultiple: value === 'yes'
-
-                    }
-
-                  }))
-
-              )}
-
-              <div className="global-settings-divider" aria-hidden="true" />
-
-              {renderGlobalSettingsControl(
-
-                '资产趋势显示',
-
-                [
-
-                  { value: 'net', label: '净资产' },
-
-                  { value: 'positive', label: '正资产' },
-
-                  { value: 'positive-negative', label: '正负资产' }
-
-                ],
-
-                assetChartSettings.trend.assetDisplay,
-
-                (value) =>
-
-                  updateAssetChartSettings((currentSettings) => ({
-
-                    ...currentSettings,
-
-                    trend: {
-
-                      ...currentSettings.trend,
-
-                      assetDisplay: value as TrendAssetDisplay
-
-                    }
-
-                  }))
-
-              )}
-
-              {renderGlobalSettingsControl(
-
-                '自适应纵轴',
-
-                [
-
-                  { value: 'on', label: '开' },
-
-                  { value: 'off', label: '关' }
-
-                ],
-
-                assetChartSettings.trend.adaptiveYAxis ? 'on' : 'off',
-
-                (value) =>
-
-                  updateAssetChartSettings((currentSettings) => ({
-
-                    ...currentSettings,
-
-                    trend: {
-
-                      ...currentSettings.trend,
-
-                      adaptiveYAxis: value === 'on'
-
-                    }
-
-                  }))
-
-              )}
-
-              {renderGlobalSettingsControl(
-
-                '横轴范围显示',
-
-                [
-
-                  { value: '1m', label: '近 1 月' },
-
-                  { value: '3m', label: '近 3 月' },
-
-                  { value: '6m', label: '近 6 月' },
-
-                  { value: '1y', label: '近 1 年' }
-
-                ],
-
-                assetChartSettings.trend.xAxisRange,
-
-                (value) =>
-
-                  updateAssetChartSettings((currentSettings) => ({
-
-                    ...currentSettings,
-
-                    trend: {
-
-                      ...currentSettings.trend,
-
-                      xAxisRange: value as TrendXAxisRange
-
-                    }
-
-                  }))
-
-              )}
-
-              {renderGlobalSettingsControl(
-
-                '点值显示',
-
-                [
-
-                  { value: 'adaptive', label: '自适应' },
-
-                  { value: 'minmax', label: '最高最低' },
-
-                  { value: 'none', label: '不显示' }
-
-                ],
-
-                assetChartSettings.trend.pointValueMode,
-
-                (value) =>
-
-                  updateAssetChartSettings((currentSettings) => ({
-
-                    ...currentSettings,
-
-                    trend: {
-
-                      ...currentSettings.trend,
-
-                      pointValueMode: value as TrendPointValueMode
-
-                    }
-
-                  }))
-
-              )}
-
-            </>
-
-          )}
-
-          {renderGlobalSettingsFieldGroup(
-
-            '全局账户类型图表设置',
-
-            <>
-
-              {renderGlobalSettingsControl(
-
-                '横轴范围显示',
-
-                [
-
-                  { value: '1m', label: '近 1 月' },
-
-                  { value: '3m', label: '近 3 月' },
-
-                  { value: '6m', label: '近 6 月' },
-
-                  { value: '1y', label: '近 1 年' }
-
-                ],
-
-                assetChartSettings.globalCategoryDetail.xAxisRange,
-
-                (value) =>
-
-                  updateGlobalCategoryDetailChartSettings((currentSettings) => ({
-
-                    ...currentSettings,
-
-                    xAxisRange: value as TrendXAxisRange
-
-                  }))
-
-              )}
-
-              {renderGlobalSettingsControl(
-
-                '点值显示',
-
-                [
-
-                  { value: 'adaptive', label: '自适应' },
-
-                  { value: 'minmax', label: '最高最低' },
-
-                  { value: 'none', label: '不显示' }
-
-                ],
-
-                assetChartSettings.globalCategoryDetail.pointValueMode,
-
-                (value) =>
-
-                  updateGlobalCategoryDetailChartSettings((currentSettings) => ({
-
-                    ...currentSettings,
-
-                    pointValueMode: value as TrendPointValueMode
-
-                  }))
-
-              )}
-
-            </>
-
-          )}
-
-        </>
-
-      );
-
-    }
-
-
-
-    if (globalSettingsSection === 'search') {
-
-      return (
-        <SearchSettingsPanel
-          searchLogicMode={globalSettings.searchLogicMode}
-          onSearchLogicModeChange={updateSearchLogicMode}
-        />
-      );
-
-    }
-
-
-
-    if (globalSettingsSection === 'security') {
-
-      return renderSecuritySettingsContent();
-
-    }
-
-
-
-    if (globalSettingsSection === 'backup') {
-
-      return (
-
-        <BackupSettingsPanel
-          userSettingsFileInputRef={userSettingsFileInputRef}
-          exampleTemplates={EXAMPLE_TEMPLATES}
-          selectedExampleTemplateId={selectedExampleTemplateId}
-          isExampleMode={isExampleMode}
-          onImportUserSettings={importUserSettings}
-          onExportUserSettings={exportUserSettings}
-          onOpenUserSettingsFile={() => userSettingsFileInputRef.current?.click()}
-          onOpenBackupPanel={openBackupPanelFromGlobalSettings}
-          onSelectExampleTemplate={setSelectedExampleTemplateId}
-          onEnterOrSwitchExampleMode={isExampleMode ? switchExampleTemplate : enterExampleMode}
-          onExitExampleMode={exitExampleMode}
-          onOpenResetConfirmation={openResetConfirmation}
-        />
-
-      );
-
-    }
-
-
-
-    return (
-
-      <AboutNetraFlowPanel
-        appVersion={window.appInfo?.version ?? APP_VERSION}
-        productIconPath={PRODUCT_ICON_PATH}
-        productNameZh={PRODUCT_NAME_ZH}
-        productNameEn={PRODUCT_NAME_EN}
-        isCatPetted={isCatPetted}
-        onOpenBilibili={openBilibiliProfile}
-        onOpenGithubReleases={openGithubReleases}
-        onTriggerEasterEgg={petNyaaCat}
-        onStartVersionLongPress={startAboutVersionLongPress}
-        onClearVersionLongPress={clearSecretConsoleLongPress}
-      />
-
-    );
-
-  };
-
-
-
-  const renderGlobalSettingsPage = () => {
-
-    const selectedSection =
-
-      GLOBAL_SETTINGS_NAV_ITEMS.find((item) => item.id === globalSettingsSection) ??
-
-      GLOBAL_SETTINGS_NAV_ITEMS[0];
-
-
-
-    return (
-
-      <div
-        className="global-settings-page"
-      >
-
-        <header className="global-settings-header">
-
-          <h1>{selectedSection.label}</h1>
-
-        </header>
-
-        <div className="global-settings-content">{renderGlobalSettingsContent()}</div>
-      </div>
-
-    );
-
-  };
-
-
-
-  const renderGlobalSettingsNavigation = () =>
-
+  const renderRollupImportActions = () =>
     renderRightPanelPage(
-
-      '全局设置',
-
-      <nav className="global-settings-nav" aria-label="全局设置功能导航">
-
-        {GLOBAL_SETTINGS_NAV_ITEMS.map((item) => (
-
-          <button
-
-            key={item.id}
-
-            type="button"
-
-            className={`right-panel-action global-settings-nav__item${
-
-              globalSettingsSection === item.id ? ' is-selected' : ''
-
-            }`}
-
-            aria-current={globalSettingsSection === item.id ? 'page' : undefined}
-
-            onClick={() => setGlobalSettingsSection(item.id)}
-
-          >
-
-            <strong>{item.label}</strong>
-
-          </button>
-
-        ))}
-
-        <button
-
-          type="button"
-
-          className="right-panel-action global-settings-nav__item global-settings-nav__return"
-
-          onClick={closeGlobalSettings}
-
-        >
-
-          <strong>返回资产总览</strong>
-
-        </button>
-
-      </nav>,
-
-      null
-
-    );
-
-
-
-  const getRollupRiskLabel = (riskLevel: RollupRiskLevel, lowRiskKind = 'normalized') => {
-
-    if (riskLevel === 'high') {
-
-      return '高风险';
-
-    }
-
-
-
-    if (riskLevel === 'medium') {
-
-      return '中风险';
-
-    }
-
-
-
-    return lowRiskKind === 'strict' ? '低风险 · 本地未发现明显问题' : '低风险 · 已本地修正';
-
-  };
-
-
-
-  const formatRollupSignedAmount = (record: RollupImportRecord) => {
-
-    const formattedAmount = formatHistoryAmount(Math.abs(record.amount));
-
-
-
-    if (record.mode === 'balance') {
-
-      return formattedAmount;
-
-    }
-
-
-
-    if (record.amount > 0) {
-
-      return `+${formattedAmount}`;
-
-    }
-
-
-
-    if (record.amount < 0) {
-
-      return `-${formattedAmount}`;
-
-    }
-
-
-
-    return '0';
-
-  };
-
-
-
-  const normalizeRollupMatchText = (value: string) =>
-
-    normalizeAccountName(value).replace(/\s+/g, '');
-
-
-
-  const getRollupAccountMatches = (keyword: string) => {
-
-    const normalizedKeyword = normalizeRollupMatchText(keyword);
-
-
-
-    if (!normalizedKeyword) {
-
-      return [];
-
-    }
-
-
-
-    return rollupActiveAccountOptions
-
-      .map((option, index) => {
-
-        const normalizedName = normalizeRollupMatchText(option.account.name);
-
-        const normalizedAlias = normalizeRollupMatchText(option.account.alias ?? '');
-
-        const score =
-
-          normalizedName === normalizedKeyword || normalizedAlias === normalizedKeyword
-
-            ? 100
-
-            : normalizedName.includes(normalizedKeyword) ||
-
-                Boolean(normalizedAlias && normalizedAlias.includes(normalizedKeyword))
-
-              ? 86
-
-              : normalizedKeyword.includes(normalizedName) && normalizedName.length >= 2
-
-                ? 78
-
-                : 0;
-
-
-
-        return { ...option, index, score };
-
-      })
-
-      .filter((option) => option.score >= 72)
-
-      .sort((left, right) => right.score - left.score || left.index - right.index)
-
-      .slice(0, 4);
-
-  };
-
-
-
-  const renderRollupImportPage = () => (
-    <RollupImportPage
-      mode={rollupImportReview ? 'review' : 'prompt'}
-      promptTab={rollupPromptTab}
-      promptExplanation={ROLLUP_IMPORT_EXPLANATION}
-      promptContent={ROLLUP_IMPORT_PROMPT}
-      onPromptTabChange={setRollupPromptTab}
-      review={rollupImportReview}
-      recordGroups={rollupRecordGroups}
-      accountGroups={groupTotals}
-      accountAssignments={rollupAccountAssignments}
-      getAccountMatches={getRollupAccountMatches}
-      getRiskLabel={getRollupRiskLabel}
-      formatRecordAmount={formatRollupSignedAmount}
-      onSelectAccount={selectRollupAccount}
-      onCreateAccount={openRollupNewAccount}
-    />
-
-  );
-
-
-
-  const renderRollupImportActions = () => {
-
-    if (rollupImportReview) {
-
-      return renderRightPanelPage(
-
-        '本次导入',
-
-        <>
-
-          <RollupReviewActionsPanel
-            confirmedAccountCount={rollupConfirmedAccountCount}
-            accountGroupCount={rollupAccountGroupKeys.length}
-            recordCount={rollupImportReview.records.length}
-            hasBlockingIssues={rollupImportReview.hasBlockingIssues}
-            canConfirm={isRollupImportReady}
-            onDiscardImport={discardRollupImportReview}
-            onConfirmImport={confirmRollupImportWrite}
-            onClose={closeRollupImport}
-          />
-
-        </>,
-
-        null,
-
-        'right-panel-page--rollup-import-actions'
-
-      );
-
-    }
-
-
-
-    return renderRightPanelPage(
-
-      '汇总导入',
-
-      <>
-
-        {renderRightPanelActionButton({
-
-          label: '复制提示词',
-
-          tone: 'primary',
-
-          onClick: copyRollupPrompt
-
-        })}
-        <RollupImportDropzone
-          inputValue={rollupPasteText}
-          error={rollupImportError}
-          onInputChange={(value) => {
-            setRollupPasteText(value);
-            setRollupImportError('');
-          }}
-          onImportText={importRollupPastedJson}
-          onSelectFile={() => rollupFileInputRef.current?.click()}
-        />
-
-        {renderRightPanelActionButton({
-
-          label: '返回资产总览',
-
-          onClick: closeRollupImport,
-
-          className: 'rollup-import-return-action'
-
-        })}
-
-      </>,
-
+      rollupImport.actionsTitle,
+      <RollupImportActionsPanel {...rollupImport.actionsPanelProps} />,
       null,
-
-      'right-panel-page--rollup-import-actions'
-
+      rollupImport.actionsClassName
     );
-
-  };
 
 
 
@@ -21240,7 +9255,7 @@ function App() {
 
           label: '全局搜索',
 
-          onClick: openSearch
+          onClick: globalSearch.openSearch
 
         })}
 
@@ -21658,7 +9673,7 @@ function App() {
 
   const renderRightPanelContent = () => {
 
-    if (searchState.isOpen) {
+    if (globalSearch.isOpen) {
 
       return renderSearchPreview();
 
@@ -21740,7 +9755,13 @@ function App() {
 
     if (isGlobalSettingsOpen) {
 
-      return renderGlobalSettingsNavigation();
+      return (
+        <SettingsNavigationPanel
+          selectedSection={globalSettingsSection}
+          onSelectSection={setGlobalSettingsSection}
+          onClose={closeGlobalSettings}
+        />
+      );
 
     }
 
@@ -21756,13 +9777,60 @@ function App() {
     isGlobalSettingsOpen && globalSettingsSection === 'security' && isExampleMode;
 
   const mainPanelClassName = [
-    isFlashNoteOpen ? 'flash-note-container left-browse-panel' : 'card left-browse-panel',
+    flashNote.isOpen ? 'flash-note-container left-browse-panel' : 'card left-browse-panel',
     isSecuritySettingsPageDisabled
       ? 'example-mode-disabled-panel example-mode-disabled-panel--left-page'
       : ''
   ]
     .filter(Boolean)
     .join(' ');
+
+  const settingsPageProps: SettingsPageProps = {
+    section: globalSettingsSection,
+    globalSettings,
+    assetChartSettings,
+    userSettingsFileInputRef,
+    exampleTemplates: EXAMPLE_TEMPLATES,
+    selectedExampleTemplateId,
+    isExampleMode,
+    appVersion: window.appInfo?.version ?? APP_VERSION,
+    productIconPath: PRODUCT_ICON_PATH,
+    productNameZh: PRODUCT_NAME_ZH,
+    productNameEn: PRODUCT_NAME_EN,
+    isCatPetted,
+    autoLockMinutesInput,
+    onPositiveNegativeColorModeChange: updatePositiveNegativeColorMode,
+    onHomeAssetStatMetricChange: updateHomeAssetStatMetric,
+    onHomeAssetStatLabelModeChange: updateHomeAssetStatLabelMode,
+    onHomeAssetStatCompactChange: updateHomeAssetStatCompact,
+    onThemeModeChange: updateThemeMode,
+    onThemeStyleChange: updateThemeStyle,
+    onPagePositionMemoryModeChange: updatePagePositionMemoryMode,
+    onChartColorAssignmentModeChange: updateChartColorAssignmentMode,
+    onGlobalChartControlModeChange: updateGlobalChartControlMode,
+    onUpdateAssetChartSettings: updateAssetChartSettings,
+    onUpdateHomeThumbnailChartSettings: updateHomeThumbnailChartSettings,
+    onUpdateGlobalCategoryDetailChartSettings: updateGlobalCategoryDetailChartSettings,
+    onSearchLogicModeChange: updateSearchLogicMode,
+    onPasswordProtectionChange: updatePasswordProtection,
+    onOpenPasswordEditor: requestOpenPasswordEditor,
+    onAutoLockMinutesInputChange: updateAutoLockMinutesInput,
+    onResetInvalidAutoLockMinutesInput: resetInvalidAutoLockMinutesInput,
+    onSnapshotEncryptionChange: updateSnapshotEncryption,
+    onOpenSnapshotPasswordEditor: requestOpenSnapshotPasswordEditor,
+    onImportUserSettings: importUserSettings,
+    onExportUserSettings: exportUserSettings,
+    onOpenBackupPanel: openBackupPanelFromGlobalSettings,
+    onSelectExampleTemplate: setSelectedExampleTemplateId,
+    onEnterOrSwitchExampleMode: isExampleMode ? switchExampleTemplate : enterExampleMode,
+    onExitExampleMode: exitExampleMode,
+    onOpenResetConfirmation: openResetConfirmation,
+    onOpenBilibili: openBilibiliProfile,
+    onOpenGithubReleases: openGithubReleases,
+    onTriggerEasterEgg: petNyaaCat,
+    onStartVersionLongPress: startAboutVersionLongPress,
+    onClearVersionLongPress: clearSecretConsoleLongPress
+  };
 
 
 
@@ -21913,7 +9981,7 @@ function App() {
 
       <main
 
-        className={`app-shell${isFlashNoteOpen ? ' app-shell--flash-note' : ''}`}
+        className={`app-shell${flashNote.isOpen ? ' app-shell--flash-note' : ''}`}
 
         {...appShellBackProps}
 
@@ -21943,7 +10011,7 @@ function App() {
 
           accept="application/json,.json"
 
-          onChange={importRollupFile}
+          onChange={rollupImport.importFile}
 
           style={{ display: 'none' }}
 
@@ -21967,58 +10035,26 @@ function App() {
 
         >
 
-        {isFlashNoteOpen ? (
+        {flashNote.isOpen ? (
 
           renderFlashNotePage()
 
         ) : isRollupImportOpen ? (
 
-          renderRollupImportPage()
+          <RollupImportPage {...rollupImport.pageProps} />
 
         ) : isGlobalSettingsOpen ? (
 
-          renderGlobalSettingsPage()
+          <SettingsPage {...settingsPageProps} />
 
         ) : isTotalChartsOpen ? (
 
-          <AssetChartsPanel
-
-            title="总资产图表"
-
-            totalLabel="净资产"
-
-            totalValue={formatChartNumber(totalAssets)}
-
-            allocationContent={(
-
-              <AssetAllocationPanel
-
-                data={assetStructureData}
-
-                settings={assetChartSettings.structure}
-
-                formatMoney={formatChartNumber}
-
-                formatPercent={formatChartPercent}
-
-              />
-
-            )}
-
-            trendContent={(
-
-              <AssetTrendPanel
-
-                points={assetTrendPoints}
-
-                settings={assetChartSettings.trend}
-
-                formatMoney={formatChartNumber}
-
-              />
-
-            )}
-
+          <TotalAssetChartDisplayPanel
+            totalAssets={totalAssets}
+            structureData={assetStructureData}
+            trendPoints={assetTrendPoints}
+            settings={assetChartSettings}
+            formatMoney={formatChartNumber}
           />
 
         ) : isAccountChartsOpen && selectedAccount && selectedAccountEntry ? (
@@ -22055,61 +10091,14 @@ function App() {
 
         ) : selectedGroupDetail && selectedGroupDetailStructureData && selectedGroupDetailTrendData ? (
 
-          <div className="asset-chart-page">
-
-            <header className="asset-chart-page__header chart-visual-text">
-
-              <div>
-
-                <h1>{selectedGroupDetail.name}</h1>
-
-              </div>
-
-              <div className="asset-chart-page__totals">
-
-                <span>当前合计</span>
-
-                <strong>{formatChartNumber(selectedGroupDetailStructureData.signedTotal)}</strong>
-
-              </div>
-
-            </header>
-
-            {assetChartSettings.categoryVisibility.showStructure ? (
-
-              <GroupDetailStructurePanel
-
-                data={selectedGroupDetailStructureData}
-
-              />
-
-            ) : null}
-
-            {assetChartSettings.categoryVisibility.showTrend ? (
-
-              <GroupDetailTrendPanel
-
-                data={selectedGroupDetailTrendData}
-
-                settings={selectedGroupDetailChartSettings}
-
-              />
-
-            ) : null}
-
-            {!assetChartSettings.categoryVisibility.showStructure &&
-
-            !assetChartSettings.categoryVisibility.showTrend ? (
-
-              <section className="asset-chart-panel">
-
-                <p className="asset-chart-empty chart-visual-text">图表已关闭</p>
-
-              </section>
-
-            ) : null}
-
-          </div>
+          <GroupDetailChartDisplayPanel
+            groupName={selectedGroupDetail.name}
+            structureData={selectedGroupDetailStructureData}
+            trendData={selectedGroupDetailTrendData}
+            settings={selectedGroupDetailChartSettings}
+            visibility={assetChartSettings.categoryVisibility}
+            formatMoney={formatChartNumber}
+          />
 
         ) : selectedAccount && selectedAccountEntry ? (
 
@@ -22122,12 +10111,7 @@ function App() {
             chartPreview={(
               <AssetTrendChart
                 points={selectedAccountTrendPoints}
-                settings={{
-                  assetDisplay: 'net',
-                  adaptiveYAxis: selectedAccountChartSettings.adaptiveYAxis,
-                  xAxisRange: selectedAccountChartSettings.xAxisRange,
-                  pointValueMode: selectedAccountChartSettings.pointValueMode
-                }}
+                settings={selectedAccountPreviewTrendSettings}
                 formatMoney={formatChartNumber}
                 compact
               />
@@ -22138,713 +10122,70 @@ function App() {
                 groups={selectedAccountHistoryByDate}
                 expandedDates={expandedDetailDates}
                 onToggleDate={toggleDetailDate}
-                {...historyRecordListProps}
+                {...accountHistoryRecordListProps}
               />
             )}
           />
 
         ) : (
 
-          <>
-
-            <header
-
-              style={{
-
-                display: 'flex',
-
-                justifyContent: 'space-between',
-
-                flexWrap: 'wrap',
-
-                gap: 24,
-
-                alignItems: 'flex-start',
-
-                marginBottom: 32
-
-              }}
-
-            >
-
-              <div>
-
-                <div className="net-worth-summary">
-
-                  <h1 className="net-worth-summary__heading">
-
-                    <span className="net-worth-summary__label">{homeAssetStatLabel}</span>
-
-                    <span className="net-worth-summary__amount">
-
-                      {formatHomeMoneyAmount(homeAssetStatValue, {
-
-                        compact: globalSettings.homeAssetStatCompact
-
-                      })}
-
-                    </span>
-
-                  </h1>
-
-                  <div
-
-                    className={`net-worth-change${
-
-                      recentNetWorthChange && recentNetWorthChange.amount > 0
-
-                        ? ' is-positive'
-
-                        : recentNetWorthChange && recentNetWorthChange.amount < 0
-
-                          ? ' is-negative'
-
-                          : ''
-
-                    }`}
-
-                  >
-
-                    {recentNetWorthChange && recentNetWorthChange.amount !== 0 ? (
-
-                      <>
-
-                        <strong>
-
-                          {recentNetWorthChange.amount > 0 ? '▲' : '▼'}{' '}
-
-                          {formatChartNumber(Math.abs(recentNetWorthChange.amount))}
-
-                        </strong>
-
-                        <span>{recentNetWorthChange.relativeLabel}</span>
-
-                      </>
-
-                    ) : (
-
-                      <strong>暂无变化</strong>
-
-                    )}
-
-                  </div>
-
-                </div>
-
-              </div>
-
-              {shouldShowL0Charts ? (
-
-                <div className="l0-chart-strip">
-
-                  {assetChartSettings.l0.showStructure ? (
-
-                    <button
-
-                      type="button"
-
-                      aria-label="打开总资产图表"
-
-                      className="l0-chart-button l0-chart-button--structure"
-
-                      onClick={openTotalChartsPage}
-
-                    >
-
-                      <AssetStructureGraphic
-
-                        data={assetStructureData}
-
-                        display="both"
-
-                        compact
-
-                        showDebtMultiple={assetChartSettings.structure.showDebtMultiple}
-
-                        formatMoney={formatChartNumber}
-
-                      />
-
-                    </button>
-
-                  ) : null}
-
-                  {assetChartSettings.l0.showTrend ? (
-
-                    <button
-
-                      type="button"
-
-                      aria-label="打开总资产趋势图"
-
-                      className="l0-chart-button l0-chart-button--trend"
-
-                      onClick={openTotalChartsPage}
-
-                    >
-
-                      <AssetTrendChart
-
-                        points={homeThumbnailTrendPoints}
-
-                        settings={{
-
-                          ...assetChartSettings.trend,
-
-                          assetDisplay: assetChartSettings.trend.assetDisplay,
-
-                          xAxisRange: assetChartSettings.l0.xAxisRange
-
-                        }}
-
-                        formatMoney={formatChartNumber}
-
-                        compact
-
-                      />
-
-                    </button>
-
-                  ) : null}
-
-                </div>
-
-              ) : null}
-
-              <div style={{ display: 'none', gap: 8, alignItems: 'center' }}>
-
-                <button
-
-                  type="button"
-
-                  aria-label="打开全局搜索"
-
-                  onClick={openSearch}
-
-                  className="top-icon-button"
-
-                >
-
-                  <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none">
-
-                    <path
-
-                      d="M10.7 18.4a7.7 7.7 0 1 1 0-15.4 7.7 7.7 0 0 1 0 15.4zM16.3 16.3L21 21"
-
-                      stroke="currentColor"
-
-                      strokeWidth="1.8"
-
-                      strokeLinecap="round"
-
-                      strokeLinejoin="round"
-
-                    />
-
-                  </svg>
-
-                </button>
-
-                <button
-
-                  type="button"
-
-                  aria-label="打开已归档账户"
-
-                  onClick={() => setIsArchivedAccountsOpen(true)}
-
-                  className="top-icon-button"
-
-                >
-
-                  <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none">
-
-                    <path
-
-                      d="M4 7h16M6 10.5v7.5h12v-7.5M10 13h4"
-
-                      stroke="currentColor"
-
-                      strokeWidth="1.8"
-
-                      strokeLinecap="round"
-
-                      strokeLinejoin="round"
-
-                    />
-
-                  </svg>
-
-                </button>
-
-                <button
-
-                  type="button"
-
-                  aria-label="打开历史记录"
-
-                  onClick={openHistoryPanel}
-
-                  className="top-icon-button"
-
-                >
-
-                  <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none">
-
-                    <path
-
-                      d="M5 7h14M5 12h14M5 17h9"
-
-                      stroke="currentColor"
-
-                      strokeWidth="1.8"
-
-                      strokeLinecap="round"
-
-                    />
-
-                  </svg>
-
-                </button>
-
-                <button
-
-                  type="button"
-
-                  aria-label="添加账户"
-
-                  onClick={openAddAccount}
-
-                  className="top-icon-button"
-
-                >
-
-                  <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none">
-
-                    <path
-
-                      d="M12 5v14M5 12h14"
-
-                      stroke="currentColor"
-
-                      strokeWidth="1.8"
-
-                      strokeLinecap="round"
-
-                    />
-
-                  </svg>
-
-                </button>
-
-              </div>
-
-            </header>
-
-
-
-            <div style={{ display: 'grid', gap: 12 }}>
-
-              {groupTotals.map((group) => {
-
-                const expanded = expandedGroupIds.includes(group.id);
-                const canDeleteGroup = canDeleteAssetGroup(group.id, accounts);
-
-                const groupDropPosition =
-                  groupDropIndicator?.groupId === group.id && draggingGroupId !== group.id
-                    ? groupDropIndicator.position
-                    : null;
-
-                const legendColor =
-
-                  homeGroupLegendColorByName.get(group.name) ?? 'var(--chart-empty)';
-
-
-
-                return (
-
-                  <section
-
-                    key={group.id}
-                    className={[
-                      'account-type-entry',
-                      groupDropPosition ? `account-type-entry--drop-${groupDropPosition}` : ''
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-
-                    data-account-type-entry="true"
-                    data-account-type-drop-indicator={groupDropPosition ?? undefined}
-
-                    draggable={isGroupEditMode}
-
-                    onDragStart={(event) => handleGroupDragStart(event, group.id)}
-
-                    onDragOver={(event) => handleGroupDragOver(event, group.id)}
-
-                    onDragLeave={(event) => handleGroupDragLeave(event, group.id)}
-
-                    onDrop={(event) => handleGroupDrop(event, group.id)}
-
-                    onDragEnd={handleGroupDragEnd}
-
-                    style={{
-
-                      border: '1px solid var(--border-soft)',
-
-                      borderRadius: 'var(--radius-section)',
-
-                      background: 'var(--surface-soft)',
-
-                      overflow: 'hidden',
-
-                      opacity: draggingGroupId === group.id ? 0.54 : 1,
-
-                      transition: 'opacity 0.16s ease, box-shadow 0.16s ease',
-
-                      boxShadow: isGroupEditMode
-
-                        ? '0 10px 26px rgba(52, 43, 30, 0.08)'
-
-                        : 'none'
-
-                    }}
-
-                  >
-
-                    <button
-
-                      type="button"
-
-                      onPointerDown={(event) => startGroupPointerInteraction(event, group.id)}
-
-                      onPointerMove={moveGroupPointerInteraction}
-
-                      onPointerUp={finishGroupPointerInteraction}
-
-                      onPointerLeave={cancelGroupPointerInteraction}
-
-                      onPointerCancel={cancelGroupPointerInteraction}
-
-                      onClick={() => handleGroupClick(group.id)}
-
-                      style={{
-
-                        display: 'grid',
-
-                        gridTemplateColumns: 'minmax(0, 1fr) auto',
-
-                        gap: 16,
-
-                        alignItems: 'center',
-
-                        position: 'relative',
-
-                        width: '100%',
-
-                        border: 0,
-
-                        padding: '16px 18px',
-
-                        background: 'transparent',
-
-                        color: 'var(--text-main)',
-
-                        cursor: isGroupEditMode ? 'grab' : 'pointer',
-
-                        font: 'inherit',
-
-                        textAlign: 'left'
-
-                      }}
-
-                    >
-
-                      <div style={{ opacity: isGroupEditMode ? 0.62 : 1 }}>
-
-                        <h2 className="account-type-entry-title">
-
-                          <span
-
-                            className="account-type-legend-swatch"
-
-                            style={{ background: legendColor }}
-
-                            aria-hidden="true"
-
-                          />
-
-                          <span>{group.name}</span>
-
-                        </h2>
-
-                        <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: '0.92rem' }}>
-
-                          {group.activeAccounts.length} 个账户
-
-                        </p>
-
-                      </div>
-
-                      <div style={{ textAlign: 'right', opacity: isGroupEditMode ? 0.62 : 1 }}>
-
-                        <strong style={{ display: 'block', fontSize: '1.06rem' }}>
-
-                          {formatHomeMoneyAmount(group.total)}
-
-                        </strong>
-
-                        <span
-
-                          style={{
-
-                            color: getPercentageColor(group.nature, group.includeInStats),
-
-                            fontSize: '0.88rem'
-
-                          }}
-
-                        >
-
-                          {getGroupPercentageLabel(group)}
-
-                        </span>
-
-                      </div>
-
-                    </button>
-
-                    {isGroupEditMode ? (
-                      <div className="account-type-entry-actions" data-interactive>
-                        <button
-                          type="button"
-                          className={[
-                            'account-type-action-button',
-                            'account-type-action-button--sort',
-                            draggingGroupId === group.id ? 'is-active' : ''
-                          ]
-                            .filter(Boolean)
-                            .join(' ')}
-                          aria-label={`拖拽排序 ${group.name}`}
-                          title="拖拽排序"
-                          data-interactive
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          <NfSvgIcon svg={NfSortIcon} className="account-sort-icon" decorative />
-                        </button>
-                        <button
-                          type="button"
-                          className="account-type-action-button account-type-action-button--delete"
-                          aria-label={`删除账户类型 ${group.name}`}
-                          title={canDeleteGroup ? '删除账户类型' : '请先归档或删除未归档账户'}
-                          data-interactive
-                          disabled={!canDeleteGroup}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            deleteAssetGroup(group.id);
-                          }}
-                        >
-                          <NfSvgIcon
-                            svg={NfWindowCloseIcon}
-                            className="account-type-delete-icon"
-                            decorative
-                          />
-                        </button>
-                      </div>
-                    ) : null}
-
-
-
-                    {expanded ? (
-
-                      <div
-
-                        style={{
-
-                          display: 'grid',
-
-                          gap: 8,
-
-                          borderTop: '1px solid var(--border-soft)',
-
-                          padding: 10
-
-                        }}
-
-                      >
-
-                        {group.activeAccounts.length === 0 ? (
-
-                          <p style={{ margin: '6px 8px', color: 'var(--text-muted)' }}>暂无账户</p>
-
-                        ) : (
-
-                          group.activeAccounts.map((account) => (
-
-                            <button
-
-                              key={account.id}
-
-                              id={`account-row-${account.id}`}
-
-                              type="button"
-
-                              onClick={() => openAccountDetail(group.id, account)}
-
-                              style={{
-
-                                display: 'flex',
-
-                                alignItems: 'center',
-
-                                gap: 10,
-
-                                width: '100%',
-
-                                border: '1px solid transparent',
-
-                                borderRadius: 'var(--radius-card)',
-
-                                background: 'var(--surface-muted)',
-
-                                boxShadow: 'none',
-
-                                padding: '9px 10px',
-
-                                color: 'var(--text-secondary)',
-
-                                cursor: 'pointer',
-
-                                font: 'inherit',
-
-                                textAlign: 'left'
-
-                              }}
-
-                            >
-
-                              <AccountMark account={account} className="account-mark--list" />
-
-                              <span style={{ flex: 1 }}>{account.name}</span>
-
-                              <span style={{ textAlign: 'right' }}>
-
-                                <span style={{ display: 'block' }}>
-
-                                  {formatHomeMoneyAmount(account.amount)}
-
-                                </span>
-
-                                <span
-
-                                  style={{
-
-                                    display: 'block',
-
-                                    color: getPercentageColor(
-
-                                      group.nature,
-
-                                      group.includeInStats
-
-                                    ),
-
-                                    fontSize: '0.78rem'
-
-                                  }}
-
-                                >
-
-                                  {getAccountPercentageLabel(group, account)}
-
-                                </span>
-
-                              </span>
-
-                            </button>
-                          ))
-
-                        )}
-
-                      </div>
-
-                    ) : null}
-
-                  </section>
-
-                );
-
-              })}
-
-            </div>
-
-
-
-            <footer
-
-              aria-label="产品信息"
-
-              style={{
-
-                display: 'flex',
-
-                alignItems: 'center',
-
-                gap: 10,
-
-                marginTop: 24,
-
-                paddingTop: 18,
-
-                borderTop: '1px solid var(--border-soft)',
-
-                color: 'var(--text-muted)'
-
-              }}
-
-            >
-
-              <img
-
-                src={PRODUCT_ICON_PATH}
-
-                alt=""
-
-                aria-hidden="true"
-
-                style={{
-
-                  width: 28,
-
-                  height: 28,
-
-                  display: 'block',
-
-                  objectFit: 'contain',
-
-                  borderRadius: 0,
-
-                  flex: '0 0 auto'
-
-                }}
-
-              />
-
-              <span style={{ display: 'grid', gap: 2 }}>
-
-                <strong style={{ color: 'var(--text-main)', fontSize: '0.94rem' }}>
-
-                  {PRODUCT_NAME_ZH} {PRODUCT_NAME_EN}
-
-                </strong>
-
-                <span style={{ fontSize: '0.84rem' }}>{PRODUCT_TAGLINE}</span>
-
-              </span>
-
-            </footer>
-
-          </>
+          <DashboardPage
+            homeAssetStat={homeAssetStat}
+            recentNetWorthChange={recentNetWorthChange}
+            chartPreview={{
+              shouldShowCharts: shouldShowL0Charts,
+              showStructure: assetChartSettings.l0.showStructure,
+              showTrend: assetChartSettings.l0.showTrend,
+              structureData: assetStructureData,
+              showDebtMultiple: assetChartSettings.structure.showDebtMultiple,
+              trendPoints: homeThumbnailTrendPoints,
+              trendSettings: homeThumbnailTrendSettings
+            }}
+            overview={{
+              groups: groupTotals,
+              expandedGroupIds,
+              isGroupEditMode,
+              draggingGroupId,
+              groupDropIndicator,
+              legendColorByName: homeGroupLegendColorByName,
+              productIconPath: PRODUCT_ICON_PATH,
+              productNameZh: PRODUCT_NAME_ZH,
+              productNameEn: PRODUCT_NAME_EN,
+              productTagline: PRODUCT_TAGLINE,
+              sortIcon: (
+                <NfSvgIcon svg={NfSortIcon} className="account-sort-icon" decorative />
+              ),
+              deleteIcon: (
+                <NfSvgIcon
+                  svg={NfWindowCloseIcon}
+                  className="account-type-delete-icon"
+                  decorative
+                />
+              ),
+              formatMoney: formatHomeMoneyAmount,
+              canDeleteGroup: (groupId) => canDeleteAssetGroup(groupId, accounts),
+              onGroupClick: handleGroupClick,
+              onOpenAccount: openAccountDetail,
+              onDeleteGroup: deleteAssetGroup,
+              onGroupPointerDown: startGroupPointerInteraction,
+              onGroupPointerMove: moveGroupPointerInteraction,
+              onGroupPointerUp: finishGroupPointerInteraction,
+              onGroupPointerLeave: cancelGroupPointerInteraction,
+              onGroupPointerCancel: cancelGroupPointerInteraction,
+              onGroupDragStart: handleGroupDragStart,
+              onGroupDragOver: handleGroupDragOver,
+              onGroupDragLeave: handleGroupDragLeave,
+              onGroupDrop: handleGroupDrop,
+              onGroupDragEnd: handleGroupDragEnd
+            }}
+            formatHomeMoneyAmount={formatHomeMoneyAmount}
+            formatChartMoney={formatChartNumber}
+            onOpenTotalCharts={openTotalChartsPage}
+            onOpenSearch={globalSearch.openSearch}
+            onOpenArchivedAccounts={() => setIsArchivedAccountsOpen(true)}
+            onOpenHistory={openHistoryPanel}
+            onOpenAddAccount={openAddAccount}
+          />
 
         )}
 
@@ -22856,7 +10197,7 @@ function App() {
 
 
 
-      {isFlashNoteOpen ? null : (
+      {flashNote.isOpen ? null : (
 
         <aside
 
@@ -23248,23 +10589,25 @@ function App() {
 
                   rangeInput={historyRangeInput}
 
+                  rangeInputPlaceholder={historyRangeInputPlaceholder}
+
                   isCalendarVisible={isCalendarVisible}
 
-                  onRangeInputFocus={clearHistoryRange}
+                  onRangeInputFocus={historyController.clearHistoryRange}
 
-                  onRangeInputClick={clearHistoryRange}
+                  onRangeInputClick={historyController.clearHistoryRange}
 
-                  onRangeInputConfirm={confirmSingleHistoryDate}
+                  onRangeInputConfirm={historyController.confirmSingleHistoryDate}
 
-                  onRangeInputChange={handleHistoryRangeInput}
+                  onRangeInputChange={historyController.handleHistoryRangeInput}
 
-                  onToggleCalendar={() => setIsCalendarVisible((visible) => !visible)}
+                  onToggleCalendar={historyController.toggleCalendarVisibility}
 
-                  onSelectPreviousWeek={setLastWeekHistoryRange}
+                  onSelectPreviousWeek={historyController.setLastWeekHistoryRange}
 
-                  onSelectRecentSevenDays={setRecent7HistoryRange}
+                  onSelectRecentSevenDays={historyController.setRecent7HistoryRange}
 
-                  onClearRange={clearHistoryRange}
+                  onClearRange={historyController.clearHistoryRange}
 
                   calendarContent={(
 
@@ -23272,39 +10615,21 @@ function App() {
 
                       calendarMonth={calendarMonth}
 
-                      isNextDisabled={isHistoryCalendarNextDisabled}
+                      calendarSecondMonth={calendarSecondMonth}
 
-                      getCalendarDays={getCalendarDays}
+                      isNextDisabled={historyController.isHistoryCalendarNextDisabled}
 
-                      getDateValue={toDateInputValue}
+                      getCalendarDays={historyController.getCalendarDays}
 
-                      getDateState={getHistoryCalendarDateState}
+                      getDateValue={historyController.getDateValue}
 
-                      onPreviousMonth={() =>
+                      getDateState={historyController.getHistoryCalendarDateState}
 
-                        setCalendarMonth(
+                      onPreviousMonth={historyController.showPreviousCalendarMonth}
 
-                          (currentMonth) =>
+                      onNextMonth={historyController.showNextCalendarMonth}
 
-                            new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
-
-                        )
-
-                      }
-
-                      onNextMonth={() =>
-
-                        setCalendarMonth(
-
-                          (currentMonth) =>
-
-                            new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1)
-
-                        )
-
-                      }
-
-                      onDateClick={selectCalendarDate}
+                      onDateClick={historyController.selectCalendarDate}
 
                     />
 
@@ -23316,7 +10641,7 @@ function App() {
 
                   records={filteredHistory}
 
-                  highlightedRecordId={highlightedHistoryRecordId}
+                  highlightedRecordId={searchTargetHighlight.highlightedHistoryRecordId}
 
                   emptyText="暂无匹配记录"
 
@@ -23368,11 +10693,11 @@ function App() {
 
 
 
-      {searchState.isOpen ? (
+      {globalSearch.isOpen ? (
 
         <OverlayBackdrop
 
-          onBack={closeSearch}
+          onBack={globalSearch.closeSearch}
 
           className="layout-layer layout-layer--left layout-layer--search"
 
@@ -23396,63 +10721,7 @@ function App() {
 
         >
 
-          <GlobalSearchPanel
-
-            output={searchOutput}
-
-            query={searchState.query}
-
-            selectedCategory={searchState.selectedCategory}
-
-            categoryLockedByUser={searchState.categoryLockedByUser}
-
-            focusedItemId={searchState.focusedResultId}
-
-            hoveredItemId={searchState.hoveredResultId}
-
-            resultLimit={searchState.resultLimit}
-
-            scrollTop={searchState.scrollTop}
-
-            lastOpenedResultId={searchState.lastOpenedResultId}
-
-            inputRef={searchInputRef}
-
-            onQueryChange={(query) => dispatchSearchState({ type: 'query-changed', query })}
-
-            onClearQuery={() => dispatchSearchState({ type: 'clear-query' })}
-
-            onSelectCategory={(category) =>
-
-              dispatchSearchState({ type: 'select-category', category, lock: category !== 'all' })
-
-            }
-
-            onShowAll={() =>
-
-              dispatchSearchState({ type: 'select-category', category: 'all', lock: false })
-
-            }
-
-            onFocusItem={(itemId) => dispatchSearchState({ type: 'focus-item', itemId })}
-
-            onHoverItem={(itemId) => dispatchSearchState({ type: 'hover-item', itemId })}
-
-            onClearHover={() => dispatchSearchState({ type: 'clear-hover' })}
-
-            onLoadMoreResults={(minimum) =>
-
-              dispatchSearchState({ type: 'load-more-results', minimum })
-
-            }
-
-            onScrollChange={(scrollTop) => dispatchSearchState({ type: 'scroll', scrollTop })}
-
-            onOpenResult={handleSearchResultOpen}
-
-            onPointerIntent={markSearchUserInteraction}
-
-          />
+          <GlobalSearchPanel {...globalSearch.panelProps} />
 
         </OverlayBackdrop>
 
@@ -23460,21 +10729,21 @@ function App() {
 
 
 
-      {currentSearchNavigationTarget ? (
+      {globalSearch.currentNavigationTarget ? (
 
         <SearchFloatingNavigator
 
-          currentTarget={currentSearchNavigationTarget}
+          currentTarget={globalSearch.currentNavigationTarget}
 
-          canMove={canMoveSearchNavigation}
+          canMove={globalSearch.canMoveNavigation}
 
-          onPrevious={() => moveSearchNavigation(-1)}
+          onPrevious={globalSearch.moveToPreviousTarget}
 
-          onNext={() => moveSearchNavigation(1)}
+          onNext={globalSearch.moveToNextTarget}
 
-          onReturn={returnFromSearchNavigation}
+          onReturn={globalSearch.returnFromNavigation}
 
-          onExit={exitSearchNavigation}
+          onExit={globalSearch.exitNavigation}
 
         />
 
@@ -23599,7 +10868,9 @@ function App() {
           message={inputDialog.message}
           label={inputDialog.label}
           value={inputDialogValue}
+          placeholder={inputDialog.placeholder}
           confirmLabel={inputDialog.confirmLabel}
+          cancelLabel={inputDialog.cancelLabel}
           inputType={inputDialog.inputType}
           autoComplete={inputDialog.autoComplete}
           onValueChange={setInputDialogValue}
@@ -23697,11 +10968,7 @@ function App() {
 
                 value={resetConfirmationInput}
 
-                onChange={(event) =>
-
-                  setResetConfirmationInput(event.target.value.replace(/[^\d]/g, '').slice(0, 4))
-
-                }
+                onChange={(event) => setResetConfirmationInput(event.target.value)}
 
               />
 
@@ -23849,7 +11116,6 @@ function App() {
           title={accountInfoEntry.name}
           accountName={accountNameDraft}
           accountAlias={accountAliasDraft}
-          accountAliasMaxLength={ACCOUNT_MARK_MAX_CHARS}
           aliasPreview={(
             <AccountMark
               account={{
@@ -23864,7 +11130,7 @@ function App() {
             setAccountNameDraft(value);
             setAccountInfoError('');
           }}
-          onAccountAliasChange={(value) => setAccountAliasDraft(limitAccountAliasInput(value))}
+          onAccountAliasChange={setAccountAliasDraft}
           onSubmit={saveAccountInfo}
           onCancel={requestCloseAccountInfoEditor}
         />
@@ -24404,4 +11670,3 @@ function App() {
 
 
 export default App;
-

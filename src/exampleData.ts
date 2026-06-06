@@ -553,7 +553,6 @@ const selectExampleAccountDefinitions = (template: ExampleTemplateDefinition) =>
 const createExampleAccount = (
   definition: ExampleAccountDefinition,
   templateId: ExampleTemplateId,
-  index: number,
   accountId: string,
   archived = false
 ): ExampleEntry => {
@@ -1327,14 +1326,13 @@ export const createExampleData = (templateId: ExampleTemplateId): ExampleGenerat
   }
 
   const accountIds = new Set<string>();
-  const entries = selectedDefinitions.map((definition, index) => {
+  const entries = selectedDefinitions.map((definition) => {
     const accountId = createStableAccountId(accountIds);
     accountIds.add(accountId);
 
     return createExampleAccount(
       definition,
       template.id,
-      index,
       accountId,
       definition.key === 'archived-old'
     );

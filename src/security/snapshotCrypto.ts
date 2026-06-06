@@ -12,8 +12,8 @@ export const SNAPSHOT_DECRYPTION_ERROR_MESSAGE =
   '解密失败，请检查快照密码或文件是否完整';
 
 export type EncryptedSnapshotFile = {
-  type: typeof ENCRYPTED_SNAPSHOT_TYPE;
-  version: typeof ENCRYPTED_SNAPSHOT_VERSION;
+  type?: typeof ENCRYPTED_SNAPSHOT_TYPE;
+  version?: typeof ENCRYPTED_SNAPSHOT_VERSION;
   createdAt: string;
   encryption: {
     algorithm: typeof SNAPSHOT_ENCRYPTION_ALGORITHM;
@@ -94,10 +94,13 @@ export const isEncryptedSnapshotFile = (value: unknown): value is EncryptedSnaps
   }
 
   const encryptionCandidate = encryption as Record<string, unknown>;
+  const hasSupportedLegacyMarker =
+    (candidate.type === undefined && candidate.version === undefined) ||
+    (candidate.type === ENCRYPTED_SNAPSHOT_TYPE &&
+      candidate.version === ENCRYPTED_SNAPSHOT_VERSION);
 
   return (
-    candidate.type === ENCRYPTED_SNAPSHOT_TYPE &&
-    candidate.version === ENCRYPTED_SNAPSHOT_VERSION &&
+    hasSupportedLegacyMarker &&
     typeof candidate.createdAt === 'string' &&
     candidate.createdAt.length > 0 &&
     encryptionCandidate.algorithm === SNAPSHOT_ENCRYPTION_ALGORITHM &&
@@ -133,8 +136,6 @@ export const encryptSnapshotPayload = async (
   );
 
   return {
-    type: ENCRYPTED_SNAPSHOT_TYPE,
-    version: ENCRYPTED_SNAPSHOT_VERSION,
     createdAt: new Date().toISOString(),
     encryption: {
       algorithm: SNAPSHOT_ENCRYPTION_ALGORITHM,

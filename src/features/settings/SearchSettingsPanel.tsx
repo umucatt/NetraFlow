@@ -12,6 +12,7 @@ function SearchSettingsPanel({
 }: SearchSettingsPanelProps) {
   return (
     <SettingsSegmentedControl
+      id="global-settings-search-logic"
       label="允许推断"
       options={[
         { value: 'infer', label: '开启' },
@@ -27,7 +28,6 @@ function SearchSettingsPanel({
       }
       onChange={(value) => onSearchLogicModeChange(value as SearchLogicMode)}
       statusLabel={null}
-      className="global-settings-field--search-logic"
     />
   );
 }

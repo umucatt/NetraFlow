@@ -1,8 +1,3 @@
-type SearchPerformanceDetail = {
-  query: string;
-  totalCandidates: number;
-};
-
 let searchPerformanceMeasureId = 0;
 
 const canMeasureSearchPerformance = () =>
@@ -13,10 +8,7 @@ const canMeasureSearchPerformance = () =>
       typeof performance.measure === 'function'
   );
 
-export const measureSearchExecution = <T>(
-  detail: SearchPerformanceDetail,
-  runSearch: () => T
-) => {
+export const measureSearchExecution = <T>(runSearch: () => T) => {
   if (!canMeasureSearchPerformance()) {
     return runSearch();
   }

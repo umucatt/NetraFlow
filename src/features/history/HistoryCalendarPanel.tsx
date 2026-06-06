@@ -7,21 +7,24 @@ type HistoryCalendarDateState = {
   isInsideRange: boolean;
   isFuture: boolean;
   recordCount: number;
+  recordDensityLevel: 'none' | 'low' | 'medium-low' | 'medium-high' | 'full';
 };
 
 type HistoryCalendarPanelProps = {
   calendarMonth: Date;
+  calendarSecondMonth: Date;
   isNextDisabled: boolean;
   getCalendarDays: (monthDate: Date) => Date[];
   getDateValue: (date: Date) => string;
   getDateState: (date: Date, monthDate: Date) => HistoryCalendarDateState;
   onPreviousMonth: () => void;
   onNextMonth: () => void;
-  onDateClick: (date: Date) => void;
+  onDateClick: (date: Date, monthDate: Date) => void;
 };
 
 export default function HistoryCalendarPanel({
   calendarMonth,
+  calendarSecondMonth,
   isNextDisabled,
   getCalendarDays,
   getDateValue,
@@ -30,8 +33,6 @@ export default function HistoryCalendarPanel({
   onNextMonth,
   onDateClick
 }: HistoryCalendarPanelProps) {
-  const nextMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1);
-
   const renderCalendarMonth = (monthDate: Date, side: 'left' | 'right') => (
     <div className="history-calendar-month" key={`${monthDate.getFullYear()}-${monthDate.getMonth()}`}>
       <strong className="history-calendar-month__title">
@@ -49,7 +50,6 @@ export default function HistoryCalendarPanel({
           const nextMonthStart = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1);
           const shouldShowDate = side === 'left' ? date < nextMonthStart : date >= monthStart;
           const state = getDateState(date, monthDate);
-          const dotCount = Math.min(3, Math.ceil(state.recordCount / 10));
 
           if (!shouldShowDate) {
             return (
@@ -76,14 +76,15 @@ export default function HistoryCalendarPanel({
               ]
                 .filter(Boolean)
                 .join(' ')}
-              onClick={() => onDateClick(date)}
+              onClick={() => onDateClick(date, monthDate)}
             >
               <span className="history-calendar-day__number">{date.getDate()}</span>
-              <span className="history-calendar-day__dots" aria-hidden="true">
-                {Array.from({ length: dotCount }, (_, index) => (
-                  <span key={index} />
-                ))}
-              </span>
+              {state.recordDensityLevel === 'none' ? null : (
+                <span
+                  className={`history-calendar-day__density history-calendar-day__density--${state.recordDensityLevel}`}
+                  aria-hidden="true"
+                />
+              )}
             </button>
           );
         })}
@@ -104,7 +105,7 @@ export default function HistoryCalendarPanel({
         </button>
         <strong className="history-calendar-range-label">
           {calendarMonth.getFullYear()}年{calendarMonth.getMonth() + 1}月 -{' '}
-          {nextMonth.getFullYear()}年{nextMonth.getMonth() + 1}月
+          {calendarSecondMonth.getFullYear()}年{calendarSecondMonth.getMonth() + 1}月
         </strong>
         <button
           type="button"
@@ -122,7 +123,7 @@ export default function HistoryCalendarPanel({
       </div>
       <div className="history-calendar-months">
         {renderCalendarMonth(calendarMonth, 'left')}
-        {renderCalendarMonth(nextMonth, 'right')}
+        {renderCalendarMonth(calendarSecondMonth, 'right')}
       </div>
     </div>
   );

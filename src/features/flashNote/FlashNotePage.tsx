@@ -13,7 +13,7 @@ import { FlashInputStep } from './FlashInputStep';
 import { FlashConfirmStep } from './FlashConfirmStep';
 import { FlashShortcutHint } from './FlashShortcutHint';
 
-type FlashNotePageProps = {
+export type FlashNotePageProps = {
   step: FlashStep;
   accountName: string;
   selectedAccountId?: string;
@@ -30,8 +30,6 @@ type FlashNotePageProps = {
   endDate: string;
   inputWeeks: Date[][];
   confirmWeeks: Date[][];
-  cells: Record<string, FlashCell>;
-  trackDates: string[];
   currentDate: string;
   nextDate: string;
   currentInput: string;
@@ -86,8 +84,6 @@ export function FlashNotePage({
   endDate,
   inputWeeks,
   confirmWeeks,
-  cells,
-  trackDates,
   currentDate,
   nextDate,
   currentInput,
@@ -191,9 +187,7 @@ export function FlashNotePage({
       return (
         <FlashInputStep
           weeks={inputWeeks}
-          cells={cells}
           getCell={getCell}
-          trackDates={trackDates}
           currentDate={currentDate}
           nextDate={nextDate}
           currentInput={currentInput}
@@ -205,9 +199,7 @@ export function FlashNotePage({
       return (
         <FlashConfirmStep
           weeks={confirmWeeks}
-          cells={cells}
           getCell={getCell}
-          trackDates={trackDates}
           selectedDate={confirmSelectedDate}
           onSelectDate={onSelectConfirmDate}
         />
@@ -223,7 +215,7 @@ export function FlashNotePage({
         <div className="flash-note-status">
           <span>{direction === 'forward' ? '正向输入' : '反向输入'}</span>
           <span>已选取 {selectedDates.size}天</span>
-          <span>{endDate ? '已选择终点' : '未选择终点'}</span>
+          {endDate ? <span>已选择终点</span> : null}
         </div>
       );
     }
@@ -285,8 +277,8 @@ export function FlashNotePage({
 
   const hintText =
     step === 'input'
-      ? 'Enter 下一格 · Backspace 删除一位 · Ctrl+Z 清空并回退 · Esc 返回'
-      : '点击数据块修改 · Enter 下一项 · Delete 清空 · Esc 返回';
+      ? 'Enter 下一格 · Backspace 删除一位 · Ctrl+Z 清空并回退'
+      : '点击数据块修改 · Enter 下一项 · Delete 清空';
 
   return (
     <section className={`flash-note-page flash-note-page--${step}`}>

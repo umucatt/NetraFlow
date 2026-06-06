@@ -50,8 +50,14 @@ test('history range input parsing preserves compact and explicit-date behavior',
     year: 2026,
     hasExplicitYear: true
   });
+  assert.deepEqual(parseDateToken('20260601'), {
+    value: '2026-06-01',
+    year: 2026,
+    hasExplicitYear: true
+  });
   assert.equal(parseDateToken('0230'), null);
   assert.deepEqual(getHistoryRangeTokens('2026-03-25 至 2026-04-21'), ['260325', '260421']);
+  assert.deepEqual(getHistoryRangeTokens('260405 20260601'), ['260405', '20260601']);
   assert.deepEqual(parseHistoryRangeInput('260421 260325'), {
     start: '2026-03-25',
     end: '2026-04-21'

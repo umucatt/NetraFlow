@@ -1,3 +1,5 @@
+import { createHistoryTimestampForBusinessDate } from './app/dateUtils';
+
 const DATE_VALUE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 const toDateValue = (year: number, month: number, day: number) => {
@@ -155,10 +157,14 @@ export const parseAccountOperationDateInput = (
 export const isAccountOperationDateValue = (value: string) =>
   DATE_VALUE_PATTERN.test(value) && parseAccountOperationDateInput(value) === value;
 
-export const toAccountOperationIsoTime = (dateValue: string) => {
+export const toAccountOperationIsoTime = (
+  dateValue: string,
+  writeTime = new Date(),
+  sequenceOffsetMs = 0
+) => {
   if (!isAccountOperationDateValue(dateValue)) {
-    return new Date().toISOString();
+    return new Date(writeTime.getTime() + sequenceOffsetMs).toISOString();
   }
 
-  return new Date(`${dateValue}T12:00:00`).toISOString();
+  return createHistoryTimestampForBusinessDate(dateValue, writeTime, sequenceOffsetMs);
 };

@@ -24,6 +24,11 @@ type ElectronWindowApi = {
     fileName: string;
     content: string;
   }) => Promise<{ filePath: string }>;
+  writeJsonFile?: (payload: {
+    directory: string;
+    fileName: string;
+    content: string;
+  }) => Promise<{ filePath: string }>;
   onNetraFlowLock?: (listener: () => void) => () => void;
   onMaximizedChange: (listener: (isMaximized: boolean) => void) => () => void;
 };

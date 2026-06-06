@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import HistoryRecordList, {
   type HistoryRecordListChangeDisplay,
+  type HistoryRecordListGroupSummary,
   type HistoryRecordListRecord,
   type HistoryRecordListTone
 } from '../history/HistoryRecordList';
@@ -13,6 +14,12 @@ export type AccountHistorySharedProps<TRecord extends AccountHistoryRecord> = {
   getTypeLabel: (type: TRecord['type']) => string;
   getTone: (record: TRecord) => HistoryRecordListTone;
   getAmountChange: (record: TRecord) => HistoryRecordListChangeDisplay;
+  getGroupRecords?: (records: TRecord[]) => TRecord[];
+  getGroupDisplayRecords?: (records: TRecord[]) => TRecord[];
+  getGroupSummaryRecords?: (records: TRecord[]) => TRecord[];
+  getGroupSummary?: (
+    records: TRecord[]
+  ) => HistoryRecordListGroupSummary<TRecord> | null;
   formatAmount: (amount: number | null) => string;
   formatShortTime: (time: string) => string;
   renderFlashSourceIcon: (className: string) => ReactNode;

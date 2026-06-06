@@ -10,3 +10,8 @@ export {
 } from './AccountEditorDialog';
 export { default as AccountHistoryList } from './AccountHistoryList';
 export { default as AccountInfoEditorDialog } from './AccountInfoEditorDialog';
+export { useAccountOperationsController } from './useAccountOperationsController';
+export type {
+  AccountActionsPanelProps,
+  AccountDangerActionsPanelProps
+} from './accountOperationTypes';
