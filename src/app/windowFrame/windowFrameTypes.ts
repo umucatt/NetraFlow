@@ -1,0 +1,26 @@
+import type { HTMLAttributes, ReactNode } from 'react';
+
+export type WindowFrameController = {
+  isMaximized: boolean;
+  minimize: () => void;
+  toggleMaximize: () => void;
+  close: () => void;
+};
+
+export type WindowFrameProps = HTMLAttributes<HTMLDivElement> & {
+  children: ReactNode;
+  productIconPath: string;
+  productName: string;
+};
+
+export type WindowTitleBarProps = {
+  controller: WindowFrameController;
+  productIconPath: string;
+  productName: string;
+};
+
+export type WindowControlsProps = WindowFrameController;
+
+export type WindowControl = 'minimize' | 'maximize' | 'close';
+
+export type WindowControlIconName = WindowControl | 'restore';

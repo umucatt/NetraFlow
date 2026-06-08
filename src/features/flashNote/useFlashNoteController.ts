@@ -785,7 +785,8 @@ export const useFlashNoteController = ({
     onEnter: commitSequenceInput,
     onBackspace: backspaceSequenceInput,
     onCtrlZ: undoSequenceInput,
-    onDelete: () => undefined
+    onDelete: () => undefined,
+    onEscape: requestReturnDateSelection
   });
 
   useFlashKeyboardInput({
@@ -797,6 +798,7 @@ export const useFlashNoteController = ({
     onBackspace: backspaceConfirmInput,
     onCtrlZ: clearConfirmCell,
     onDelete: clearConfirmCell,
+    onEscape: backToInput,
     onMoveSelection: moveConfirmSelection
   });
 

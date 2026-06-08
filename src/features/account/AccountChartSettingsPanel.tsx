@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import RightPanelActionButton from '../../components/rightPanel/RightPanelActionButton';
 import RightPanelSection from '../../components/rightPanel/RightPanelSection';
 
 export type AccountChartSettings = {
@@ -29,7 +28,6 @@ function AccountChartSettingsPanel({
   isLockedByGlobal,
   settings,
   onUpdateSettings,
-  onBackToAccountDetail,
   renderSegmentedControl
 }: AccountChartSettingsPanelProps) {
   return (
@@ -45,57 +43,52 @@ function AccountChartSettingsPanel({
         }
         ariaDisabled={isLockedByGlobal}
       >
-      {renderSegmentedControl(
-        '自适应纵轴',
-        [
-          { value: 'on', label: '开' },
-          { value: 'off', label: '关' }
-        ],
-        settings.adaptiveYAxis ? 'on' : 'off',
-        (value) =>
-          onUpdateSettings((currentSettings) => ({
-            ...currentSettings,
-            adaptiveYAxis: value === 'on'
-          })),
-        isLockedByGlobal
-      )}
-      {renderSegmentedControl(
-        '横轴范围显示',
-        [
-          { value: '1m', label: '近 1 月' },
-          { value: '3m', label: '近 3 月' },
-          { value: '6m', label: '近 6 月' },
-          { value: '1y', label: '近 1 年' }
-        ],
-        settings.xAxisRange,
-        (value) =>
-          onUpdateSettings((currentSettings) => ({
-            ...currentSettings,
-            xAxisRange: value
-          })),
-        isLockedByGlobal
-      )}
-      {renderSegmentedControl(
-        '点值显示',
-        [
-          { value: 'adaptive', label: '自适应' },
-          { value: 'minmax', label: '最高最低' },
-          { value: 'none', label: '不显示' }
-        ],
-        settings.pointValueMode,
-        (value) =>
-          onUpdateSettings((currentSettings) => ({
-            ...currentSettings,
-            pointValueMode: value
-          })),
-        isLockedByGlobal
-      )}
+        {renderSegmentedControl(
+          '自适应纵轴',
+          [
+            { value: 'on', label: '开' },
+            { value: 'off', label: '关' }
+          ],
+          settings.adaptiveYAxis ? 'on' : 'off',
+          (value) =>
+            onUpdateSettings((currentSettings) => ({
+              ...currentSettings,
+              adaptiveYAxis: value === 'on'
+            })),
+          isLockedByGlobal
+        )}
+        {renderSegmentedControl(
+          '横轴范围显示',
+          [
+            { value: '1m', label: '近 1 月' },
+            { value: '3m', label: '近 3 月' },
+            { value: '6m', label: '近 6 月' },
+            { value: '1y', label: '近 1 年' }
+          ],
+          settings.xAxisRange,
+          (value) =>
+            onUpdateSettings((currentSettings) => ({
+              ...currentSettings,
+              xAxisRange: value
+            })),
+          isLockedByGlobal
+        )}
+        {renderSegmentedControl(
+          '点值显示',
+          [
+            { value: 'adaptive', label: '自适应' },
+            { value: 'minmax', label: '最高最低' },
+            { value: 'none', label: '不显示' }
+          ],
+          settings.pointValueMode,
+          (value) =>
+            onUpdateSettings((currentSettings) => ({
+              ...currentSettings,
+              pointValueMode: value
+            })),
+          isLockedByGlobal
+        )}
       </RightPanelSection>
-      <RightPanelActionButton
-        label="返回账户明细"
-        className="right-panel-page-action"
-        onClick={onBackToAccountDetail}
-      />
     </section>
   );
 }

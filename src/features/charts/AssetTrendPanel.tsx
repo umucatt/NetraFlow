@@ -1,4 +1,5 @@
 import {
+  type FocusEvent,
   type MouseEvent,
   useEffect,
   useRef,
@@ -16,6 +17,8 @@ import {
   type ChartPointValueMode,
   type ChartXAxisRange
 } from '../../chartLogic';
+import NfFloatingTooltip from '../../components/tooltip/NfFloatingTooltip';
+import type { NfFloatingTooltipData } from '../../components/tooltip/nfTooltipTypes';
 import ChartLegendList, { getInteractiveChartClassName, type ChartLegendItemData } from './ChartLegendList';
 import { CHART_COLORS } from './chartColors';
 
@@ -64,6 +67,28 @@ type AssetTrendChartProps = AssetTrendPanelProps & {
 
 const clampNumber = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
+
+const getMouseTooltipData = (
+  event: MouseEvent<SVGElement>,
+  content: string
+): NfFloatingTooltipData => ({
+  content,
+  x: event.clientX,
+  y: event.clientY
+});
+
+const getFocusTooltipData = (
+  event: FocusEvent<SVGElement>,
+  content: string
+): NfFloatingTooltipData => {
+  const bounds = event.currentTarget.getBoundingClientRect();
+
+  return {
+    content,
+    x: bounds.left + bounds.width / 2,
+    y: bounds.top
+  };
+};
 
 const getTrendSeries = (
   points: TrendChartPoint[],
@@ -189,6 +214,7 @@ export function AssetTrendChart({
 }: AssetTrendChartProps) {
   const [containerRef, measuredWidth] = useMeasuredWidth<HTMLDivElement>();
   const [detailPoint, setDetailPoint] = useState<AssetTrendDetailPoint | null>(null);
+  const [chartTooltip, setChartTooltip] = useState<NfFloatingTooltipData | null>(null);
   const message = getTrendBoundaryMessage(points, settings.assetDisplay);
   const visibleSeries = getTrendSeries(points, settings.assetDisplay);
   const densityWidth = measuredWidth || (compact ? 220 : 620);
@@ -197,6 +223,7 @@ export function AssetTrendChart({
 
   useEffect(() => {
     setDetailPoint(null);
+    setChartTooltip(null);
   }, [isDetailMode, points, settings.assetDisplay]);
 
   if (message || visibleSeries.length === 0) {
@@ -352,6 +379,7 @@ export function AssetTrendChart({
         onMouseMove={isDetailMode ? updateDetailPointFromMouse : undefined}
         onMouseLeave={() => {
           setDetailPoint(null);
+          setChartTooltip(null);
           if (!isDetailMode) {
             onSeriesHover?.(null);
           }
@@ -475,6 +503,7 @@ export function AssetTrendChart({
               ) : null}
               {markerIndexes.map((index) => {
                 const value = series.values[index];
+                const tooltipLabel = `${points[index].date} \u00b7 ${series.label} ${formatMoney(value)}`;
 
                 return (
                   <circle
@@ -486,20 +515,36 @@ export function AssetTrendChart({
                     stroke={series.color}
                     strokeWidth="1.5"
                     opacity={isDimmed ? 0.35 : 1}
+                    aria-label={tooltipLabel}
                     className={getInteractiveChartClassName('chart-shape', series.key, chartActiveSeriesId)}
-                    onMouseEnter={() => {
+                    onMouseEnter={(event) => {
                       if (!isDetailMode) {
                         onSeriesHover?.(series.key);
                       }
+                      setChartTooltip(getMouseTooltipData(event, tooltipLabel));
+                    }}
+                    onMouseMove={(event) => {
+                      setChartTooltip(getMouseTooltipData(event, tooltipLabel));
                     }}
                     onMouseLeave={() => {
                       if (!isDetailMode) {
                         onSeriesHover?.(null);
                       }
+                      setChartTooltip(null);
                     }}
-                  >
-                    <title>{`${points[index].date} · ${series.label} ${formatMoney(value)}`}</title>
-                  </circle>
+                    onFocus={(event) => {
+                      if (!isDetailMode) {
+                        onSeriesHover?.(series.key);
+                      }
+                      setChartTooltip(getFocusTooltipData(event, tooltipLabel));
+                    }}
+                    onBlur={() => {
+                      if (!isDetailMode) {
+                        onSeriesHover?.(null);
+                      }
+                      setChartTooltip(null);
+                    }}
+                  />
                 );
               })}
               {valueLabelIndexes.map((index) => {
@@ -582,6 +627,7 @@ export function AssetTrendChart({
           </g>
         ) : null}
       </svg>
+      <NfFloatingTooltip tooltip={chartTooltip} />
     </div>
   );
 }

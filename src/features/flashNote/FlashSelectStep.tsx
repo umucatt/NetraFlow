@@ -7,6 +7,7 @@ import {
   NfSelectionUnionIcon
 } from '../../assets/icons';
 import NfSvgIcon from '../../components/NfSvgIcon';
+import NfTooltip from '../../components/tooltip/NfTooltip';
 import type {
   FlashAccountGroupOption,
   FlashInputMode,
@@ -70,10 +71,10 @@ const selectionTools: Array<{
     mode: 'replace',
     icon: NfSelectionSingleIcon,
     label: '拖选日期',
-    title: '拖选日期：点击选择单日，拖动选择连续日期'
+    title: '拖选日期'
   },
-  { mode: 'union', icon: NfSelectionUnionIcon, label: '合集', title: '合集：合并日期选区' },
-  { mode: 'subtract', icon: NfSelectionSubtractIcon, label: '删除', title: '删除：从选区中移除日期' }
+  { mode: 'union', icon: NfSelectionUnionIcon, label: '合集', title: '合并选区' },
+  { mode: 'subtract', icon: NfSelectionSubtractIcon, label: '删除', title: '移除日期' }
 ];
 
 const dateRuleTools: Array<{ rule: FlashDateRule; label: string; title: string; ariaLabel: string }> = [
@@ -229,31 +230,31 @@ export function FlashSelectStep({
           <div className="flash-note-tool-row">
             <div className="flash-note-icon-tools" aria-label="选区工具">
               {selectionTools.map((tool) => (
-                <button
-                  key={tool.mode}
-                  type="button"
-                  title={tool.title}
-                  aria-label={tool.label}
-                  className={`flash-note-icon-tool${selectionMode === tool.mode ? ' is-active' : ''}`}
-                  onClick={() => onSelectionModeChange(tool.mode)}
-                >
-                  <NfSvgIcon svg={tool.icon} className="flash-note-selection-icon" decorative />
-                </button>
+                <NfTooltip key={tool.mode} content={tool.title}>
+                  <button
+                    type="button"
+                    aria-label={tool.label}
+                    className={`flash-note-icon-tool${selectionMode === tool.mode ? ' is-active' : ''}`}
+                    onClick={() => onSelectionModeChange(tool.mode)}
+                  >
+                    <NfSvgIcon svg={tool.icon} className="flash-note-selection-icon" decorative />
+                  </button>
+                </NfTooltip>
               ))}
             </div>
             <div className="flash-note-rule-tools" aria-label="快速日期工具">
               {dateRuleTools.map((item) => (
-                <button
-                  key={item.rule}
-                  type="button"
-                  title={item.title}
-                  aria-label={item.ariaLabel}
-                  className={activeDateRule === item.rule ? 'is-active' : undefined}
-                  disabled={!startDate || disabledDateRules[item.rule]}
-                  onClick={() => onDateRuleApply(item.rule)}
-                >
-                  {item.label}
-                </button>
+                <NfTooltip key={item.rule} content={item.title}>
+                  <button
+                    type="button"
+                    aria-label={item.ariaLabel}
+                    className={activeDateRule === item.rule ? 'is-active' : undefined}
+                    disabled={!startDate || disabledDateRules[item.rule]}
+                    onClick={() => onDateRuleApply(item.rule)}
+                  >
+                    {item.label}
+                  </button>
+                </NfTooltip>
               ))}
             </div>
           </div>

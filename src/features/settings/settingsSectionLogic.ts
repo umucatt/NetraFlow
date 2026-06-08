@@ -38,7 +38,7 @@ export const GLOBAL_SETTINGS_SEARCH_ITEMS = [
 
     blockTitle: '显示与界面',
 
-    summary: '控制界面显示方式、首页资产统计口径、主题和页面位置记忆。',
+    summary: '控制界面显示方式、首页资产统计口径、主题和页面位置。',
 
     previewItems: [
 
@@ -46,7 +46,7 @@ export const GLOBAL_SETTINGS_SEARCH_ITEMS = [
 
       '设置首页资产统计的数值口径和展示格式',
 
-      '控制页面主题与切换页面时的位置记忆方式'
+      '控制页面主题、双栏页面重心与切换页面时的位置记忆方式'
 
     ],
 
@@ -96,6 +96,16 @@ export const GLOBAL_SETTINGS_SEARCH_ITEMS = [
 
       '主题风格',
 
+      '页面重心',
+
+      '左侧',
+
+      '右侧',
+
+      '主要内容区',
+
+      '双栏页面',
+
       '页面位置记忆',
 
       '全局记忆',
@@ -122,9 +132,16 @@ export const GLOBAL_SETTINGS_SEARCH_ITEMS = [
 
     ],
 
-    pinyinKeywords: ['xian shi', 'jie mian', 'wai guan', 'zhu ti', 'ye mian wei zhi ji yi'],
+    pinyinKeywords: [
+      'xian shi',
+      'jie mian',
+      'wai guan',
+      'zhu ti',
+      'ye mian zhong xin',
+      'ye mian wei zhi ji yi'
+    ],
 
-    pinyinInitials: ['xs', 'jm', 'wg', 'zt', 'ymwzjy']
+    pinyinInitials: ['xs', 'jm', 'wg', 'zt', 'ymzx', 'ymwzjy']
 
   },
 
@@ -233,6 +250,76 @@ export const GLOBAL_SETTINGS_SEARCH_ITEMS = [
     pinyinKeywords: ['ye mian zhu ti', 'qian se', 'shen se', 'gen sui xi tong'],
 
     pinyinInitials: ['ymzt', 'qs', 'ss', 'gsxt']
+
+  },
+
+  {
+
+    id: 'appearance-main-content-position',
+
+    title: '页面重心',
+
+    group: '显示与界面',
+
+    description: '双栏页面主要内容区域的显示侧',
+
+    sectionTitle: '显示与界面',
+
+    blockTitle: '页面重心',
+
+    summary: '控制双栏页面中主要内容区域显示在左侧或右侧。',
+
+    previewItems: [
+
+      '左侧：主要内容区在左，辅助 / 操作区在右',
+
+      '右侧：主要内容区在右，辅助 / 操作区在左',
+
+      '仅交换双栏页面左右栏视觉顺序'
+
+    ],
+
+    section: 'appearance',
+
+    blockId: 'global-settings-main-content-position',
+
+    keywords: [
+
+      '页面重心',
+
+      '左侧',
+
+      '右侧',
+
+      '主要内容区',
+
+      '辅助区',
+
+      '操作区',
+
+      '双栏页面',
+
+      '左右栏',
+
+      '视觉顺序'
+
+    ],
+
+    pinyinKeywords: [
+
+      'ye mian zhong xin',
+
+      'zuo ce',
+
+      'you ce',
+
+      'zhu yao nei rong qu',
+
+      'shuang lan ye mian'
+
+    ],
+
+    pinyinInitials: ['ymzx', 'zc', 'yc', 'zynrq', 'slym']
 
   },
 

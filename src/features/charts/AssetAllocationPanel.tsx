@@ -35,6 +35,12 @@ type SegmentGraphicProps = {
 const getDebtMultipleLabel = (debtRatio: number) =>
   Number.isFinite(debtRatio) && debtRatio >= 2 ? `≥${Math.floor(debtRatio)}×` : '';
 
+const getSegmentTooltipLabel = (
+  segment: ChartSegment,
+  formatMoney: (amount: number | null, maximumFractionDigits?: number) => string
+) =>
+  `${getArchivedChartTooltipLabel(segment.label, segment.archived)} \u00b7 ${formatMoney(segment.amount)}`;
+
 const polarToCartesian = (cx: number, cy: number, radius: number, angleInDegrees: number) => {
   const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180;
 
@@ -102,6 +108,7 @@ export function PieSegments({
 
   if (segments.length === 1) {
     const segment = segments[0];
+    const tooltipLabel = getSegmentTooltipLabel(segment, formatMoney);
 
     return (
       <circle
@@ -109,14 +116,21 @@ export function PieSegments({
         cy={cy}
         r={radius}
         fill={segment.color}
+        aria-label={tooltipLabel}
         className={getInteractiveChartClassName('chart-shape', segment.id, activeSegmentId)}
-        onMouseEnter={() => onSegmentHover?.(segment.id)}
-        onMouseLeave={() => onSegmentHover?.(null)}
-      >
-        <title>
-          {`${getArchivedChartTooltipLabel(segment.label, segment.archived)} · ${formatMoney(segment.amount)}`}
-        </title>
-      </circle>
+        onMouseEnter={() => {
+          onSegmentHover?.(segment.id);
+        }}
+        onMouseLeave={() => {
+          onSegmentHover?.(null);
+        }}
+        onFocus={() => {
+          onSegmentHover?.(segment.id);
+        }}
+        onBlur={() => {
+          onSegmentHover?.(null);
+        }}
+      />
     );
   }
 
@@ -128,6 +142,7 @@ export function PieSegments({
         const startAngle = currentAngle;
         const endAngle = currentAngle + (segment.amount / total) * 360;
         currentAngle = endAngle;
+        const tooltipLabel = getSegmentTooltipLabel(segment, formatMoney);
 
         return (
           <path
@@ -135,14 +150,21 @@ export function PieSegments({
             d={describePieSlice(cx, cy, radius, startAngle, endAngle)}
             fill={segment.color}
             {...PIE_SEGMENT_SEPARATOR_CONFIG}
+            aria-label={tooltipLabel}
             className={getInteractiveChartClassName('chart-shape', segment.id, activeSegmentId)}
-            onMouseEnter={() => onSegmentHover?.(segment.id)}
-            onMouseLeave={() => onSegmentHover?.(null)}
-          >
-            <title>
-              {`${getArchivedChartTooltipLabel(segment.label, segment.archived)} · ${formatMoney(segment.amount)}`}
-            </title>
-          </path>
+            onMouseEnter={() => {
+              onSegmentHover?.(segment.id);
+            }}
+            onMouseLeave={() => {
+              onSegmentHover?.(null);
+            }}
+            onFocus={() => {
+              onSegmentHover?.(segment.id);
+            }}
+            onBlur={() => {
+              onSegmentHover?.(null);
+            }}
+          />
         );
       })}
     </>
@@ -165,22 +187,32 @@ function DonutSegments({
   }
 
   if (segments.length === 1) {
+    const segment = segments[0];
+    const tooltipLabel = getSegmentTooltipLabel(segment, formatMoney);
+
     return (
       <circle
         cx={cx}
         cy={cy}
         r={(innerRadius + outerRadius) / 2}
         fill="none"
-        stroke={segments[0].color}
+        stroke={segment.color}
         strokeWidth={outerRadius - innerRadius}
-        className={getInteractiveChartClassName('chart-shape', segments[0].id, activeSegmentId)}
-        onMouseEnter={() => onSegmentHover?.(segments[0].id)}
-        onMouseLeave={() => onSegmentHover?.(null)}
-      >
-        <title>
-          {`${getArchivedChartTooltipLabel(segments[0].label, segments[0].archived)} · ${formatMoney(segments[0].amount)}`}
-        </title>
-      </circle>
+        aria-label={tooltipLabel}
+        className={getInteractiveChartClassName('chart-shape', segment.id, activeSegmentId)}
+        onMouseEnter={() => {
+          onSegmentHover?.(segment.id);
+        }}
+        onMouseLeave={() => {
+          onSegmentHover?.(null);
+        }}
+        onFocus={() => {
+          onSegmentHover?.(segment.id);
+        }}
+        onBlur={() => {
+          onSegmentHover?.(null);
+        }}
+      />
     );
   }
 
@@ -192,6 +224,7 @@ function DonutSegments({
         const startAngle = currentAngle;
         const endAngle = currentAngle + (segment.amount / total) * 360;
         currentAngle = endAngle;
+        const tooltipLabel = getSegmentTooltipLabel(segment, formatMoney);
 
         return (
           <path
@@ -199,14 +232,21 @@ function DonutSegments({
             d={describeDonutSegment(cx, cy, innerRadius, outerRadius, startAngle, endAngle)}
             fill={segment.color}
             {...PIE_SEGMENT_SEPARATOR_CONFIG}
+            aria-label={tooltipLabel}
             className={getInteractiveChartClassName('chart-shape', segment.id, activeSegmentId)}
-            onMouseEnter={() => onSegmentHover?.(segment.id)}
-            onMouseLeave={() => onSegmentHover?.(null)}
-          >
-            <title>
-              {`${getArchivedChartTooltipLabel(segment.label, segment.archived)} · ${formatMoney(segment.amount)}`}
-            </title>
-          </path>
+            onMouseEnter={() => {
+              onSegmentHover?.(segment.id);
+            }}
+            onMouseLeave={() => {
+              onSegmentHover?.(null);
+            }}
+            onFocus={() => {
+              onSegmentHover?.(segment.id);
+            }}
+            onBlur={() => {
+              onSegmentHover?.(null);
+            }}
+          />
         );
       })}
     </>
@@ -330,7 +370,11 @@ export function AssetStructureGraphic({
 
   return (
     <div className={`asset-structure-graphic${compact ? ' is-compact' : ''}`}>
-      <svg viewBox="0 0 120 120" role="img" aria-hidden={compact ? true : undefined}>
+      <svg
+        viewBox="0 0 120 120"
+        role="img"
+        aria-hidden={compact ? true : undefined}
+      >
         <circle cx="60" cy="60" r="36" fill="var(--chart-center-bg)" />
         {effectiveDisplay === 'positive' ? (
           <PieSegments

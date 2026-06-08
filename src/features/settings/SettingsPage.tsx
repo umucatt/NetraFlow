@@ -355,6 +355,7 @@ function renderSettingsContent(props: SettingsPageProps) {
         themeMode={props.globalSettings.themeMode}
         themeStyle={props.globalSettings.themeStyle}
         nyaaThemeUnlocked={props.globalSettings.nyaaThemeUnlocked}
+        mainContentPosition={props.globalSettings.mainContentPosition}
         pagePositionMemoryMode={props.globalSettings.pagePositionMemoryMode}
         onPositiveNegativeColorModeChange={props.onPositiveNegativeColorModeChange}
         onHomeAssetStatMetricChange={props.onHomeAssetStatMetricChange}
@@ -362,6 +363,7 @@ function renderSettingsContent(props: SettingsPageProps) {
         onHomeAssetStatCompactChange={props.onHomeAssetStatCompactChange}
         onThemeModeChange={props.onThemeModeChange}
         onThemeStyleChange={props.onThemeStyleChange}
+        onMainContentPositionChange={props.onMainContentPositionChange}
         onPagePositionMemoryModeChange={props.onPagePositionMemoryModeChange}
       />
     );
@@ -459,8 +461,7 @@ function SettingsPage(props: SettingsPageProps) {
 
 export function SettingsNavigationPanel({
   selectedSection,
-  onSelectSection,
-  onClose
+  onSelectSection
 }: SettingsNavigationPanelProps) {
   return (
     <section className="right-panel-page">
@@ -482,14 +483,6 @@ export function SettingsNavigationPanel({
               <strong>{item.label}</strong>
             </button>
           ))}
-
-          <button
-            type="button"
-            className="right-panel-action global-settings-nav__item global-settings-nav__return"
-            onClick={onClose}
-          >
-            <strong>返回资产总览</strong>
-          </button>
         </nav>
       </div>
     </section>

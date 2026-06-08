@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { NfRollupSourceWideIcon } from '../../assets/icons';
 import NfSvgIcon from '../../components/NfSvgIcon';
+import NfTooltip from '../../components/tooltip/NfTooltip';
 
 export type HistoryRecordListRecord = {
   id: string;
@@ -164,12 +165,13 @@ export default function HistoryRecordList<TRecord extends HistoryRecordListRecor
             ? renderFlashSourceIcon('history-flash-source')
             : null}
           {source === 'rollup' ? (
-            <NfSvgIcon
-              svg={NfRollupSourceWideIcon}
-              className="history-rollup-source"
-              title="汇总导入"
-              decorative
-            />
+            <NfTooltip content="汇总导入">
+              <NfSvgIcon
+                svg={NfRollupSourceWideIcon}
+                className="history-rollup-source"
+                decorative
+              />
+            </NfTooltip>
           ) : null}
           {showSourceMarker && !extraInfo && !source ? (
             <span

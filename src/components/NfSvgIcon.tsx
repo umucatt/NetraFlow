@@ -18,7 +18,6 @@ export default function NfSvgIcon({
   return (
     <span
       className={['nf-svg-icon', className].filter(Boolean).join(' ')}
-      title={title}
       role={decorative ? undefined : 'img'}
       aria-label={decorative ? undefined : accessibleLabel}
       aria-hidden={decorative ? true : undefined}

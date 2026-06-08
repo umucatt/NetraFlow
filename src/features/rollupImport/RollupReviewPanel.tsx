@@ -43,8 +43,7 @@ export function RollupReviewActionsPanel({
   hasBlockingIssues,
   canConfirm,
   onDiscardImport,
-  onConfirmImport,
-  onClose
+  onConfirmImport
 }: RollupReviewActionsPanelProps) {
   return (
     <>
@@ -70,11 +69,6 @@ export function RollupReviewActionsPanel({
         tone="primary"
         disabled={!canConfirm}
         onClick={onConfirmImport}
-      />
-      <RightPanelActionButton
-        label="返回资产总览"
-        onClick={onClose}
-        className="rollup-import-return-action"
       />
     </>
   );

@@ -386,6 +386,10 @@ function GroupDetailTrendChart({
           const areaPath = createSteppedAreaPath(layer.upperValues, layer.lowerValues, getX, getY);
           const horizontalPath = createSteppedHorizontalLinePath(layer.upperValues, getX, getY);
           const verticalPath = createSteppedVerticalLinePath(layer.upperValues, getX, getY);
+          const tooltipLabel = getArchivedChartTooltipLabel(
+            layer.series.label,
+            layer.series.archived
+          );
 
           return (
             <g key={layer.series.id}>
@@ -394,6 +398,7 @@ function GroupDetailTrendChart({
                 fill={layer.series.color}
                 fillOpacity={isActive ? 0.56 : isDimmed ? 0.22 : 0.38}
                 stroke="none"
+                aria-label={tooltipLabel}
                 className={getInteractiveChartClassName(
                   'chart-shape chart-shape--stacked-area',
                   layer.series.id,
@@ -409,9 +414,17 @@ function GroupDetailTrendChart({
                     onSeriesHover?.(null);
                   }
                 }}
-              >
-                <title>{getArchivedChartTooltipLabel(layer.series.label, layer.series.archived)}</title>
-              </path>
+                onFocus={() => {
+                  if (!isDetailMode) {
+                    onSeriesHover?.(layer.series.id);
+                  }
+                }}
+                onBlur={() => {
+                  if (!isDetailMode) {
+                    onSeriesHover?.(null);
+                  }
+                }}
+              />
               <path
                 d={horizontalPath}
                 fill="none"
