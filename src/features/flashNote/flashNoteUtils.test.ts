@@ -1,6 +1,7 @@
 /// <reference types="node" />
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   appendFlashInputCharacter,
@@ -18,6 +19,9 @@ import {
 } from './flashNoteUtils';
 import { resolveFlashKeyboardAction } from './useFlashKeyboardInput';
 import type { FlashCell } from './flashNoteTypes';
+
+const readSourceFile = (path: string) =>
+  readFileSync(new URL(`../../../../${path}`, import.meta.url), 'utf8');
 
 const cell = (date: string, value = ''): FlashCell => ({
   date,
@@ -419,8 +423,8 @@ test('flash keyboard action resolver covers enter, backspace, delete, and ctrl z
   assert.deepEqual(resolveFlashKeyboardAction({ key: 'Backspace', step: 'input' }), { type: 'backspace' });
   assert.deepEqual(resolveFlashKeyboardAction({ key: 'Delete', step: 'confirm' }), { type: 'delete' });
   assert.deepEqual(resolveFlashKeyboardAction({ ctrlKey: true, key: 'z', step: 'input' }), { type: 'ctrl-z' });
-  assert.deepEqual(resolveFlashKeyboardAction({ key: 'Escape', step: 'input' }), null);
-  assert.deepEqual(resolveFlashKeyboardAction({ key: 'Escape', step: 'confirm' }), null);
+  assert.deepEqual(resolveFlashKeyboardAction({ key: 'Escape', step: 'input' }), { type: 'escape' });
+  assert.deepEqual(resolveFlashKeyboardAction({ key: 'Escape', step: 'confirm' }), { type: 'escape' });
   assert.deepEqual(resolveFlashKeyboardAction({ key: 'ArrowDown', step: 'input' }), null);
   assert.deepEqual(resolveFlashKeyboardAction({ key: 'ArrowDown', step: 'confirm' }), null);
   assert.deepEqual(
@@ -431,6 +435,24 @@ test('flash keyboard action resolver covers enter, backspace, delete, and ctrl z
   assert.deepEqual(
     resolveFlashKeyboardAction({ hasConfirmSelection: true, key: '5', step: 'confirm' }),
     { type: 'input-character', key: '5' }
+  );
+});
+
+test('flash keyboard Escape is wired to existing stage return callbacks', () => {
+  const controllerSource = readSourceFile('src/features/flashNote/useFlashNoteController.ts');
+  const keyboardSource = readSourceFile('src/features/flashNote/useFlashKeyboardInput.ts');
+
+  assert.match(
+    keyboardSource,
+    /if \(action\.type === 'escape'\) \{[\s\S]*event\.stopPropagation\(\);[\s\S]*onEscape\(\);/
+  );
+  assert.match(
+    controllerSource,
+    /enabled: isOpen && step === 'input'[\s\S]*onEscape: requestReturnDateSelection/
+  );
+  assert.match(
+    controllerSource,
+    /enabled: isOpen && step === 'confirm'[\s\S]*onEscape: backToInput/
   );
 });
 

@@ -12,6 +12,7 @@ type PositiveNegativeColorMode = 'red-positive' | 'green-positive';
 type ThemeMode = 'light' | 'dark' | 'system';
 type ThemeStyle = 'default' | 'nyaa';
 type PagePositionMemoryMode = 'global' | 'covered-reset';
+type MainContentPosition = 'left' | 'right';
 
 export type AppearanceSettingsPanelProps = {
   positiveNegativeColorMode: PositiveNegativeColorMode;
@@ -21,6 +22,7 @@ export type AppearanceSettingsPanelProps = {
   themeMode: ThemeMode;
   themeStyle: ThemeStyle;
   nyaaThemeUnlocked: boolean;
+  mainContentPosition: MainContentPosition;
   pagePositionMemoryMode: PagePositionMemoryMode;
   onPositiveNegativeColorModeChange: (value: PositiveNegativeColorMode) => void;
   onHomeAssetStatMetricChange: (value: HomeAssetStatMetric) => void;
@@ -28,6 +30,7 @@ export type AppearanceSettingsPanelProps = {
   onHomeAssetStatCompactChange: (value: 'yes' | 'no') => void;
   onThemeModeChange: (value: ThemeMode) => void;
   onThemeStyleChange: (value: ThemeStyle) => void;
+  onMainContentPositionChange: (value: MainContentPosition) => void;
   onPagePositionMemoryModeChange: (value: PagePositionMemoryMode) => void;
 };
 
@@ -39,6 +42,7 @@ function AppearanceSettingsPanel({
   themeMode,
   themeStyle,
   nyaaThemeUnlocked,
+  mainContentPosition,
   pagePositionMemoryMode,
   onPositiveNegativeColorModeChange,
   onHomeAssetStatMetricChange,
@@ -46,6 +50,7 @@ function AppearanceSettingsPanel({
   onHomeAssetStatCompactChange,
   onThemeModeChange,
   onThemeStyleChange,
+  onMainContentPositionChange,
   onPagePositionMemoryModeChange
 }: AppearanceSettingsPanelProps) {
   return (
@@ -115,6 +120,19 @@ function AppearanceSettingsPanel({
           statusLabel={null}
         />
       ) : null}
+
+      <SettingsSegmentedControl
+        id="global-settings-main-content-position"
+        label="页面重心"
+        options={[
+          { value: 'left', label: '左侧' },
+          { value: 'right', label: '右侧' }
+        ]}
+        currentValue={mainContentPosition}
+        note="控制双栏页面中主要内容区域的显示侧"
+        onChange={(value) => onMainContentPositionChange(value as MainContentPosition)}
+        statusLabel={null}
+      />
 
       <div id="global-settings-page-position-memory">
         <SettingsSegmentedControl

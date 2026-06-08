@@ -6,6 +6,7 @@ import type {
 
 import type { Account } from '../../app/types';
 import AccountMark from '../../components/AccountMark';
+import NfTooltip from '../../components/tooltip/NfTooltip';
 import type { AssetOverviewGroup } from './assetOverviewLogic';
 
 export type AssetOverviewDropIndicator = {
@@ -33,7 +34,7 @@ export type AssetOverviewPageProps = {
   deleteIcon: ReactNode;
   formatMoney: HomeMoneyFormatter;
   canDeleteGroup: (groupId: string) => boolean;
-  onGroupClick: (groupId: string) => void;
+  onGroupClick: (groupId: string, clickDetail?: number) => void;
   onOpenAccount: (groupId: string, account: Account) => void;
   onDeleteGroup: (groupId: string) => void;
   onGroupPointerDown: (event: PointerEvent<HTMLButtonElement>, groupId: string) => void;
@@ -125,7 +126,7 @@ function AssetOverviewPage({
                 onPointerUp={onGroupPointerUp}
                 onPointerLeave={onGroupPointerLeave}
                 onPointerCancel={onGroupPointerCancel}
-                onClick={() => onGroupClick(group.id)}
+                onClick={(event) => onGroupClick(group.id, event.detail)}
                 style={{
                   display: 'grid',
                   gridTemplateColumns: 'minmax(0, 1fr) auto',
@@ -172,36 +173,40 @@ function AssetOverviewPage({
 
               {isGroupEditMode ? (
                 <div className="account-type-entry-actions" data-interactive>
-                  <button
-                    type="button"
-                    className={[
-                      'account-type-action-button',
-                      'account-type-action-button--sort',
-                      draggingGroupId === group.id ? 'is-active' : ''
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                    aria-label={`拖拽排序 ${group.name}`}
-                    title="拖拽排序"
-                    data-interactive
-                    onClick={(event) => event.stopPropagation()}
+                  <NfTooltip content="排序">
+                    <button
+                      type="button"
+                      className={[
+                        'account-type-action-button',
+                        'account-type-action-button--sort',
+                        draggingGroupId === group.id ? 'is-active' : ''
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                      aria-label={`拖拽排序 ${group.name}`}
+                      data-interactive
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {sortIcon}
+                    </button>
+                  </NfTooltip>
+                  <NfTooltip
+                    content={currentCanDeleteGroup ? '删除' : '该类型下存在有效账户'}
                   >
-                    {sortIcon}
-                  </button>
-                  <button
-                    type="button"
-                    className="account-type-action-button account-type-action-button--delete"
-                    aria-label={`删除账户类型 ${group.name}`}
-                    title={currentCanDeleteGroup ? '删除账户类型' : '请先归档或删除未归档账户'}
-                    data-interactive
-                    disabled={!currentCanDeleteGroup}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onDeleteGroup(group.id);
-                    }}
-                  >
-                    {deleteIcon}
-                  </button>
+                    <button
+                      type="button"
+                      className="account-type-action-button account-type-action-button--delete"
+                      aria-label={`删除账户类型 ${group.name}`}
+                      data-interactive
+                      disabled={!currentCanDeleteGroup}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onDeleteGroup(group.id);
+                      }}
+                    >
+                      {deleteIcon}
+                    </button>
+                  </NfTooltip>
                 </div>
               ) : null}
 

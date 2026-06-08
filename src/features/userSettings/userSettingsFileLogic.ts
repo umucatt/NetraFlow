@@ -14,6 +14,7 @@ import {
 } from '../../homeAssetStats';
 import type {
   GlobalSettings,
+  MainContentPosition,
   PagePositionMemoryMode,
   PositiveNegativeColorMode,
   ThemeMode,
@@ -24,6 +25,7 @@ type UserSettingsGlobalFields = Pick<
   GlobalSettings,
   | 'themeMode'
   | 'positiveNegativeColorMode'
+  | 'mainContentPosition'
   | 'pagePositionMemoryMode'
   | 'searchLogicMode'
   | 'chartColorAssignmentMode'
@@ -63,6 +65,9 @@ const isPagePositionMemoryMode = (
 ): value is PagePositionMemoryMode =>
   value === 'global' || value === 'covered-reset';
 
+const isMainContentPosition = (value: unknown): value is MainContentPosition =>
+  value === 'left' || value === 'right';
+
 const isSearchLogicMode = (value: unknown): value is GlobalSettings['searchLogicMode'] =>
   value === 'strict' || value === 'infer';
 
@@ -99,6 +104,7 @@ export const createUserSettingsExportPayload = <TAssetChartSettings>({
   settings: {
     themeMode: globalSettings.themeMode,
     positiveNegativeColorMode: globalSettings.positiveNegativeColorMode,
+    mainContentPosition: globalSettings.mainContentPosition,
     pagePositionMemoryMode: globalSettings.pagePositionMemoryMode,
     searchLogicMode: globalSettings.searchLogicMode,
     chartColorAssignmentMode:
@@ -147,6 +153,9 @@ export const readImportedUserSettings = <TAssetChartSettings>({
     searchLogicMode: isSearchLogicMode(importedSettings.searchLogicMode)
       ? importedSettings.searchLogicMode
       : currentGlobalSettings.searchLogicMode,
+    mainContentPosition: isMainContentPosition(importedSettings.mainContentPosition)
+      ? importedSettings.mainContentPosition
+      : currentGlobalSettings.mainContentPosition,
     pagePositionMemoryMode: isPagePositionMemoryMode(
       importedSettings.pagePositionMemoryMode
     )

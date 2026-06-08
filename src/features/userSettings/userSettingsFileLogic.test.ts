@@ -19,6 +19,7 @@ const currentGlobalSettings: GlobalSettings = {
   themeMode: 'system',
   themeStyle: 'default',
   nyaaThemeUnlocked: false,
+  mainContentPosition: 'left',
   pagePositionMemoryMode: 'global',
   searchLogicMode: 'infer',
   chartColorAssignmentMode: 'createdAt',
@@ -58,6 +59,7 @@ test('user settings export excludes security and sensitive fields', () => {
   assert.equal('autoLockMinutes' in payload.settings, false);
   assert.equal('snapshotEncryptionEnabled' in payload.settings, false);
   assert.equal('snapshotPasswordHash' in payload.settings, false);
+  assert.equal(payload.settings.mainContentPosition, 'left');
 });
 
 test('imported user settings do not overwrite security fields', () => {
@@ -67,6 +69,7 @@ test('imported user settings do not overwrite security fields', () => {
       version: USER_SETTINGS_FILE_VERSION,
       settings: {
         themeMode: 'dark',
+        mainContentPosition: 'right',
         passwordProtectionEnabled: true,
         passwordHash: { algorithm: 'fake' },
         autoLockMinutes: 1,
@@ -80,6 +83,7 @@ test('imported user settings do not overwrite security fields', () => {
   });
 
   assert.equal(imported.globalSettings.themeMode, 'dark');
+  assert.equal(imported.globalSettings.mainContentPosition, 'right');
   assert.equal(imported.globalSettings.passwordProtectionEnabled, false);
   assert.equal(imported.globalSettings.passwordHash, null);
   assert.equal(imported.globalSettings.autoLockMinutes, 10);
@@ -88,4 +92,23 @@ test('imported user settings do not overwrite security fields', () => {
   assert.deepEqual(imported.assetChartSettings, {
     normalized: { imported: true }
   });
+});
+
+test('imported user settings keep current page focus side for invalid values', () => {
+  const imported = readImportedUserSettings({
+    value: {
+      type: USER_SETTINGS_FILE_TYPE,
+      version: USER_SETTINGS_FILE_VERSION,
+      settings: {
+        mainContentPosition: 'center'
+      }
+    },
+    currentGlobalSettings: {
+      ...currentGlobalSettings,
+      mainContentPosition: 'right'
+    },
+    normalizeAssetChartSettings: (value) => value
+  });
+
+  assert.equal(imported.globalSettings.mainContentPosition, 'right');
 });

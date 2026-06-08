@@ -21,7 +21,7 @@ import {
 import SearchCategoryTabs from './SearchCategoryTabs';
 import SearchResultList from './SearchResultList';
 
-type GlobalSearchPanelProps = {
+export type GlobalSearchPanelProps = {
   output: GlobalSearchOutput;
   query: string;
   selectedCategory: SearchCategory;

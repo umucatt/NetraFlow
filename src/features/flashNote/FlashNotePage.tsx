@@ -102,11 +102,8 @@ export function FlashNotePage({
   onDatePointerDown,
   onDatePointerEnter,
   onDatePointerUp,
-  onClose,
-  onBackToSelect,
   onStartInput,
   onGoToConfirm,
-  onBackToInput,
   onConfirmWrite,
   onSelectConfirmDate,
   onCloseShortcutHint
@@ -115,42 +112,20 @@ export function FlashNotePage({
 
   const renderStageRail = () => (
     <ol className="flash-note-stage-rail" aria-label="闪记阶段">
-      {stageOrder.map((stage, index) => {
-        const returnAction =
-          step === 'input' && stage === 'select'
-            ? { label: '返回选择', onClick: onBackToSelect }
-            : step === 'confirm' && stage === 'input'
-              ? { label: '返回输入', onClick: onBackToInput }
-              : null;
-
-        return (
-          <li
-            key={stage}
-            className={[
-              'flash-note-stage-pill',
-              index === currentIndex ? 'is-current' : '',
-              index < currentIndex ? 'is-done' : '',
-              returnAction ? 'is-actionable' : ''
-            ]
-              .filter(Boolean)
-              .join(' ')}
-          >
-            {returnAction ? (
-              <button
-                type="button"
-                className="flash-note-stage-pill__button"
-                title={returnAction.label}
-                aria-label={returnAction.label}
-                onClick={returnAction.onClick}
-              >
-                {returnAction.label}
-              </button>
-            ) : (
-              stageLabels[stage]
-            )}
-          </li>
-        );
-      })}
+      {stageOrder.map((stage, index) => (
+        <li
+          key={stage}
+          className={[
+            'flash-note-stage-pill',
+            index === currentIndex ? 'is-current' : '',
+            index < currentIndex ? 'is-done' : ''
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        >
+          {stageLabels[stage]}
+        </li>
+      ))}
     </ol>
   );
 
@@ -235,40 +210,35 @@ export function FlashNotePage({
   const renderActions = () => {
     if (step === 'select') {
       return (
-        <>
-          <button type="button" className="flash-note-secondary" onClick={onClose}>
-            退出
-          </button>
-          <button type="button" className="flash-note-primary" disabled={!canStartInput} onClick={onStartInput}>
-            开始输入
-          </button>
-        </>
+        <button
+          type="button"
+          className="flash-note-primary"
+          disabled={!canStartInput}
+          onClick={onStartInput}
+        >
+          开始输入
+        </button>
       );
     }
 
     if (step === 'input') {
       return (
-        <>
-          <button type="button" className="flash-note-secondary" onClick={onClose}>
-            退出
-          </button>
-          <button type="button" className="flash-note-primary" onClick={onGoToConfirm}>
-            进入确认
-          </button>
-        </>
+        <button type="button" className="flash-note-primary" onClick={onGoToConfirm}>
+          进入确认
+        </button>
       );
     }
 
     if (step === 'confirm') {
       return (
-        <>
-          <button type="button" className="flash-note-secondary" onClick={onClose}>
-            退出
-          </button>
-          <button type="button" className="flash-note-primary" disabled={!canWrite} onClick={onConfirmWrite}>
-            确认写入
-          </button>
-        </>
+        <button
+          type="button"
+          className="flash-note-primary"
+          disabled={!canWrite}
+          onClick={onConfirmWrite}
+        >
+          完成写入
+        </button>
       );
     }
 

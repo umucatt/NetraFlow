@@ -1,7 +1,8 @@
 {
   "name": "netraflow",
-  "version": "0.9.4",
+  "version": "0.9.5",
   "private": true,
+  "license": "GPL-3.0-only",
   "productName": "NetraFlow",
   "description": "资产变化记录工具",
   "type": "module",

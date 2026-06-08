@@ -69,11 +69,44 @@
   Var NetraFlowDeleteLocalUserDataCheckbox
 !endif
 
+!macro NetraFlowRemoveRuntimeEntries ROOT
+  RMDir /r "${ROOT}\${NETRAFLOW_RUNTIME_DIR_NAME}"
+  RMDir /r "${ROOT}\${NETRAFLOW_LOGS_DIR_NAME}"
+  RMDir /r "${ROOT}\Local Storage"
+  RMDir /r "${ROOT}\IndexedDB"
+  RMDir /r "${ROOT}\Cache"
+  RMDir /r "${ROOT}\Code Cache"
+  RMDir /r "${ROOT}\GPUCache"
+  RMDir /r "${ROOT}\Session Storage"
+  RMDir /r "${ROOT}\blob_storage"
+  RMDir /r "${ROOT}\DawnCache"
+  RMDir /r "${ROOT}\DawnWebGPUCache"
+  RMDir /r "${ROOT}\Network"
+  RMDir /r "${ROOT}\Shared Dictionary"
+  Delete "${ROOT}\Preferences"
+  Delete "${ROOT}\Local State"
+  RMDir "${ROOT}"
+!macroend
+
+!macro NetraFlowRemoveUserDataIfRequested ROOT
+  ${If} $NetraFlowDeleteLocalUserData == "1"
+    RMDir /r "${ROOT}\${NETRAFLOW_USERDATA_DIR_NAME}"
+  ${EndIf}
+!macroend
+
 !macro NetraFlowRemoveLegacyProfileDirs
-  RMDir /r "$APPDATA\${NETRAFLOW_PRODUCT_NAME}"
-  RMDir /r "$APPDATA\netraflow"
-  RMDir /r "$LOCALAPPDATA\${NETRAFLOW_PRODUCT_NAME}"
-  RMDir /r "$LOCALAPPDATA\netraflow"
+  !insertmacro NetraFlowRemoveRuntimeEntries $APPDATA\${NETRAFLOW_PRODUCT_NAME}
+  !insertmacro NetraFlowRemoveRuntimeEntries $APPDATA\netraflow
+  !insertmacro NetraFlowRemoveRuntimeEntries $LOCALAPPDATA\${NETRAFLOW_PRODUCT_NAME}
+  !insertmacro NetraFlowRemoveRuntimeEntries $LOCALAPPDATA\netraflow
+  !insertmacro NetraFlowRemoveUserDataIfRequested $APPDATA\${NETRAFLOW_PRODUCT_NAME}
+  !insertmacro NetraFlowRemoveUserDataIfRequested $APPDATA\netraflow
+  !insertmacro NetraFlowRemoveUserDataIfRequested $LOCALAPPDATA\${NETRAFLOW_PRODUCT_NAME}
+  !insertmacro NetraFlowRemoveUserDataIfRequested $LOCALAPPDATA\netraflow
+  RMDir "$APPDATA\${NETRAFLOW_PRODUCT_NAME}"
+  RMDir "$APPDATA\netraflow"
+  RMDir "$LOCALAPPDATA\${NETRAFLOW_PRODUCT_NAME}"
+  RMDir "$LOCALAPPDATA\netraflow"
 !macroend
 
 !macro NetraFlowRemoveInstallDirIfAllowed
@@ -128,7 +161,7 @@
 !macro NetraFlowCleanupInstallRoots
   ${IfNot} ${isUpdated}
     Call un.NetraFlowRemoveInstallResidues
-    RMDir /r "$INSTDIR\${NETRAFLOW_RUNTIME_DIR_NAME}"
+    !insertmacro NetraFlowRemoveRuntimeEntries $INSTDIR
 
     ${If} $NetraFlowDeleteLocalUserData == "1"
       RMDir /r "$INSTDIR\${NETRAFLOW_USERDATA_DIR_NAME}"
@@ -270,11 +303,14 @@
     RMDir /r "$INSTDIR\resources"
     RMDir /r "$INSTDIR\locales"
     RMDir /r "$INSTDIR\licenses"
-    RMDir /r "$INSTDIR\${NETRAFLOW_LOGS_DIR_NAME}"
+    !insertmacro NetraFlowRemoveRuntimeEntries $INSTDIR
+    !insertmacro NetraFlowRemoveLegacyProfileDirs
     !insertmacro NetraFlowRemoveInstallDirIfAllowed
   !macroend
 
   Function un.onUninstSuccess
+    !insertmacro NetraFlowRemoveRuntimeEntries $INSTDIR
+    !insertmacro NetraFlowRemoveLegacyProfileDirs
     !insertmacro NetraFlowRemoveInstallDirIfAllowed
   FunctionEnd
 !endif

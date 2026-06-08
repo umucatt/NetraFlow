@@ -1,7 +1,7 @@
 import type { SearchNavigationTarget } from '../../search/searchTypes';
 import { SEARCH_CATEGORY_LABELS } from '../../search/searchTypes';
 
-type SearchFloatingNavigatorProps = {
+export type SearchFloatingNavigatorProps = {
   currentTarget: SearchNavigationTarget;
   canMove: boolean;
   onPrevious: () => void;
@@ -14,9 +14,7 @@ function SearchFloatingNavigator({
   currentTarget,
   canMove,
   onPrevious,
-  onNext,
-  onReturn,
-  onExit
+  onNext
 }: SearchFloatingNavigatorProps) {
   return (
     <div className="search-floating-navigation" role="navigation" aria-label="搜索结果导航">
@@ -28,12 +26,6 @@ function SearchFloatingNavigator({
       </button>
       <button type="button" disabled={!canMove} onClick={onNext}>
         下一条
-      </button>
-      <button type="button" onClick={onReturn}>
-        返回
-      </button>
-      <button type="button" onClick={onExit}>
-        退出
       </button>
     </div>
   );

@@ -29,11 +29,6 @@ function RollupImportActionsPanel(props: RollupImportActionsPanelProps) {
         onImportText={props.onImportText}
         onSelectFile={props.onSelectFile}
       />
-      <RightPanelActionButton
-        label="返回资产总览"
-        onClick={props.onClose}
-        className="rollup-import-return-action"
-      />
     </>
   );
 }

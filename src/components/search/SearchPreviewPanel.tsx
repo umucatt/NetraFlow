@@ -113,7 +113,6 @@ function SearchPreviewPanel({
   focusedResult,
   sortedHistory,
   onOpenResult,
-  onCloseSearch,
   formatMoney,
   formatShortTime,
   getAmountChange,
@@ -258,36 +257,29 @@ function SearchPreviewPanel({
         <h2 className="right-panel-title">搜索结果预览</h2>
       </div>
       <div className="right-panel-stack">
-      {!hasQuery ? (
-        <>
+        {!hasQuery ? (
           <article className="right-panel-preview right-panel-preview--search-empty">
             <span className="global-search-preview-empty">键入关键词开始搜索</span>
           </article>
-          <RightPanelActionButton label="退出搜索" onClick={onCloseSearch} />
-        </>
-      ) : focusedResult ? (
-        <>
-          <article className="right-panel-preview right-panel-preview--search-result">
-            <span>{getSearchPreviewTypeLabel(focusedResult)}</span>
-            <strong>{focusedResult.title}</strong>
-            {renderSearchPreviewLead(focusedResult)}
-            {renderSearchPreviewDetails(focusedResult)}
-          </article>
-          <RightPanelActionButton
-            label="打开 / 定位"
-            tone="primary"
-            onClick={() => onOpenResult(focusedResult)}
-          />
-          <RightPanelActionButton label="退出搜索" onClick={onCloseSearch} />
-        </>
-      ) : (
-        <>
+        ) : focusedResult ? (
+          <>
+            <article className="right-panel-preview right-panel-preview--search-result">
+              <span>{getSearchPreviewTypeLabel(focusedResult)}</span>
+              <strong>{focusedResult.title}</strong>
+              {renderSearchPreviewLead(focusedResult)}
+              {renderSearchPreviewDetails(focusedResult)}
+            </article>
+            <RightPanelActionButton
+              label="打开 / 定位"
+              tone="primary"
+              onClick={() => onOpenResult(focusedResult)}
+            />
+          </>
+        ) : (
           <article className="right-panel-preview right-panel-preview--search-empty">
             <span className="global-search-preview-empty">暂无预览项</span>
           </article>
-          <RightPanelActionButton label="退出搜索" onClick={onCloseSearch} />
-        </>
-      )}
+        )}
       </div>
     </section>
   );

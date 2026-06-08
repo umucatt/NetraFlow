@@ -1,11 +1,9 @@
 import {
   type CSSProperties,
   type DragEvent,
-  type HTMLAttributes,
   type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
-  type ReactNode,
   type WheelEvent,
   useEffect,
   useMemo,
@@ -68,33 +66,47 @@ import {
 import { createStableGroupId } from './app/ids';
 import {
   NfFlashnoteSourceIcon,
-  NfRollupSourceWideIcon,
   NfSortIcon,
-  NfWindowCloseIcon,
-  NfWindowMaximizeIcon,
-  NfWindowMinimizeIcon,
-  NfWindowRestoreIcon
+  NfWindowCloseIcon
 } from './assets/icons';
+import { WindowFrame } from './app/windowFrame';
+import { AppShell } from './app/shell';
+import {
+  MainContentRenderer,
+  type MainContentMode,
+  type MainContentRendererProps
+} from './app/mainContent';
+import { AppDialogLayer, ToastViewport, useToastController } from './app/feedback';
+import { AccountDialogLayer } from './app/accountDialogs';
+import {
+  SnapshotSecurityDialogLayer,
+  type SnapshotSecurityDialogLayerProps
+} from './app/snapshotSecurityDialogs';
+import {
+  FirstWelcomeLayer,
+  type FirstWelcomeStage,
+  type FirstWelcomeStoryRoute
+} from './app/firstWelcome';
+import { SecretConsoleLayer } from './app/secretConsole';
+import {
+  SearchOverlayLayer
+} from './app/searchOverlay';
+import {
+  RightPanelRenderer,
+  type RightPanelMode,
+  type RightPanelRendererProps
+} from './app/rightPanel';
+import { ResetDangerDialogLayer } from './app/resetDangerDialog';
+import { LockScreenLayer } from './app/lockScreen';
+import { QuickEntryPickerLayer } from './app/quickEntryLayer';
+import { ArchivedAccountsLayer } from './app/archivedAccountsLayer';
+import { HistoryBackupLayer } from './app/historyBackupLayer';
+import { useOverlayBack } from './app/overlay';
 
 import AccountMark from './components/AccountMark';
 import NfSvgIcon from './components/NfSvgIcon';
-import { ConfirmDialog, InputDialog, NoticeDialog } from './components/dialogs';
-import { RightPanelActionButton, RightPanelSection } from './components/rightPanel';
-import GlobalSearchPanel from './components/search/GlobalSearchPanel';
-import SearchFloatingNavigator from './components/search/SearchFloatingNavigator';
-import SearchPreviewPanel from './components/search/SearchPreviewPanel';
 
 import {
-  AccountActionsPanel,
-  AccountAmountEditorDialog,
-  AccountChartSettingsPanel,
-  AccountCreateDialog,
-  AccountDangerActionsPanel,
-  AccountDetailPanel,
-  AccountHistoryList,
-  AccountInfoEditorDialog,
-  AccountRestoreDialog,
-  AccountRestoreTargetDialog,
   useAccountOperationsController
 } from './features/account';
 import {
@@ -121,44 +133,20 @@ import {
   type ArchivedRestoreSource
 } from './features/account/archivedAccountLogic';
 import {
-  AssetTrendChart,
-  ChartSettingsPanel,
-  GroupDetailChartDisplayPanel,
-  TotalAssetChartDisplayPanel,
   formatChartNumber,
   getGlobalAccountDetailChartSettings,
   useChartDataController
 } from './features/charts';
-import type { TrendChartPoint } from './features/charts/assetTrendData';
-import DashboardPage from './features/dashboard/DashboardPage';
 import { useDashboardController } from './features/dashboard/useDashboardController';
-import { FlashNotePage } from './features/flashNote/FlashNotePage';
 import { useFlashNoteController } from './features/flashNote/useFlashNoteController';
-import {
-  BackupRecordList,
-  HistoryCalendarPanel,
-  HistoryFilterToolbar,
-  HistoryPanel,
-  HistoryRecordList
-} from './features/history';
 import {
   createAccountHistoryRecordListProps,
   createHistoryRecordListProps
 } from './features/history/historyGroupLogic';
 import { useHistoryController } from './features/history/useHistoryController';
-import { QuickEntryAccountPicker, QuickEntryPanel } from './features/quickEntry';
 import {
-  RollupImportActionsPanel,
-  RollupImportPage,
   useRollupImportController
 } from './features/rollupImport';
-import {
-  PasswordEditorDialog,
-  SettingsNavigationPanel,
-  SettingsPage,
-  SnapshotEncryptionDisableDialog,
-  SnapshotPasswordEditorDialog
-} from './features/settings';
 import {
   GLOBAL_SETTINGS_SEARCH_ITEMS,
   isGlobalSettingsSection
@@ -224,11 +212,9 @@ import type {
   ArchivedAccountEntry,
   AssetGroup,
   AssetGroupWithAccounts,
-  BackupCycleUnit,
   HistoryRecord,
   HistoryType
 } from './app/types';
-import type { RightPanelActionButtonProps } from './components/rightPanel';
 import type { FlashHistoryRecordInput } from './features/flashNote/flashNoteWriteLogic';
 import type { QuickEntryAccountGroup } from './features/quickEntry';
 import type {
@@ -237,10 +223,7 @@ import type {
   CategoryDetailChartSettings,
   HomeThumbnailChartSettings,
   StructureAssetDisplay,
-  TotalAssetChartSettings,
   TrendAssetDisplay,
-  TrendPointValueMode,
-  TrendXAxisRange
 } from './features/charts';
 import type { ExampleTemplateId } from './exampleData';
 import type {
@@ -250,6 +233,7 @@ import type {
 } from './search/searchTypes';
 import type {
   GlobalSettings,
+  MainContentPosition,
   PagePositionMemoryMode,
   PositiveNegativeColorMode,
   ResolvedTheme,
@@ -379,45 +363,11 @@ type PageCoverage = 'full' | 'right-panel-only' | 'none';
 
 
 
-type ToastTone = 'info' | 'success' | 'error';
-
-
-
-type ToastMessage = {
-
-  id: string;
-
-  message: string;
-
-  tone: ToastTone;
-
-};
-
-
-
 type FirstWelcomeState = {
 
   completed: boolean;
 
   pendingAfterClearAll: boolean;
-
-};
-
-
-
-type FirstWelcomeStage = 'welcome' | 'story' | null;
-
-
-
-type OverlayBackdropProps = Omit<
-
-  HTMLAttributes<HTMLDivElement>,
-
-  'onClick'
-
-> & {
-
-  onBack: () => void;
 
 };
 
@@ -446,6 +396,8 @@ const GITHUB_RELEASES_URL = 'https://github.com/umucatt/NetraFlow/releases';
 const INITIAL_TIME = new Date().toISOString();
 
 const LONG_PRESS_DURATION_MS = 560;
+
+const GROUP_CLICK_DELAY_MS = 220;
 
 const GROUP_DOUBLE_CLICK_MS = 320;
 
@@ -524,6 +476,8 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   themeStyle: 'default',
 
   nyaaThemeUnlocked: false,
+
+  mainContentPosition: 'left',
 
   pagePositionMemoryMode: 'global',
 
@@ -609,15 +563,7 @@ migrateLegacyLocalStorageToNfStorage();
 
 
 
-const FIRST_WELCOME_STORY_ROUTES: Array<{
-
-  templateId: ExampleTemplateId;
-
-  title: string;
-
-  description: string;
-
-}> = [
+const FIRST_WELCOME_STORY_ROUTES: FirstWelcomeStoryRoute[] = [
 
   {
 
@@ -678,70 +624,6 @@ const createId = (prefix: string) => {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 };
-
-
-
-const useOverlayBack = <T extends HTMLElement>(handleBack: () => void) => {
-
-  const mouseDownStartedOnBackdropRef = useRef<{ x: number; y: number } | null>(null);
-
-
-
-  return {
-
-    onMouseDownCapture: (event: MouseEvent<T>) => {
-
-      mouseDownStartedOnBackdropRef.current =
-        event.button === 0 && event.target === event.currentTarget
-          ? { x: event.clientX, y: event.clientY }
-          : null;
-
-    },
-
-    onMouseUpCapture: (event: MouseEvent<T>) => {
-
-      const startedOnBackdrop = mouseDownStartedOnBackdropRef.current;
-      const shouldBack =
-
-        startedOnBackdrop !== null &&
-        event.button === 0 &&
-        event.target === event.currentTarget &&
-        Math.abs(event.clientX - startedOnBackdrop.x) <= 6 &&
-        Math.abs(event.clientY - startedOnBackdrop.y) <= 6;
-
-
-
-      mouseDownStartedOnBackdropRef.current = null;
-
-
-
-      if (!shouldBack) {
-
-        return;
-
-      }
-
-
-
-      handleBack();
-
-    }
-
-  };
-
-};
-
-
-
-function OverlayBackdrop({ onBack, ...props }: OverlayBackdropProps) {
-
-  const overlayBackProps = useOverlayBack<HTMLDivElement>(onBack);
-
-
-
-  return <div {...props} {...overlayBackProps} />;
-
-}
 
 
 
@@ -1403,6 +1285,10 @@ const isPagePositionMemoryMode = (value: unknown): value is PagePositionMemoryMo
 
   value === 'global' || value === 'covered-reset';
 
+const isMainContentPosition = (value: unknown): value is MainContentPosition =>
+
+  value === 'left' || value === 'right';
+
 
 
 const isSearchLogicMode = (value: unknown): value is SearchLogicMode =>
@@ -1502,6 +1388,12 @@ const normalizeGlobalSettings = (value: unknown): GlobalSettings => {
         : DEFAULT_GLOBAL_SETTINGS.themeStyle,
 
     nyaaThemeUnlocked,
+
+    mainContentPosition: isMainContentPosition(value.mainContentPosition)
+
+      ? value.mainContentPosition
+
+      : DEFAULT_GLOBAL_SETTINGS.mainContentPosition,
 
     pagePositionMemoryMode: isPagePositionMemoryMode(value.pagePositionMemoryMode)
 
@@ -2680,12 +2572,6 @@ const getArchivedAccountRestoreTitle = (account: ArchivedAccountEntry) => {
 
 
 
-const getSegmentedControlStyle = (optionCount: number): CSSProperties =>
-
-  ({ '--segmented-option-count': optionCount } as CSSProperties);
-
-
-
 const getAccountDetailTitle = (groupName: string | undefined, accountName: string) => {
 
   const trimmedGroupName = groupName?.trim() ?? '';
@@ -2722,126 +2608,6 @@ const getPageCoverage = (
 
 
 
-const renderWindowControlIcon = (
-
-  control: 'minimize' | 'maximize' | 'close',
-
-  isWindowMaximized = false
-
-): ReactNode => {
-
-  const iconName = control === 'maximize' && isWindowMaximized ? 'restore' : control;
-
-  const iconSvg = {
-
-    minimize: NfWindowMinimizeIcon,
-
-    maximize: NfWindowMaximizeIcon,
-
-    restore: NfWindowRestoreIcon,
-
-    close: NfWindowCloseIcon
-
-  }[iconName];
-
-
-
-  return (
-
-    <NfSvgIcon
-
-      svg={iconSvg}
-
-      className={`window-control-icon window-control-icon--${iconName}`}
-
-      decorative
-
-    />
-
-  );
-
-};
-
-
-
-function AccountTrendPanel({
-
-  points,
-
-  settings
-
-}: {
-
-  points: TrendChartPoint[];
-
-  settings: AccountDetailChartSettings;
-
-}) {
-
-  const [hoveredSeriesId, setHoveredSeriesId] = useState<string | null>(null);
-
-  const [isDetailMode, setIsDetailMode] = useState(false);
-
-  const chartSettings: AssetChartSettings['trend'] = {
-
-    assetDisplay: 'net',
-
-    adaptiveYAxis: settings.adaptiveYAxis,
-
-    xAxisRange: settings.xAxisRange,
-
-    pointValueMode: settings.pointValueMode
-
-  };
-
-
-
-  return (
-
-    <section className="asset-chart-panel account-chart-panel">
-
-      <header className="asset-chart-panel__header chart-visual-text">
-
-        <div>
-
-          <h2>账户趋势</h2>
-
-        </div>
-
-      </header>
-
-      <AssetTrendChart
-
-        points={points}
-
-        settings={chartSettings}
-
-        formatMoney={formatChartNumber}
-
-        activeSeriesId={isDetailMode ? null : hoveredSeriesId}
-
-        onSeriesHover={setHoveredSeriesId}
-
-        detailMode={isDetailMode}
-
-        onDetailModeChange={(enabled) => {
-
-          setIsDetailMode(enabled);
-
-          setHoveredSeriesId(null);
-
-        }}
-
-      />
-
-    </section>
-
-  );
-
-}
-
-
-
 function App() {
 
   const mainContentRef = useRef<HTMLElement | null>(null);
@@ -2870,6 +2636,8 @@ function App() {
 
   const groupPointerInteractionRef = useRef<GroupPointerInteraction | null>(null);
 
+  const groupClickTimerRef = useRef<number | null>(null);
+
   const groupDoubleClickCandidateRef = useRef<{ groupId: string; time: number } | null>(null);
 
   const suppressGroupClickRef = useRef(false);
@@ -2897,8 +2665,6 @@ function App() {
   const lastCatPetAtRef = useRef(0);
 
   const catPetCountRef = useRef(0);
-
-  const toastTimerRefs = useRef<number[]>([]);
 
   const [appData, setAppData] = useState<AppData>(loadAppData);
 
@@ -3020,9 +2786,7 @@ function App() {
 
     useState<GlobalSettingsSection>('appearance');
 
-  const [isWindowMaximized, setIsWindowMaximized] = useState(false);
-
-  const [toastMessages, setToastMessages] = useState<ToastMessage[]>([]);
+  const { toastMessages, showToast, dismissToast } = useToastController();
 
   const resolvedTheme = useMemo(
 
@@ -3037,29 +2801,6 @@ function App() {
     ? globalSettings.themeStyle
 
     : 'default';
-
-  const dismissToast = (toastId: string) => {
-    setToastMessages((currentMessages) =>
-      currentMessages.filter((message) => message.id !== toastId)
-    );
-  };
-
-  const showToast = (message: string, tone: ToastTone = 'info') => {
-    const toastId = createId('toast');
-    const timerId = window.setTimeout(() => dismissToast(toastId), 2800);
-
-    toastTimerRefs.current.push(timerId);
-    setToastMessages((currentMessages) => [
-      ...currentMessages.filter((currentMessage) => currentMessage.message !== message),
-      {
-        id: toastId,
-        message,
-        tone
-      }
-    ]);
-
-    return toastId;
-  };
 
   const clearSecretConsoleLongPress = () => {
 
@@ -3179,67 +2920,21 @@ function App() {
 
   useEffect(() => {
 
-    const electronAPI = window.electronAPI ?? window.electronWindow;
-
-
-
-    if (!electronAPI) {
-
-      console.error('electronAPI is not available');
-
-      return;
-
-    }
-
-
-
-    let isMounted = true;
-
-
-
-    void electronAPI.isMaximized().then((maximized) => {
-
-      if (isMounted) {
-
-        setIsWindowMaximized(maximized);
-
-      }
-
-    });
-
-
-
-    const unsubscribe = electronAPI.onMaximizedChange((maximized) => {
-
-      setIsWindowMaximized(maximized);
-
-    });
-
-
-
-    return () => {
-
-      isMounted = false;
-
-      unsubscribe();
-
-    };
-
-  }, []);
-
-
-
-  useEffect(() => {
-
     const root = document.documentElement;
 
+    root.dataset.themeMode = globalSettings.themeMode;
+
     root.dataset.theme = resolvedTheme;
+
+    root.dataset.resolvedTheme = resolvedTheme;
 
     root.dataset.themeStyle = effectiveThemeStyle;
 
     root.style.setProperty('color-scheme', resolvedTheme);
 
-  }, [effectiveThemeStyle, resolvedTheme]);
+    root.style.removeProperty('background-color');
+
+  }, [effectiveThemeStyle, globalSettings.themeMode, resolvedTheme]);
 
 
 
@@ -3295,12 +2990,6 @@ function App() {
 
     () => () => {
 
-      toastTimerRefs.current.forEach((timerId) => window.clearTimeout(timerId));
-
-      toastTimerRefs.current = [];
-
-
-
       if (catPetTimerRef.current !== null) {
 
         window.clearTimeout(catPetTimerRef.current);
@@ -3326,6 +3015,16 @@ function App() {
         window.clearTimeout(groupLongPressTimerRef.current);
 
         groupLongPressTimerRef.current = null;
+
+      }
+
+
+
+      if (groupClickTimerRef.current !== null) {
+
+        window.clearTimeout(groupClickTimerRef.current);
+
+        groupClickTimerRef.current = null;
 
       }
 
@@ -4299,6 +3998,26 @@ function App() {
 
   };
 
+  const updateMainContentPosition = (value: string) => {
+
+    if (!isMainContentPosition(value)) {
+
+      return;
+
+    }
+
+
+
+    updateGlobalSettings((currentSettings) => ({
+
+      ...currentSettings,
+
+      mainContentPosition: value
+
+    }));
+
+  };
+
 
 
   const updateSearchLogicMode = (value: string) => {
@@ -5052,178 +4771,13 @@ function App() {
     }))
   }));
 
-  const renderQuickSingleEntryAccountPicker = () => (
-    <QuickEntryAccountPicker
-      groups={quickSingleEntryAccountGroups}
-      onChooseAccount={(groupId, accountId) => {
-        const account = getQuickSingleEntryAccount(groupId, accountId);
-
-        if (account) {
-          chooseQuickSingleEntryAccount(groupId, account);
-        }
-      }}
-    />
-  );
-
-
-
-  const renderFlashExitConfirm = () =>
-
-    flashNote.isExitConfirmOpen ? (
-
-      <OverlayBackdrop onBack={flashNote.dismissExitConfirm} className="modal-backdrop">
-
-        <section
-
-          role="dialog"
-
-          aria-modal="true"
-
-          aria-labelledby="flash-exit-title"
-
-          className="modal-card"
-
-          onClick={(event) => event.stopPropagation()}
-
-        >
-
-          <h2 id="flash-exit-title" style={{ margin: '0 0 10px', fontSize: '1.26rem' }}>
-
-            退出后，本次闪记内容不会保留
-
-          </h2>
-
-          <div className="modal-actions">
-
-            <button
-
-              type="button"
-
-              className="modal-button modal-button--secondary"
-
-              onClick={flashNote.dismissExitConfirm}
-
-            >
-
-              继续编辑
-
-            </button>
-
-            <button
-
-              type="button"
-
-              className="modal-button modal-button--danger"
-
-              onClick={flashNote.confirmExit}
-
-            >
-
-              退出
-
-            </button>
-
-          </div>
-
-        </section>
-
-      </OverlayBackdrop>
-
-    ) : null;
-
-
-
-  const renderFlashReturnDateConfirm = () =>
-
-    flashNote.isReturnDateConfirmOpen ? (
-
-      <OverlayBackdrop
-
-        onBack={flashNote.dismissReturnDateConfirm}
-
-        className="modal-backdrop"
-
-      >
-
-        <section
-
-          role="dialog"
-
-          aria-modal="true"
-
-          aria-labelledby="flash-return-date-title"
-
-          className="modal-card"
-
-          onClick={(event) => event.stopPropagation()}
-
-        >
-
-          <p className="eyebrow" style={{ marginBottom: 8 }}>
-
-            返回日期选择
-
-          </p>
-
-          <h2 id="flash-return-date-title" style={{ margin: '0 0 10px', fontSize: '1.26rem' }}>
-
-            返回日期选择后，当前顺序输入内容不会保留
-
-          </h2>
-
-          <div className="modal-actions">
-
-            <button
-
-              type="button"
-
-              className="modal-button modal-button--secondary"
-
-              onClick={flashNote.dismissReturnDateConfirm}
-
-            >
-
-              取消
-
-            </button>
-
-            <button
-
-              type="button"
-
-              className="modal-button modal-button--primary"
-
-              onClick={flashNote.confirmReturnDateSelection}
-
-            >
-
-              返回日期选择
-
-            </button>
-
-          </div>
-
-        </section>
-
-      </OverlayBackdrop>
-
-    ) : null;
-
-
-
-  const renderFlashNotePage = () => (
-
-    <>
-
-      <FlashNotePage {...flashNote.pageProps} />
-
-      {renderFlashExitConfirm()}
-
-      {renderFlashReturnDateConfirm()}
-
-    </>
-
-  );
+  const chooseQuickSingleEntryAccountById = (groupId: string, accountId: string) => {
+    const account = getQuickSingleEntryAccount(groupId, accountId);
+
+    if (account) {
+      chooseQuickSingleEntryAccount(groupId, account);
+    }
+  };
 
 
   const getChangeDisplay = (
@@ -5460,6 +5014,20 @@ function App() {
 
   };
 
+  const clearPendingGroupClick = () => {
+
+    if (groupClickTimerRef.current !== null) {
+
+      window.clearTimeout(groupClickTimerRef.current);
+
+      groupClickTimerRef.current = null;
+
+    }
+
+    groupDoubleClickCandidateRef.current = null;
+
+  };
+
 
 
   const clearGroupLongPress = () => {
@@ -5479,6 +5047,8 @@ function App() {
   const exitGroupEditMode = () => {
 
     clearGroupLongPress();
+
+    clearPendingGroupClick();
 
     setIsGroupEditMode(false);
 
@@ -5622,7 +5192,7 @@ function App() {
 
     interaction.moved = true;
 
-    groupDoubleClickCandidateRef.current = null;
+    clearPendingGroupClick();
 
 
 
@@ -5732,11 +5302,13 @@ function App() {
 
 
 
-  const handleGroupClick = (groupId: string) => {
+  const handleGroupClick = (groupId: string, clickDetail = 1) => {
 
     if (suppressGroupClickRef.current) {
 
       suppressGroupClickRef.current = false;
+
+      clearPendingGroupClick();
 
       return;
 
@@ -5745,6 +5317,20 @@ function App() {
 
 
     if (isGroupEditMode) {
+
+      clearPendingGroupClick();
+
+      return;
+
+    }
+
+
+
+    if (clickDetail === 0) {
+
+      clearPendingGroupClick();
+
+      toggleGroup(groupId);
 
       return;
 
@@ -5768,7 +5354,7 @@ function App() {
 
     ) {
 
-      groupDoubleClickCandidateRef.current = null;
+      clearPendingGroupClick();
 
       openGroupDetailPage(groupId);
 
@@ -5778,9 +5364,19 @@ function App() {
 
 
 
+    clearPendingGroupClick();
+
     groupDoubleClickCandidateRef.current = { groupId, time: now };
 
-    toggleGroup(groupId);
+    groupClickTimerRef.current = window.setTimeout(() => {
+
+      groupClickTimerRef.current = null;
+
+      groupDoubleClickCandidateRef.current = null;
+
+      toggleGroup(groupId);
+
+    }, GROUP_CLICK_DELAY_MS);
 
   };
 
@@ -5904,7 +5500,7 @@ function App() {
 
     suppressGroupClickRef.current = true;
 
-    groupDoubleClickCandidateRef.current = null;
+    clearPendingGroupClick();
 
     event.dataTransfer.effectAllowed = 'move';
 
@@ -5970,7 +5566,7 @@ function App() {
 
     suppressNextGroupClick(350);
 
-    groupDoubleClickCandidateRef.current = null;
+    clearPendingGroupClick();
 
     setDraggingGroupId('');
     setGroupDropIndicator(null);
@@ -7020,7 +6616,7 @@ function App() {
   const clearDeletedAssetGroupUiState = (groupId: string, groupName: string) => {
     clearGroupLongPress();
     groupPointerInteractionRef.current = null;
-    groupDoubleClickCandidateRef.current = null;
+    clearPendingGroupClick();
     suppressNextGroupClick(250);
     setIsGroupEditMode(false);
     setDraggingGroupId('');
@@ -7223,6 +6819,62 @@ function App() {
                       ? `global-settings:${globalSettingsSection}`
 
                       : 'home-actions';
+
+  const rightPanelMode: RightPanelMode = globalSearch.isOpen
+
+    ? 'search'
+
+    : isRollupImportOpen
+
+      ? 'rollup-import'
+
+      : isDangerActionsOpen && selectedAccount && selectedAccountEntry
+
+        ? 'account-danger'
+
+        : isAccountChartsOpen && selectedAccount && selectedAccountEntry
+
+          ? 'account-chart-settings'
+
+          : selectedAccount && selectedAccountEntry
+
+            ? 'account-actions'
+
+            : isHistoryOpen && historyPanelView === 'backup'
+
+              ? 'snapshot'
+
+              : isHistoryOpen
+
+                ? 'history'
+
+                : isArchivedAccountsOpen
+
+                  ? 'archived'
+
+                  : isTotalChartsOpen
+
+                    ? 'chart-settings'
+
+                    : selectedGroupDetail
+
+                      ? 'group-detail'
+
+                      : isGlobalSettingsOpen
+
+                        ? 'settings'
+
+                        : 'home';
+
+  useEffect(() => {
+
+    if (mainPageKey !== 'home') {
+
+      clearPendingGroupClick();
+
+    }
+
+  }, [mainPageKey]);
 
 
 
@@ -8137,1642 +7789,84 @@ function App() {
 
 
 
-  const renderRightPanelSection = (
-
-    title: string | null,
-
-    children: ReactNode,
-
-    eyebrow: string | null = '操作区',
-
-    className = '',
-
-    titleAccessory: ReactNode = null
-
-  ) => (
-
-    <RightPanelSection
-      title={title}
-      eyebrow={eyebrow}
-      className={className}
-      titleAccessory={titleAccessory}
-    >
-      {children}
-    </RightPanelSection>
-
-  );
-
-
-
-  const renderRightPanelPage = (
-
-    title: string | null,
-
-    children: ReactNode,
-
-    eyebrow: string | null = null,
-
-    className = '',
-
-    titleAccessory: ReactNode = null
-
-  ) => (
-
-    <section className={`right-panel-page${className ? ` ${className}` : ''}`}>
-
-      {eyebrow ? <p className="eyebrow right-panel-eyebrow">{eyebrow}</p> : null}
-
-      {title || titleAccessory ? (
-
-        <div className="right-panel-title-row">
-
-          {title ? <h2 className="right-panel-title">{title}</h2> : <span />}
-
-          {titleAccessory}
-
-        </div>
-
-      ) : null}
-
-      <div className="right-panel-stack">{children}</div>
-
-    </section>
-
-  );
-
-
-
-  const renderRightPanelActionButton = (props: RightPanelActionButtonProps) => (
-    <RightPanelActionButton {...props} />
-  );
-
-
-
-  const renderSnapshotSummary = () => (
-
-    <div className="right-panel-facts">
-
-      {[
-
-        {
-          label: '上次快照',
-          value:
-            backupRecords.length === 0
-              ? '从未备份'
-              : formatRelativeBackupTime(backupRecords[0].backedUpAt)
-        },
-
-        { label: '账户数量', value: `${accountCount}` },
-
-        { label: '历史记录', value: `${history.length}` },
-
-        { label: '增量记录', value: incrementalRecordValue }
-
-      ].map((item) => (
-
-        <div key={item.label}>
-
-          <span>{item.label}</span>
-
-          <strong>{item.value}</strong>
-
-        </div>
-
-      ))}
-
-    </div>
-
-  );
-
-
-
-  const renderAutoBackupControls = () => {
-
-    const controls = (
-
-      <div className="right-panel-form-grid">
-
-        <div
-
-          className="segmented-control right-panel-segmented"
-
-          aria-label="自动快照开关"
-
-          style={getSegmentedControlStyle(2)}
-
-        >
-
-        {[
-
-          { value: true, label: '开启' },
-
-          { value: false, label: '关闭' }
-
-        ].map((option) => (
-
-          <button
-
-            key={option.label}
-
-            type="button"
-
-            onClick={() => updateAutoBackupEnabled(option.value)}
-
-            className={autoBackupDraft.enabled === option.value ? 'is-selected' : undefined}
-
-          >
-
-            {option.label}
-
-          </button>
-
-        ))}
-
-      </div>
-
-
-
-      <div
-
-        aria-disabled={!autoBackupDraft.enabled}
-
-        className="right-panel-form-grid"
-
-        style={{
-
-          opacity: autoBackupDraft.enabled ? 1 : 0.45,
-
-          pointerEvents: autoBackupDraft.enabled ? 'auto' : 'none'
-
-        }}
-
-      >
-
-        <label className="right-panel-label">
-
-          自动快照周期
-
-          <div
-
-            className="stepper-input"
-
-            onWheel={(event) => {
-
-              event.preventDefault();
-
-              event.stopPropagation();
-
-
-
-              if (event.deltaY === 0) {
-
-                return;
-
-              }
-
-
-
-              adjustAutoBackupCycleValue(event.deltaY > 0 ? -1 : 1);
-
-            }}
-
-          >
-
-            <input
-
-              ref={autoSnapshotCycleInputRef}
-
-              type="text"
-
-              inputMode="numeric"
-
-              disabled={!autoBackupDraft.enabled}
-
-              value={autoBackupCycleValueInput}
-
-              onChange={(event) => updateAutoBackupCycleValue(event.target.value)}
-
-              onBlur={() => {
-
-                if (!autoBackupCycleValueInput) {
-
-                  setAutoBackupCycleValueInput(String(autoBackupDraft.cycle.value));
-
-                }
-
-              }}
-
-              onWheel={(event) => {
-
-                event.preventDefault();
-
-                event.stopPropagation();
-
-
-
-                if (event.deltaY === 0) {
-
-                  return;
-
-                }
-
-
-
-                adjustAutoBackupCycleValue(event.deltaY > 0 ? -1 : 1);
-
-              }}
-
-            />
-
-            <div className="stepper-input__controls">
-
-              {[
-
-                { label: '增加自动快照周期', direction: 1 as const, path: 'M7 14l5-5 5 5' },
-
-                { label: '减少自动快照周期', direction: -1 as const, path: 'M7 10l5 5 5-5' }
-
-              ].map((control) => (
-
-                <button
-
-                  key={control.label}
-
-                  type="button"
-
-                  aria-label={control.label}
-
-                  disabled={!autoBackupDraft.enabled}
-
-                  onMouseDown={(event) => event.preventDefault()}
-
-                  onClick={() => adjustAutoBackupCycleValue(control.direction)}
-
-                  style={{
-
-                    borderTop:
-
-                      control.direction === -1
-
-                        ? '1px solid var(--border-soft)'
-
-                        : 0
-
-                  }}
-
-                >
-
-                  <svg
-
-                    aria-hidden="true"
-
-                    viewBox="0 0 24 24"
-
-                    fill="none"
-
-                    style={{ width: 12, height: 12 }}
-
-                  >
-
-                    <path
-
-                      d={control.path}
-
-                      stroke="currentColor"
-
-                      strokeWidth="2"
-
-                      strokeLinecap="round"
-
-                      strokeLinejoin="round"
-
-                    />
-
-                  </svg>
-
-                </button>
-
-              ))}
-
-            </div>
-
-          </div>
-
-        </label>
-
-
-
-        <div className="right-panel-form-grid">
-
-          <span className="right-panel-label-text">单位</span>
-
-          <div
-
-            className="segmented-control right-panel-segmented"
-
-            style={getSegmentedControlStyle(3)}
-
-          >
-
-            {[
-
-              { value: 'day', label: '日' },
-
-              { value: 'week', label: '周' },
-
-              { value: 'month', label: '月' }
-
-            ].map((option) => (
-
-              <button
-
-                key={option.value}
-
-                type="button"
-
-                disabled={!autoBackupDraft.enabled}
-
-                onClick={() =>
-
-                  updateAutoBackupCycleUnit(option.value as BackupCycleUnit)
-
-                }
-
-                className={
-
-                  autoBackupDraft.cycle.unit === option.value ? 'is-selected' : undefined
-
-                }
-
-              >
-
-                {option.label}
-
-              </button>
-
-            ))}
-
-          </div>
-
-        </div>
-
-
-
-        <div className="right-panel-form-grid">
-
-          <span className="right-panel-label-text">导出目录</span>
-
-          <div className="right-panel-path-row">
-
-            <div title={autoBackupDraft.directory || '未选择目录'}>
-
-              {autoBackupDraft.directory || '未选择目录'}
-
-            </div>
-
-            <button
-
-              type="button"
-
-              disabled={!autoBackupDraft.enabled}
-
-              onClick={selectAutoBackupDirectory}
-
-            >
-
-              选择
-
-            </button>
-
-          </div>
-
-        </div>
-
-      </div>
-
-
-
-      {hasAutoBackupDraftChanges ? (
-
-        <button
-
-          type="button"
-
-          className="right-panel-primary-button"
-
-          disabled={!canSaveAutoBackupSettings}
-
-          onClick={saveAutoBackupDraft}
-
-        >
-
-          保存自动快照设置
-
-        </button>
-
-      ) : null}
-
-    </div>
-
-    );
-
-
-
-    return controls;
-
-  };
-
-
-
-  const renderSearchPreview = () => (
-    <SearchPreviewPanel
-      hasQuery={globalSearch.output.hasQuery}
-      focusedResult={globalSearch.focusedResult}
-      sortedHistory={sortedHistory}
-      onOpenResult={globalSearch.openResult}
-      onCloseSearch={globalSearch.closeSearch}
-      formatMoney={formatMoney}
-      formatShortTime={formatHistoryRecordDate}
-      getAmountChange={getAmountChange}
-      getAccountNatureLabel={getAccountNatureLabel}
-    />
-  );
-
-
-
-  const renderAccountActions = () => {
-
-    if (!accountActionsPanelProps) {
-
-      return null;
-
-    }
-
-
-
-    return <AccountActionsPanel {...accountActionsPanelProps} />;
-
-  };
-
-
-
-  const renderAccountChartSettingsActions = () => {
-
-    if (!selectedAccountEntry) {
-
-      return null;
-
-    }
-
-
-
-    const isLockedByGlobal = assetChartSettings.globalChartControlMode === 'locked';
-
-    return (
-      <AccountChartSettingsPanel
-        isLockedByGlobal={isLockedByGlobal}
-        settings={selectedAccountChartSettings}
-        onUpdateSettings={(updater) =>
-          updateLocalAccountDetailChartSettings(selectedAccountEntry.id, (currentSettings) =>
-            updater(currentSettings) as AccountDetailChartSettings
-          )
+  const snapshotSecurityDialogLayerProps: SnapshotSecurityDialogLayerProps = {
+    passwordEditor: passwordEditorMode
+      ? {
+          mode: passwordEditorMode,
+          oldPassword: oldPasswordInput,
+          newPassword: newPasswordInput,
+          confirmPassword: confirmPasswordInput,
+          error: passwordEditorError,
+          isSaving: isSavingPassword,
+          onOldPasswordChange: (value) => {
+            setOldPasswordInput(value);
+            setPasswordEditorError('');
+          },
+          onNewPasswordChange: (value) => {
+            setNewPasswordInput(value);
+            setPasswordEditorError('');
+          },
+          onConfirmPasswordChange: (value) => {
+            setConfirmPasswordInput(value);
+            setPasswordEditorError('');
+          },
+          onSubmit: saveLoginPassword,
+          onCancel: resetPasswordEditor
         }
-        onBackToAccountDetail={closeAccountChartsPage}
-        renderSegmentedControl={renderChartSegmentedControl}
-      />
-    );
-
-  };
-
-
-
-  const renderDangerActions = () => {
-
-    if (!accountDangerActionsPanelProps) {
-
-      return null;
-
-    }
-
-
-
-    return <AccountDangerActionsPanel {...accountDangerActionsPanelProps} />;
-
-  };
-
-
-
-  const renderHistoryActions = () =>
-
-    renderRightPanelPage(
-
-      '历史',
-
-      <>
-
-        {renderRightPanelActionButton({
-
-          label: '快照',
-
-          tone: 'primary',
-
-          onClick: openBackupPanel
-
-        })}
-
-        {renderRightPanelActionButton({
-
-          label: '关闭历史记录',
-
-          onClick: () => currentLayerBack?.()
-
-        })}
-
-      </>,
-
-      null
-
-    );
-
-
-
-  const renderSnapshotActions = () => (
-
-    <section className="right-panel-page right-panel-page--snapshot">
-
-      <div className="right-panel-stack right-panel-stack--snapshot">
-
-        <section className="right-panel-subsection">
-
-          <h2>手动快照</h2>
-
-          {renderSnapshotSummary()}
-
-          {renderRightPanelActionButton({
-
-            label: '导出快照',
-
-            tone: 'primary',
-
-            onClick: exportBackup
-
-          })}
-
-          {renderRightPanelActionButton({
-
-            label: '导入快照',
-
-            onClick: () => backupFileInputRef.current?.click()
-
-          })}
-
-        </section>
-
-
-
-        <section
-          className={`right-panel-subsection${
-            isExampleMode ? ' example-mode-disabled-panel right-panel-subsection--auto-snapshot-disabled' : ''
-          }`}
-          aria-disabled={isExampleMode ? 'true' : undefined}
-        >
-
-          <h2>自动快照</h2>
-
-          {renderAutoBackupControls()}
-
-          {isExampleMode ? (
-            <div className="example-mode-disabled-panel__banner">示例模式下不可用</div>
-          ) : null}
-
-        </section>
-
-
-
-        {renderRightPanelActionButton({
-
-          label:
-
-            backupReturnTarget === 'global-settings-backup' ? '返回数据与备份' : '返回历史记录',
-
-          onClick: () => currentLayerBack?.()
-
-        })}
-
-      </div>
-
-    </section>
-
-  );
-
-  const renderArchivedActions = () =>
-
-    renderRightPanelPage(
-
-      '已归档账户',
-
-      <>
-
-        <article className="right-panel-preview">
-
-          <span>归档列表</span>
-
-          <strong>{archivedAccounts.length} 个账户</strong>
-
-          <p>在左侧选择账户后，右侧会切换到账户恢复或删除操作。</p>
-
-        </article>
-
-        {renderRightPanelActionButton({
-
-          label: '返回资产总览',
-
-          onClick: () => setIsArchivedAccountsOpen(false)
-
-        })}
-
-      </>,
-
-      '归档'
-
-    );
-
-
-
-  const renderChartSegmentedControl = (
-
-    label: string,
-
-    options: Array<{ value: string; label: string }>,
-
-    currentValue: string,
-
-    onSelect: (value: string) => void,
-
-    disabled = false,
-
-    note?: ReactNode
-
-  ) => (
-
-    <div className={`right-panel-form-grid${disabled ? ' is-chart-control-locked' : ''}`}>
-
-      <span className="right-panel-label-text">{label}</span>
-
-      <div
-
-        className="segmented-control right-panel-segmented"
-
-        style={getSegmentedControlStyle(options.length)}
-
-        aria-disabled={disabled ? 'true' : undefined}
-
-      >
-
-        {options.map((option) => (
-
-          <button
-
-            key={option.value}
-
-            type="button"
-
-            disabled={disabled}
-
-            onClick={() => {
-
-              if (!disabled) {
-
-                onSelect(option.value);
-
-              }
-
-            }}
-
-            className={currentValue === option.value ? 'is-selected' : undefined}
-
-          >
-
-            {option.label}
-
-          </button>
-
-        ))}
-
-      </div>
-
-      {note ? <p className="right-panel-note">{note}</p> : null}
-
-    </div>
-
-  );
-
-
-
-  const renderChartSettingsActions = () => {
-
-    const isLockedByGlobal = assetChartSettings.globalChartControlMode === 'locked';
-
-
-
-    return (
-
-      <ChartSettingsPanel
-
-        isLockedByGlobal={isLockedByGlobal}
-
-        settings={assetChartSettings}
-
-        onUpdateSettings={(updater) =>
-
-          updateAssetChartSettings((currentSettings) =>
-
-            updater(currentSettings as TotalAssetChartSettings) as AssetChartSettings
-
-          )
-
+      : null,
+    snapshotPasswordEditor: snapshotPasswordEditorMode
+      ? {
+          mode: snapshotPasswordEditorMode,
+          oldPassword: oldSnapshotPasswordInput,
+          newPassword: newSnapshotPasswordInput,
+          confirmPassword: confirmSnapshotPasswordInput,
+          visibleField: visibleSnapshotPasswordField,
+          error: snapshotPasswordEditorError,
+          isSaving: isSavingSnapshotPassword,
+          onOldPasswordChange: (value) => {
+            setOldSnapshotPasswordInput(value);
+            setSnapshotPasswordEditorError('');
+          },
+          onNewPasswordChange: (value) => {
+            setNewSnapshotPasswordInput(value);
+            setSnapshotPasswordEditorError('');
+          },
+          onConfirmPasswordChange: (value) => {
+            setConfirmSnapshotPasswordInput(value);
+            setSnapshotPasswordEditorError('');
+          },
+          onToggleVisibility: toggleSnapshotPasswordVisibility,
+          onSubmit: saveSnapshotPassword,
+          onCancel: resetSnapshotPasswordEditor
         }
-
-        onBackToOverview={closeTotalChartsPage}
-
-        renderSegmentedControl={renderChartSegmentedControl}
-
-      />
-
-    );
-
+      : null,
+    passwordProtectionDisable: isPasswordDisableConfirmOpen
+      ? {
+          password: passwordDisableInput,
+          error: passwordDisableError,
+          isLoading: isDisablingPasswordProtection,
+          onPasswordChange: (value) => {
+            setPasswordDisableInput(value);
+            setPasswordDisableError('');
+          },
+          onSubmit: confirmDisablePasswordProtection,
+          onCancel: closePasswordDisableConfirm
+        }
+      : null,
+    snapshotEncryptionDisable: isSnapshotEncryptionDisableConfirmOpen
+      ? {
+          password: snapshotEncryptionDisableInput,
+          error: snapshotEncryptionDisableError,
+          isLoading: isDisablingSnapshotEncryption,
+          onPasswordChange: (value) => {
+            setSnapshotEncryptionDisableInput(value);
+            setSnapshotEncryptionDisableError('');
+          },
+          onSubmit: confirmDisableSnapshotEncryption,
+          onCancel: closeSnapshotEncryptionDisableConfirm
+        }
+      : null
   };
-
-
-
-  const renderGroupDetailActions = () => {
-
-    if (!selectedGroupDetail) {
-
-      return null;
-
-    }
-
-
-
-    const isLockedByGlobal = assetChartSettings.globalChartControlMode === 'locked';
-
-    return (
-
-      <>
-
-        {renderRightPanelSection(
-
-          '账户类型信息',
-
-          <>
-
-            <label className="right-panel-label">
-
-              账户类型
-
-              <input
-
-                type="text"
-
-                value={groupDetailNameDraft}
-
-                onChange={(event) => {
-
-                  setGroupDetailNameDraft(event.target.value);
-
-                  setGroupDetailError('');
-
-                }}
-
-              />
-
-            </label>
-
-            {renderChartSegmentedControl(
-
-              '参与统计',
-
-              [
-
-                { value: 'yes', label: '是' },
-
-                { value: 'no', label: '否' }
-
-              ],
-
-              groupDetailStatsDraft ? 'yes' : 'no',
-
-              (value) => {
-
-                setGroupDetailStatsDraft(value === 'yes');
-
-                setGroupDetailError('');
-
-              }
-
-            )}
-
-            {groupDetailError ? (
-
-              <p className="right-panel-note" style={{ color: 'var(--danger-text)' }}>
-
-                {groupDetailError}
-
-              </p>
-
-            ) : null}
-
-            {renderRightPanelActionButton({
-
-              label: '保存信息',
-
-              className: 'right-panel-action--save',
-
-              onClick: saveGroupDetailInfo
-
-            })}
-
-          </>,
-
-          null
-
-        )}
-
-
-
-        <RightPanelSection
-          title="图表参数设置"
-          eyebrow={null}
-          contentClassName={isLockedByGlobal ? 'example-mode-disabled-panel chart-settings-locked-panel' : ''}
-          contentOverlay={
-            isLockedByGlobal ? (
-              <div className="example-mode-disabled-panel__banner">由全局图表设置锁定</div>
-            ) : null
-          }
-          ariaDisabled={isLockedByGlobal}
-        >
-
-            {renderChartSegmentedControl(
-
-              '横轴范围显示',
-
-              [
-
-                { value: '1m', label: '近 1 月' },
-
-                { value: '3m', label: '近 3 月' },
-
-                { value: '6m', label: '近 6 月' },
-
-                { value: '1y', label: '近 1 年' }
-
-              ],
-
-              selectedGroupDetailChartSettings.xAxisRange,
-
-              (value) =>
-
-                updateLocalCategoryDetailChartSettings(
-
-                  selectedGroupDetail.id,
-
-                  (currentSettings) => ({
-
-                    ...currentSettings,
-
-                    xAxisRange: value as TrendXAxisRange
-
-                  })
-
-                ),
-
-              isLockedByGlobal
-
-            )}
-
-            {renderChartSegmentedControl(
-
-              '点值显示',
-
-              [
-
-                { value: 'adaptive', label: '自适应' },
-
-                { value: 'minmax', label: '最高最低' },
-
-                { value: 'none', label: '不显示' }
-
-              ],
-
-              selectedGroupDetailChartSettings.pointValueMode,
-
-              (value) =>
-
-                updateLocalCategoryDetailChartSettings(
-
-                  selectedGroupDetail.id,
-
-                  (currentSettings) => ({
-
-                    ...currentSettings,
-
-                    pointValueMode: value as TrendPointValueMode
-
-                  })
-
-                ),
-
-              isLockedByGlobal
-
-            )}
-
-        </RightPanelSection>
-
-        {renderRightPanelActionButton({
-          label: '返回资产总览',
-          className: 'right-panel-page-action',
-          onClick: closeGroupDetailPage
-        })}
-
-      </>
-
-    );
-
-  };
-
-
-
-  const renderPasswordEditor = () => {
-
-    if (!passwordEditorMode) {
-
-      return null;
-
-    }
-
-    return (
-      <PasswordEditorDialog
-        mode={passwordEditorMode}
-        oldPassword={oldPasswordInput}
-        newPassword={newPasswordInput}
-        confirmPassword={confirmPasswordInput}
-        error={passwordEditorError}
-        isSaving={isSavingPassword}
-        onOldPasswordChange={(value) => {
-          setOldPasswordInput(value);
-          setPasswordEditorError('');
-        }}
-        onNewPasswordChange={(value) => {
-          setNewPasswordInput(value);
-          setPasswordEditorError('');
-        }}
-        onConfirmPasswordChange={(value) => {
-          setConfirmPasswordInput(value);
-          setPasswordEditorError('');
-        }}
-        onSubmit={saveLoginPassword}
-        onCancel={resetPasswordEditor}
-      />
-    );
-
-  };
-
-
-
-  const renderSnapshotPasswordEditor = () => {
-
-    if (!snapshotPasswordEditorMode) {
-
-      return null;
-
-    }
-
-    return (
-      <SnapshotPasswordEditorDialog
-        mode={snapshotPasswordEditorMode}
-        oldPassword={oldSnapshotPasswordInput}
-        newPassword={newSnapshotPasswordInput}
-        confirmPassword={confirmSnapshotPasswordInput}
-        visibleField={visibleSnapshotPasswordField}
-        error={snapshotPasswordEditorError}
-        isSaving={isSavingSnapshotPassword}
-        onOldPasswordChange={(value) => {
-          setOldSnapshotPasswordInput(value);
-          setSnapshotPasswordEditorError('');
-        }}
-        onNewPasswordChange={(value) => {
-          setNewSnapshotPasswordInput(value);
-          setSnapshotPasswordEditorError('');
-        }}
-        onConfirmPasswordChange={(value) => {
-          setConfirmSnapshotPasswordInput(value);
-          setSnapshotPasswordEditorError('');
-        }}
-        onToggleVisibility={toggleSnapshotPasswordVisibility}
-        onSubmit={saveSnapshotPassword}
-        onCancel={resetSnapshotPasswordEditor}
-      />
-    );
-
-  };
-
-
-
-  const renderRollupImportActions = () =>
-    renderRightPanelPage(
-      rollupImport.actionsTitle,
-      <RollupImportActionsPanel {...rollupImport.actionsPanelProps} />,
-      null,
-      rollupImport.actionsClassName
-    );
-
-
-
-  const renderHomeActions = () =>
-
-    renderRightPanelPage(
-
-      '下一步',
-
-      <>
-
-        {renderRightPanelActionButton({
-
-          label: '记一笔',
-
-          onClick: openQuickSingleEntry
-
-        })}
-
-        <button
-
-          type="button"
-
-          className="right-panel-action flash-note-entry-action"
-
-          onClick={openFlashNote}
-
-        >
-
-          <strong>闪记</strong>
-
-          <span className="home-action-entry__icon">{renderFlashLightningIcon()}</span>
-
-        </button>
-
-        <button
-
-          type="button"
-
-          className="right-panel-action rollup-import-entry-action"
-
-          onClick={openRollupImport}
-
-        >
-
-          <strong>汇总导入</strong>
-
-          <span className="home-action-entry__icon">
-
-            <NfSvgIcon
-
-              svg={NfRollupSourceWideIcon}
-
-              className="rollup-import-source-icon"
-
-              title="汇总导入"
-
-              decorative
-
-            />
-
-          </span>
-
-        </button>
-
-        {renderRightPanelActionButton({
-
-          label: '全局搜索',
-
-          onClick: globalSearch.openSearch
-
-        })}
-
-        {renderRightPanelActionButton({
-
-          label: '账户新增 / 恢复',
-
-          onClick: openAddAccount
-
-        })}
-
-        {renderRightPanelActionButton({
-
-          label: '历史记录',
-
-          onClick: openHistoryPanel
-
-        })}
-
-        {renderRightPanelActionButton({
-
-          label: '全局设置',
-
-          onClick: openGlobalSettings
-
-        })}
-
-      </>,
-
-      null,
-
-      '',
-
-      isExampleMode ? (
-        <button
-          type="button"
-          className="home-example-mode-badge"
-          aria-label="打开示例数据设置"
-          onClick={openExampleDataSettingsFromHome}
-        >
-          示例模式
-        </button>
-      ) : null
-
-    );
-
-
-
-  const renderPasswordDisableConfirm = () =>
-
-    isPasswordDisableConfirmOpen ? (
-
-      <OverlayBackdrop onBack={closePasswordDisableConfirm} className="modal-backdrop">
-
-        <form
-
-          role="dialog"
-
-          aria-modal="true"
-
-          aria-labelledby="disable-password-protection-title"
-
-          onClick={(event) => event.stopPropagation()}
-
-          onSubmit={confirmDisablePasswordProtection}
-
-          className="modal-card"
-
-        >
-
-          <p className="eyebrow" style={{ marginBottom: 8 }}>
-
-            登录密码确认
-
-          </p>
-
-          <h2
-
-            id="disable-password-protection-title"
-
-            style={{ margin: '0 0 10px', fontSize: '1.26rem' }}
-
-          >
-
-            关闭密码保护
-
-          </h2>
-
-          <p style={{ margin: '0 0 14px', color: 'var(--text-muted)', fontSize: '0.94rem' }}>
-
-            请输入当前登录密码
-
-          </p>
-
-          <label className="right-panel-label">
-
-            登录密码
-
-            <input
-
-              autoFocus
-
-              type="password"
-
-              autoComplete="current-password"
-
-              value={passwordDisableInput}
-
-              onChange={(event) => {
-
-                setPasswordDisableInput(event.target.value);
-
-                setPasswordDisableError('');
-
-              }}
-
-            />
-
-          </label>
-
-          {passwordDisableError ? (
-
-            <p style={{ margin: '12px 0 0', color: '#b91c1c', fontSize: '0.92rem' }}>
-
-              {passwordDisableError}
-
-            </p>
-
-          ) : null}
-
-          <div className="modal-actions">
-
-            <button
-
-              type="button"
-
-              onClick={closePasswordDisableConfirm}
-
-              className="modal-button modal-button--secondary"
-
-            >
-
-              取消
-
-            </button>
-
-            <button
-
-              type="submit"
-
-              disabled={isDisablingPasswordProtection}
-
-              className="modal-button modal-button--primary"
-
-            >
-
-              {isDisablingPasswordProtection ? '验证中' : '确认关闭'}
-
-            </button>
-
-          </div>
-
-        </form>
-
-      </OverlayBackdrop>
-
-    ) : null;
-
-
-
-  const renderSnapshotEncryptionDisableConfirm = () =>
-
-    isSnapshotEncryptionDisableConfirmOpen ? (
-      <SnapshotEncryptionDisableDialog
-        password={snapshotEncryptionDisableInput}
-        error={snapshotEncryptionDisableError}
-        isLoading={isDisablingSnapshotEncryption}
-        onPasswordChange={(value) => {
-          setSnapshotEncryptionDisableInput(value);
-          setSnapshotEncryptionDisableError('');
-        }}
-        onSubmit={confirmDisableSnapshotEncryption}
-        onCancel={closeSnapshotEncryptionDisableConfirm}
-      />
-
-    ) : null;
-
-
-
-  const renderFirstWelcome = () => {
-
-    if (firstWelcomeStage === 'welcome') {
-
-      return (
-
-        <OverlayBackdrop onBack={completeFirstWelcome} className="modal-backdrop">
-
-          <section
-
-            role="dialog"
-
-            aria-modal="true"
-
-            aria-labelledby="first-welcome-title"
-
-            onClick={(event) => event.stopPropagation()}
-
-            className="modal-card first-welcome-modal"
-
-          >
-
-            <h2 id="first-welcome-title" className="first-welcome-modal__message">
-
-              Halo, 你好像是第一次来到净流，需要跟我一起看看吗？
-
-            </h2>
-
-            <div className="modal-actions first-welcome-modal__actions">
-
-              <button
-
-                type="button"
-
-                onClick={openFirstWelcomeStory}
-
-                className="modal-button modal-button--primary"
-
-              >
-
-                拉手~
-
-              </button>
-
-              <button
-
-                type="button"
-
-                onClick={completeFirstWelcome}
-
-                className="modal-button modal-button--secondary"
-
-              >
-
-                不用啦
-
-              </button>
-
-            </div>
-
-          </section>
-
-        </OverlayBackdrop>
-
-      );
-
-    }
-
-
-
-    if (firstWelcomeStage === 'story') {
-
-      return (
-
-        <OverlayBackdrop onBack={completeFirstWelcome} className="modal-backdrop">
-
-          <section
-
-            role="dialog"
-
-            aria-modal="true"
-
-            aria-labelledby="first-welcome-story-title"
-
-            onClick={(event) => event.stopPropagation()}
-
-            className="modal-card first-welcome-modal first-welcome-modal--story"
-
-          >
-
-            <div className="first-welcome-story-copy">
-
-              <h2 id="first-welcome-story-title">
-
-                ta轻轻拉住你的手，推开了净流的小门
-
-              </h2>
-
-              <p>然后</p>
-
-            </div>
-
-            <div className="first-welcome-story-grid">
-
-              {FIRST_WELCOME_STORY_ROUTES.map((route) => (
-
-                <button
-
-                  key={route.templateId}
-
-                  type="button"
-
-                  className="first-welcome-story-card"
-
-                  onClick={() => chooseFirstWelcomeStoryRoute(route.templateId)}
-
-                >
-
-                  <strong>{route.title}</strong>
-
-                  <span>{route.description}</span>
-
-                </button>
-
-              ))}
-
-            </div>
-
-            <div className="modal-actions first-welcome-modal__actions">
-
-              <button
-
-                type="button"
-
-                onClick={completeFirstWelcome}
-
-                className="modal-button modal-button--secondary first-welcome-modal__quiet-button"
-
-              >
-
-                还是先不用啦
-
-              </button>
-
-            </div>
-
-          </section>
-
-        </OverlayBackdrop>
-
-      );
-
-    }
-
-
-
-    return null;
-
-  };
-
-
-
-  const renderLockScreen = () =>
-
-    isLocked ? (
-
-      <div className="lock-screen" role="dialog" aria-modal="true" aria-labelledby="lock-title">
-
-        <form className="lock-screen__panel" onSubmit={unlockApp}>
-
-          <div className="lock-screen__brand">
-
-            <img src={PRODUCT_ICON_PATH} alt="" aria-hidden="true" />
-
-            <div>
-
-              <p className="eyebrow">净流 / NetraFlow</p>
-
-              <h2 id="lock-title">已锁定</h2>
-
-            </div>
-
-          </div>
-
-          <label className="lock-screen__field">
-
-            登录密码
-
-            <input
-
-              autoFocus
-
-              type="password"
-
-              autoComplete="current-password"
-
-              value={unlockPasswordInput}
-
-              onChange={(event) => {
-
-                setUnlockPasswordInput(event.target.value);
-
-                setUnlockError('');
-
-              }}
-
-            />
-
-          </label>
-
-          {unlockError ? <p className="lock-screen__error">{unlockError}</p> : null}
-
-          <button type="submit" disabled={isUnlocking} className="lock-screen__button">
-
-            {isUnlocking ? '解锁中' : '解锁'}
-
-          </button>
-
-        </form>
-
-      </div>
-
-    ) : null;
-
-
-
-  const renderRightPanelContent = () => {
-
-    if (globalSearch.isOpen) {
-
-      return renderSearchPreview();
-
-    }
-
-
-
-    if (isRollupImportOpen) {
-
-      return renderRollupImportActions();
-
-    }
-
-
-
-    if (isDangerActionsOpen && selectedAccount && selectedAccountEntry) {
-
-      return renderDangerActions();
-
-    }
-
-
-
-    if (isAccountChartsOpen && selectedAccount && selectedAccountEntry) {
-
-      return renderAccountChartSettingsActions();
-
-    }
-
-
-
-    if (selectedAccount && selectedAccountEntry) {
-
-      return renderAccountActions();
-
-    }
-
-
-
-    if (isHistoryOpen && historyPanelView === 'backup') {
-
-      return renderSnapshotActions();
-
-    }
-
-
-
-    if (isHistoryOpen) {
-
-      return renderHistoryActions();
-
-    }
-
-
-
-    if (isArchivedAccountsOpen) {
-
-      return renderArchivedActions();
-
-    }
-
-
-
-    if (isTotalChartsOpen) {
-
-      return renderChartSettingsActions();
-
-    }
-
-
-
-    if (selectedGroupDetail) {
-
-      return renderGroupDetailActions();
-
-    }
-
-
-
-    if (isGlobalSettingsOpen) {
-
-      return (
-        <SettingsNavigationPanel
-          selectedSection={globalSettingsSection}
-          onSelectSection={setGlobalSettingsSection}
-          onClose={closeGlobalSettings}
-        />
-      );
-
-    }
-
-
-
-    return renderHomeActions();
-
-  };
-
-
-
   const isSecuritySettingsPageDisabled =
     isGlobalSettingsOpen && globalSettingsSection === 'security' && isExampleMode;
 
@@ -9805,6 +7899,7 @@ function App() {
     onHomeAssetStatCompactChange: updateHomeAssetStatCompact,
     onThemeModeChange: updateThemeMode,
     onThemeStyleChange: updateThemeStyle,
+    onMainContentPositionChange: updateMainContentPosition,
     onPagePositionMemoryModeChange: updatePagePositionMemoryMode,
     onChartColorAssignmentModeChange: updateChartColorAssignmentMode,
     onGlobalChartControlModeChange: updateGlobalChartControlMode,
@@ -9832,1836 +7927,756 @@ function App() {
     onClearVersionLongPress: clearSecretConsoleLongPress
   };
 
+  const mainContentMode: MainContentMode = flashNote.isOpen
+    ? 'flash-note'
+    : isRollupImportOpen
+      ? 'rollup-import'
+      : isGlobalSettingsOpen
+        ? 'settings'
+        : isTotalChartsOpen
+          ? 'total-chart'
+          : isAccountChartsOpen && selectedAccount && selectedAccountEntry
+            ? 'account-chart'
+            : selectedGroupDetail && selectedGroupDetailStructureData && selectedGroupDetailTrendData
+              ? 'group-detail'
+              : selectedAccount && selectedAccountEntry
+                ? 'account-detail'
+                : 'dashboard';
+
+  const mainContentRendererProps: MainContentRendererProps = {
+    mode: mainContentMode,
+    dashboard: {
+      pageProps: {
+        homeAssetStat,
+        recentNetWorthChange,
+        chartPreview: {
+          shouldShowCharts: shouldShowL0Charts,
+          showStructure: assetChartSettings.l0.showStructure,
+          showTrend: assetChartSettings.l0.showTrend,
+          structureData: assetStructureData,
+          showDebtMultiple: assetChartSettings.structure.showDebtMultiple,
+          trendPoints: homeThumbnailTrendPoints,
+          trendSettings: homeThumbnailTrendSettings
+        },
+        overview: {
+          groups: groupTotals,
+          expandedGroupIds,
+          isGroupEditMode,
+          draggingGroupId,
+          groupDropIndicator,
+          legendColorByName: homeGroupLegendColorByName,
+          productIconPath: PRODUCT_ICON_PATH,
+          productNameZh: PRODUCT_NAME_ZH,
+          productNameEn: PRODUCT_NAME_EN,
+          productTagline: PRODUCT_TAGLINE,
+          sortIcon: (
+            <NfSvgIcon svg={NfSortIcon} className="account-sort-icon" decorative />
+          ),
+          deleteIcon: (
+            <NfSvgIcon
+              svg={NfWindowCloseIcon}
+              className="account-type-delete-icon"
+              decorative
+            />
+          ),
+          formatMoney: formatHomeMoneyAmount,
+          canDeleteGroup: (groupId) => canDeleteAssetGroup(groupId, accounts),
+          onGroupClick: handleGroupClick,
+          onOpenAccount: openAccountDetail,
+          onDeleteGroup: deleteAssetGroup,
+          onGroupPointerDown: startGroupPointerInteraction,
+          onGroupPointerMove: moveGroupPointerInteraction,
+          onGroupPointerUp: finishGroupPointerInteraction,
+          onGroupPointerLeave: cancelGroupPointerInteraction,
+          onGroupPointerCancel: cancelGroupPointerInteraction,
+          onGroupDragStart: handleGroupDragStart,
+          onGroupDragOver: handleGroupDragOver,
+          onGroupDragLeave: handleGroupDragLeave,
+          onGroupDrop: handleGroupDrop,
+          onGroupDragEnd: handleGroupDragEnd
+        },
+        formatHomeMoneyAmount,
+        formatChartMoney: formatChartNumber,
+        onOpenTotalCharts: openTotalChartsPage,
+        onOpenSearch: globalSearch.openSearch,
+        onOpenArchivedAccounts: () => setIsArchivedAccountsOpen(true),
+        onOpenHistory: openHistoryPanel,
+        onOpenAddAccount: openAddAccount
+      }
+    },
+    account: {
+      detail: selectedAccount && selectedAccountEntry
+        ? {
+            panelProps: {
+              groupName: selectedGroup?.name ?? selectedAccount.groupName ?? '',
+              account: selectedAccountEntry,
+              currentAmount: selectedAccountEntry.amount,
+              historyRecords: selectedAccountHistory,
+              formatMoney
+            },
+            chartPreview: {
+              chartProps: {
+                points: selectedAccountTrendPoints,
+                settings: selectedAccountPreviewTrendSettings,
+                formatMoney: formatChartNumber
+              },
+              onOpenChart: openAccountChartsPage
+            },
+            historyList: {
+              groups: selectedAccountHistoryByDate,
+              expandedDates: expandedDetailDates,
+              onToggleDate: toggleDetailDate,
+              ...accountHistoryRecordListProps
+            }
+          }
+        : null,
+      chart: selectedAccount && selectedAccountEntry
+        ? {
+            title: selectedAccountTitle,
+            currentAmount: selectedAccountEntry.amount,
+            points: selectedAccountTrendPoints,
+            settings: selectedAccountChartSettings,
+            formatMoney: formatChartNumber
+          }
+        : null
+    },
+    charts: {
+      total: {
+        totalAssets,
+        structureData: assetStructureData,
+        trendPoints: assetTrendPoints,
+        settings: assetChartSettings,
+        formatMoney: formatChartNumber
+      },
+      groupDetail:
+        selectedGroupDetail && selectedGroupDetailStructureData && selectedGroupDetailTrendData
+          ? {
+              groupName: selectedGroupDetail.name,
+              structureData: selectedGroupDetailStructureData,
+              trendData: selectedGroupDetailTrendData,
+              settings: selectedGroupDetailChartSettings,
+              visibility: assetChartSettings.categoryVisibility,
+              formatMoney: formatChartNumber
+            }
+          : null
+    },
+    settings: {
+      pageProps: settingsPageProps
+    },
+    rollupImport: {
+      pageProps: rollupImport.pageProps
+    },
+    flashNote: {
+      hostProps: {
+        page: {
+          isOpen: flashNote.isOpen,
+          pageProps: flashNote.pageProps
+        },
+        exitConfirm: {
+          isOpen: flashNote.isExitConfirmOpen,
+          onCancel: flashNote.dismissExitConfirm,
+          onConfirm: flashNote.confirmExit
+        },
+        returnDateConfirm: {
+          isOpen: flashNote.isReturnDateConfirmOpen,
+          onCancel: flashNote.dismissReturnDateConfirm,
+          onConfirm: flashNote.confirmReturnDateSelection
+        }
+      }
+    },
+    security: {
+      isSettingsPageDisabled: isSecuritySettingsPageDisabled
+    }
+  };
+
+  const rightPanelRendererProps: RightPanelRendererProps = {
+    mode: rightPanelMode,
+    search: {
+      hasQuery: globalSearch.output.hasQuery,
+      focusedResult: globalSearch.focusedResult,
+      sortedHistory,
+      onOpenResult: globalSearch.openResult,
+      onCloseSearch: globalSearch.closeSearch,
+      formatMoney,
+      formatShortTime: formatHistoryRecordDate,
+      getAmountChange,
+      getAccountNatureLabel
+    },
+    account: {
+      actions: accountActionsPanelProps,
+      dangerActions: accountDangerActionsPanelProps,
+      chartSettings:
+        selectedAccount && selectedAccountEntry
+          ? {
+              isLockedByGlobal: assetChartSettings.globalChartControlMode === 'locked',
+              settings: selectedAccountChartSettings,
+              onUpdateSettings: (updater) =>
+                updateLocalAccountDetailChartSettings(
+                  selectedAccountEntry.id,
+                  (currentSettings) => {
+                    const nextSettings = updater(currentSettings);
+
+                    return {
+                      ...currentSettings,
+                      adaptiveYAxis: nextSettings.adaptiveYAxis,
+                      xAxisRange:
+                        nextSettings.xAxisRange as AccountDetailChartSettings['xAxisRange'],
+                      pointValueMode:
+                        nextSettings.pointValueMode as AccountDetailChartSettings['pointValueMode']
+                    };
+                  }
+                ),
+              onBackToAccountDetail: closeAccountChartsPage
+            }
+          : null
+    },
+    history: {
+      actions: {
+        onOpenBackupPanel: openBackupPanel
+      },
+      snapshot: {
+        summaryItems: [
+          {
+            label: '上次快照',
+            value:
+              backupRecords.length === 0
+                ? '从未备份'
+                : formatRelativeBackupTime(backupRecords[0].backedUpAt)
+          },
+          { label: '账户数量', value: `${accountCount}` },
+          { label: '历史记录', value: `${history.length}` },
+          { label: '增量记录', value: incrementalRecordValue }
+        ],
+        autoBackupDraft,
+        autoBackupCycleValueInput,
+        autoSnapshotCycleInputRef,
+        isExampleMode,
+        hasAutoBackupDraftChanges,
+        canSaveAutoBackupSettings,
+        onExportBackup: exportBackup,
+        onImportBackup: () => backupFileInputRef.current?.click(),
+        onAutoBackupEnabledChange: updateAutoBackupEnabled,
+        onAutoBackupCycleValueChange: updateAutoBackupCycleValue,
+        onAutoBackupCycleValueInputReset: setAutoBackupCycleValueInput,
+        onAdjustAutoBackupCycleValue: adjustAutoBackupCycleValue,
+        onAutoBackupCycleUnitChange: updateAutoBackupCycleUnit,
+        onSelectAutoBackupDirectory: selectAutoBackupDirectory,
+        onSaveAutoBackupDraft: saveAutoBackupDraft
+      }
+    },
+    archived: {
+      accountCount: archivedAccounts.length,
+      onBackToOverview: () => setIsArchivedAccountsOpen(false)
+    },
+    totalChart: {
+      isLockedByGlobal: assetChartSettings.globalChartControlMode === 'locked',
+      settings: assetChartSettings,
+      onUpdateSettings: (updater) =>
+        updateAssetChartSettings((currentSettings) => {
+          const nextSettings = updater(currentSettings);
+
+          return {
+            ...currentSettings,
+            structure: nextSettings.structure,
+            trend: {
+              ...nextSettings.trend,
+              xAxisRange: nextSettings.trend.xAxisRange as AssetChartSettings['trend']['xAxisRange'],
+              pointValueMode:
+                nextSettings.trend.pointValueMode as AssetChartSettings['trend']['pointValueMode']
+            }
+          };
+        }),
+      onBackToOverview: closeTotalChartsPage
+    },
+    groupDetail: selectedGroupDetail
+      ? {
+          nameDraft: groupDetailNameDraft,
+          statsDraft: groupDetailStatsDraft,
+          error: groupDetailError,
+          chartSettings: selectedGroupDetailChartSettings,
+          isLockedByGlobal: assetChartSettings.globalChartControlMode === 'locked',
+          onNameDraftChange: (value) => {
+            setGroupDetailNameDraft(value);
+            setGroupDetailError('');
+          },
+          onStatsDraftChange: (value) => {
+            setGroupDetailStatsDraft(value);
+            setGroupDetailError('');
+          },
+          onSaveInfo: saveGroupDetailInfo,
+          onUpdateChartSettings: (updater) =>
+            updateLocalCategoryDetailChartSettings(selectedGroupDetail.id, updater),
+          onBackToOverview: closeGroupDetailPage
+        }
+      : null,
+    settings: {
+      selectedSection: globalSettingsSection,
+      onSelectSection: setGlobalSettingsSection,
+      onClose: closeGlobalSettings
+    },
+    rollupImport: {
+      title: rollupImport.actionsTitle,
+      actionsClassName: rollupImport.actionsClassName,
+      actionsPanelProps: rollupImport.actionsPanelProps
+    },
+    home: {
+      isExampleMode,
+      renderFlashIcon: () => renderFlashLightningIcon(),
+      onOpenQuickSingleEntry: openQuickSingleEntry,
+      onOpenFlashNote: openFlashNote,
+      onOpenRollupImport: openRollupImport,
+      onOpenSearch: globalSearch.openSearch,
+      onOpenAddAccount: openAddAccount,
+      onOpenHistoryPanel: openHistoryPanel,
+      onOpenGlobalSettings: openGlobalSettings,
+      onOpenExampleDataSettings: openExampleDataSettingsFromHome
+    }
+  };
+
 
 
   return (
 
-    <div
-      className="window-shell"
+    <WindowFrame
+      productIconPath={PRODUCT_ICON_PATH}
+      productName={window.appInfo?.name ?? PRODUCT_NAME_EN}
+      data-theme-mode={globalSettings.themeMode}
       data-theme={resolvedTheme}
+      data-resolved-theme={resolvedTheme}
       data-theme-style={effectiveThemeStyle}
       {...windowShellBackProps}
     >
 
-      <header className="title-bar window-titlebar" aria-label="Application title bar">
-
-        <div className="window-titlebar__brand">
-
-          <img
-
-            src={PRODUCT_ICON_PATH}
-
-            alt=""
-
-            aria-hidden="true"
-
-            className="window-titlebar__icon"
-
-          />
-
-          <strong className="window-titlebar__title">
-
-            {window.appInfo?.name ?? PRODUCT_NAME_EN}
-
-          </strong>
-
-        </div>
-
-
-
-        <div className="window-controls">
-
-          <button
-
-            type="button"
-
-            className="window-control-button"
-
-            onPointerUp={() => {
-
-              const api = window.electronAPI ?? window.electronWindow;
-
-
-
-              if (!api) {
-
-                console.error('electronAPI is not available');
-
-                return;
-
-              }
-
-
-
-              api.minimize();
-
-            }}
-
-            aria-label="最小化"
-
-          >
-
-            {renderWindowControlIcon('minimize')}
-
-          </button>
-
-          <button
-
-            type="button"
-
-            className={`window-control-button${isWindowMaximized ? ' maximized' : ''}`}
-
-            onPointerUp={() => {
-
-              const api = window.electronAPI ?? window.electronWindow;
-
-
-
-              if (!api) {
-
-                console.error('electronAPI is not available');
-
-                return;
-
-              }
-
-
-
-              api.toggleMaximize();
-
-            }}
-
-            aria-label={isWindowMaximized ? '还原' : '最大化'}
-
-          >
-
-            {renderWindowControlIcon('maximize', isWindowMaximized)}
-
-          </button>
-
-          <button
-
-            type="button"
-
-            className="window-control-button window-control-button--close"
-
-            onPointerUp={() => {
-
-              const api = window.electronAPI ?? window.electronWindow;
-
-
-
-              if (!api) {
-
-                console.error('electronAPI is not available');
-
-                return;
-
-              }
-
-
-
-              api.close();
-
-            }}
-
-            aria-label="关闭"
-
-          >
-
-            {renderWindowControlIcon('close')}
-
-          </button>
-
-        </div>
-
-      </header>
-
-
-
-      <main
-
+      <AppShell
         className={`app-shell${flashNote.isOpen ? ' app-shell--flash-note' : ''}`}
-
-        {...appShellBackProps}
-
+        mainContentPosition={flashNote.isOpen ? 'left' : globalSettings.mainContentPosition}
+        shellProps={appShellBackProps}
         style={signedAmountCssVariables}
-
+        hiddenControls={(
+          <>
+            <input
+              ref={backupFileInputRef}
+              type="file"
+              accept="application/json,.json"
+              onChange={importBackup}
+              style={{ display: 'none' }}
+            />
+            <input
+              ref={rollupFileInputRef}
+              type="file"
+              accept="application/json,.json"
+              onChange={rollupImport.importFile}
+              style={{ display: 'none' }}
+            />
+          </>
+        )}
+        mainContentRef={mainContentRef}
+        mainContentClassName={mainPanelClassName}
+        mainContentAriaDisabled={isSecuritySettingsPageDisabled}
+        onMainContentClick={handleMainContentBlankClick}
+        onMainContentScroll={(event) => {
+          sessionMainScrollPositionsRef.current[mainPageKey] = event.currentTarget.scrollTop;
+        }}
+        rightPanel={
+          flashNote.isOpen ? null : <RightPanelRenderer {...rightPanelRendererProps} />
+        }
+        rightPanelRef={rightActionPanelRef}
+        rightPanelAriaLabel="操作面板"
+        onRightPanelClick={(event) => event.stopPropagation()}
+        onRightPanelScroll={(event) => {
+          sessionRightPanelScrollPositionsRef.current[rightPanelKey] =
+            event.currentTarget.scrollTop;
+        }}
+        mainContent={(
+          <MainContentRenderer {...mainContentRendererProps} />
+        )}
       >
 
-        <input
 
-          ref={backupFileInputRef}
 
-          type="file"
 
-          accept="application/json,.json"
 
-          onChange={importBackup}
 
-          style={{ display: 'none' }}
 
-        />
+      <SnapshotSecurityDialogLayer {...snapshotSecurityDialogLayerProps} />
 
-        <input
-
-          ref={rollupFileInputRef}
-
-          type="file"
-
-          accept="application/json,.json"
-
-          onChange={rollupImport.importFile}
-
-          style={{ display: 'none' }}
-
-        />
-
-        <section
-
-          ref={mainContentRef}
-
-          className={mainPanelClassName}
-
-          aria-disabled={isSecuritySettingsPageDisabled ? 'true' : undefined}
-
-          onClick={handleMainContentBlankClick}
-
-          onScroll={(event) => {
-
-            sessionMainScrollPositionsRef.current[mainPageKey] = event.currentTarget.scrollTop;
-
-          }}
-
-        >
-
-        {flashNote.isOpen ? (
-
-          renderFlashNotePage()
-
-        ) : isRollupImportOpen ? (
-
-          <RollupImportPage {...rollupImport.pageProps} />
-
-        ) : isGlobalSettingsOpen ? (
-
-          <SettingsPage {...settingsPageProps} />
-
-        ) : isTotalChartsOpen ? (
-
-          <TotalAssetChartDisplayPanel
-            totalAssets={totalAssets}
-            structureData={assetStructureData}
-            trendPoints={assetTrendPoints}
-            settings={assetChartSettings}
-            formatMoney={formatChartNumber}
-          />
-
-        ) : isAccountChartsOpen && selectedAccount && selectedAccountEntry ? (
-
-          <div className="asset-chart-page">
-
-            <header className="asset-chart-page__header chart-visual-text">
-
-              <div>
-
-                <h1>{selectedAccountTitle}</h1>
-
-              </div>
-
-              <div className="asset-chart-page__totals">
-
-                <span>当前余额</span>
-
-                <strong>{formatChartNumber(selectedAccountEntry.amount)}</strong>
-
-              </div>
-
-            </header>
-
-            <AccountTrendPanel
-
-              points={selectedAccountTrendPoints}
-
-              settings={selectedAccountChartSettings}
-
-            />
-
-          </div>
-
-        ) : selectedGroupDetail && selectedGroupDetailStructureData && selectedGroupDetailTrendData ? (
-
-          <GroupDetailChartDisplayPanel
-            groupName={selectedGroupDetail.name}
-            structureData={selectedGroupDetailStructureData}
-            trendData={selectedGroupDetailTrendData}
-            settings={selectedGroupDetailChartSettings}
-            visibility={assetChartSettings.categoryVisibility}
-            formatMoney={formatChartNumber}
-          />
-
-        ) : selectedAccount && selectedAccountEntry ? (
-
-          <AccountDetailPanel
-            groupName={selectedGroup?.name ?? selectedAccount.groupName ?? ''}
-            account={selectedAccountEntry}
-            currentAmount={selectedAccountEntry.amount}
-            historyRecords={selectedAccountHistory}
-            formatMoney={formatMoney}
-            chartPreview={(
-              <AssetTrendChart
-                points={selectedAccountTrendPoints}
-                settings={selectedAccountPreviewTrendSettings}
-                formatMoney={formatChartNumber}
-                compact
-              />
-            )}
-            onOpenChart={openAccountChartsPage}
-            historyList={(
-              <AccountHistoryList
-                groups={selectedAccountHistoryByDate}
-                expandedDates={expandedDetailDates}
-                onToggleDate={toggleDetailDate}
-                {...accountHistoryRecordListProps}
-              />
-            )}
-          />
-
-        ) : (
-
-          <DashboardPage
-            homeAssetStat={homeAssetStat}
-            recentNetWorthChange={recentNetWorthChange}
-            chartPreview={{
-              shouldShowCharts: shouldShowL0Charts,
-              showStructure: assetChartSettings.l0.showStructure,
-              showTrend: assetChartSettings.l0.showTrend,
-              structureData: assetStructureData,
-              showDebtMultiple: assetChartSettings.structure.showDebtMultiple,
-              trendPoints: homeThumbnailTrendPoints,
-              trendSettings: homeThumbnailTrendSettings
-            }}
-            overview={{
-              groups: groupTotals,
-              expandedGroupIds,
-              isGroupEditMode,
-              draggingGroupId,
-              groupDropIndicator,
-              legendColorByName: homeGroupLegendColorByName,
-              productIconPath: PRODUCT_ICON_PATH,
-              productNameZh: PRODUCT_NAME_ZH,
-              productNameEn: PRODUCT_NAME_EN,
-              productTagline: PRODUCT_TAGLINE,
-              sortIcon: (
-                <NfSvgIcon svg={NfSortIcon} className="account-sort-icon" decorative />
-              ),
-              deleteIcon: (
-                <NfSvgIcon
-                  svg={NfWindowCloseIcon}
-                  className="account-type-delete-icon"
-                  decorative
-                />
-              ),
-              formatMoney: formatHomeMoneyAmount,
-              canDeleteGroup: (groupId) => canDeleteAssetGroup(groupId, accounts),
-              onGroupClick: handleGroupClick,
-              onOpenAccount: openAccountDetail,
-              onDeleteGroup: deleteAssetGroup,
-              onGroupPointerDown: startGroupPointerInteraction,
-              onGroupPointerMove: moveGroupPointerInteraction,
-              onGroupPointerUp: finishGroupPointerInteraction,
-              onGroupPointerLeave: cancelGroupPointerInteraction,
-              onGroupPointerCancel: cancelGroupPointerInteraction,
-              onGroupDragStart: handleGroupDragStart,
-              onGroupDragOver: handleGroupDragOver,
-              onGroupDragLeave: handleGroupDragLeave,
-              onGroupDrop: handleGroupDrop,
-              onGroupDragEnd: handleGroupDragEnd
-            }}
-            formatHomeMoneyAmount={formatHomeMoneyAmount}
-            formatChartMoney={formatChartNumber}
-            onOpenTotalCharts={openTotalChartsPage}
-            onOpenSearch={globalSearch.openSearch}
-            onOpenArchivedAccounts={() => setIsArchivedAccountsOpen(true)}
-            onOpenHistory={openHistoryPanel}
-            onOpenAddAccount={openAddAccount}
-          />
-
-        )}
-
-        {isSecuritySettingsPageDisabled ? (
-          <div className="example-mode-disabled-panel__banner">示例模式下不可用</div>
-        ) : null}
-
-      </section>
-
-
-
-      {flashNote.isOpen ? null : (
-
-        <aside
-
-          ref={rightActionPanelRef}
-
-          className="right-action-panel"
-
-          aria-label="操作面板"
-
-          onClick={(event) => event.stopPropagation()}
-
-          onScroll={(event) => {
-
-            sessionRightPanelScrollPositionsRef.current[rightPanelKey] =
-
-              event.currentTarget.scrollTop;
-
-          }}
-
-        >
-
-          {renderRightPanelContent()}
-
-        </aside>
-
-      )}
-
-
-
-      {renderPasswordEditor()}
-
-      {renderSnapshotPasswordEditor()}
-
-      {renderPasswordDisableConfirm()}
-
-      {renderSnapshotEncryptionDisableConfirm()}
-
-      {isArchivedAccountsOpen ? (
-
-        <OverlayBackdrop
-
-          onBack={() => currentLayerBack?.()}
-
-          className="layout-layer layout-layer--left"
-
-          style={{
-
-            position: 'fixed',
-
-            inset: 0,
-
-            display: 'grid',
-
-            placeItems: 'center',
-
-            padding: 24,
-
-            background: 'var(--modal-backdrop)'
-
-          }}
-
-        >
-
-          <section
-
-            ref={leftLayerPanelRef}
-
-            onClick={(event) => event.stopPropagation()}
-
-            onScroll={(event) => {
-
-              sessionLeftLayerScrollPositionsRef.current[leftLayerKey] =
-
-                event.currentTarget.scrollTop;
-
-            }}
-
-            style={{
-
-              width: 'min(640px, 100%)',
-
-              maxHeight: '80vh',
-
-              overflowY: 'auto',
-
-              borderRadius: 'var(--radius-page)',
-
-              padding: 24,
-
-              background: 'var(--surface-strong)',
-
-              boxShadow: 'var(--shadow-popover)'
-
-            }}
-
-          >
-
-            <header
-
-              style={{
-
-                display: 'flex',
-
-                justifyContent: 'space-between',
-
-                gap: 16,
-
-                alignItems: 'baseline',
-
-                marginBottom: 16
-
-              }}
-
-            >
-
-              <div>
-
-                <p className="eyebrow" style={{ marginBottom: 8 }}>
-
-                  已归档账户
-
-                </p>
-
-                <h2 style={{ margin: 0, fontSize: '1.45rem' }}>
-
-                  共 {archivedAccounts.length} 个账户
-
-                </h2>
-
-              </div>
-
-              <button
-
-                type="button"
-
-                onClick={() => setIsArchivedAccountsOpen(false)}
-
-                style={{
-
-                  border: '1px solid var(--border-medium)',
-
-                  borderRadius: 'var(--radius-control)',
-
-                  padding: '8px 12px',
-
-                  background: 'var(--surface-strong)',
-
-                  color: 'var(--text-secondary)',
-
-                  cursor: 'pointer',
-
-                  font: 'inherit'
-
-                }}
-
-              >
-
-                关闭
-
-              </button>
-
-            </header>
-
-
-
-            {archivedAccounts.length === 0 ? (
-
-              <p style={{ margin: 0, color: 'var(--text-muted)' }}>暂无已归档账户</p>
-
-            ) : (
-
-              <div style={{ display: 'grid', gap: 10 }}>
-
-                {archivedAccounts.map((account) => (
-
-                  <article
-
-                    key={account.id}
-
-                    id={`account-row-${account.id}`}
-
-                    style={{
-
-                      display: 'grid',
-
-                      gridTemplateColumns: 'minmax(0, 1fr)',
-
-                      gap: 12,
-
-                      alignItems: 'center',
-
-                      borderRadius: 'var(--radius-card)',
-
-                      padding: '12px 14px',
-
-                      background: 'rgba(37, 99, 235, 0.08)',
-
-                      border: '1px solid rgba(37, 99, 235, 0.12)',
-
-                      boxShadow: 'none'
-
-                    }}
-
-                  >
-
-                    <button
-
-                      type="button"
-
-                      onClick={() => openAccountDetail(account.groupId, account)}
-
-                      style={{
-
-                        display: 'flex',
-
-                        alignItems: 'center',
-
-                        gap: 12,
-
-                        minWidth: 0,
-
-                        border: 0,
-
-                        padding: 0,
-
-                        background: 'transparent',
-
-                        color: 'var(--text-main)',
-
-                        cursor: 'pointer',
-
-                        font: 'inherit',
-
-                        textAlign: 'left'
-
-                      }}
-
-                    >
-
-                      <AccountMark account={account} className="account-mark--archived" />
-
-                      <span style={{ minWidth: 0 }}>
-
-                        <strong style={{ display: 'block' }}>{account.name}</strong>
-
-                        <span
-
-                          style={{
-
-                            display: 'block',
-
-                            marginTop: 4,
-
-                            color: 'var(--text-secondary)',
-
-                            fontSize: '0.92rem'
-
-                          }}
-
-                        >
-
-                          {account.groupName ? `${account.groupName} · ` : null}
-                          {formatMoney(account.amount)}
-
-                        </span>
-
-                        {account.archivedAt ? (
-
-                          <span
-
-                            style={{
-
-                              display: 'block',
-
-                              marginTop: 4,
-
-                              color: 'var(--text-muted)',
-
-                              fontSize: '0.82rem'
-
-                            }}
-
-                          >
-
-                            归档于 {formatShortTime(account.archivedAt)}
-
-                          </span>
-
-                        ) : null}
-
-                      </span>
-
-                    </button>
-
-                    <button
-
-                      type="button"
-
-                      onClick={() => restoreAccount(account.groupId, account, 'archived-accounts-list')}
-
-                      style={{
-
-                        display: 'none',
-
-                        border: '1px solid rgba(37, 99, 235, 0.22)',
-
-                        borderRadius: 'var(--radius-control)',
-
-                        padding: '8px 10px',
-
-                        background: 'var(--surface-strong)',
-
-                        color: '#2563eb',
-
-                        cursor: 'pointer',
-
-                        font: 'inherit'
-
-                      }}
-
-                    >
-
-                      重新启用
-
-                    </button>
-
-                  </article>
-                ))}
-
-              </div>
-
-            )}
-
-          </section>
-
-        </OverlayBackdrop>
-
-      ) : null}
-
-
-
-      {isHistoryOpen ? (
-
-        <OverlayBackdrop
-
-          onBack={() => currentLayerBack?.()}
-
-          className="layout-layer layout-layer--left"
-
-          style={{
-
-            position: 'fixed',
-
-            inset: 0,
-
-            display: 'grid',
-
-            placeItems: 'center',
-
-            padding: 24,
-
-            background: 'var(--modal-backdrop)'
-
-          }}
-
-        >
-
-          <HistoryPanel
-
-            ref={leftLayerPanelRef}
-
-            view={historyPanelView}
-
-            onPanelClick={(event) => event.stopPropagation()}
-
-            onPanelScroll={(event) => {
-
-              sessionLeftLayerScrollPositionsRef.current[leftLayerKey] =
-
-                event.currentTarget.scrollTop;
-
-            }}
-
-            historyContent={(
-
-              <>
-
-                <HistoryFilterToolbar
-
-                  rangeInput={historyRangeInput}
-
-                  rangeInputPlaceholder={historyRangeInputPlaceholder}
-
-                  isCalendarVisible={isCalendarVisible}
-
-                  onRangeInputFocus={historyController.clearHistoryRange}
-
-                  onRangeInputClick={historyController.clearHistoryRange}
-
-                  onRangeInputConfirm={historyController.confirmSingleHistoryDate}
-
-                  onRangeInputChange={historyController.handleHistoryRangeInput}
-
-                  onToggleCalendar={historyController.toggleCalendarVisibility}
-
-                  onSelectPreviousWeek={historyController.setLastWeekHistoryRange}
-
-                  onSelectRecentSevenDays={historyController.setRecent7HistoryRange}
-
-                  onClearRange={historyController.clearHistoryRange}
-
-                  calendarContent={(
-
-                    <HistoryCalendarPanel
-
-                      calendarMonth={calendarMonth}
-
-                      calendarSecondMonth={calendarSecondMonth}
-
-                      isNextDisabled={historyController.isHistoryCalendarNextDisabled}
-
-                      getCalendarDays={historyController.getCalendarDays}
-
-                      getDateValue={historyController.getDateValue}
-
-                      getDateState={historyController.getHistoryCalendarDateState}
-
-                      onPreviousMonth={historyController.showPreviousCalendarMonth}
-
-                      onNextMonth={historyController.showNextCalendarMonth}
-
-                      onDateClick={historyController.selectCalendarDate}
-
-                    />
-
-                  )}
-
-                />
-
-                <HistoryRecordList
-
-                  records={filteredHistory}
-
-                  highlightedRecordId={searchTargetHighlight.highlightedHistoryRecordId}
-
-                  emptyText="暂无匹配记录"
-
-                  {...historyRecordListProps}
-
-                />
-
-              </>
-
-            )}
-
-            backupContent={(
-
-              <div style={{ display: 'grid', gap: 16 }}>
-
-                <input
-
-                  ref={backupFileInputRef}
-
-                  type="file"
-
-                  accept="application/json,.json"
-
-                  onChange={importBackup}
-
-                  style={{ display: 'none' }}
-
-                />
-
-                <BackupRecordList
-
-                  records={backupRecords}
-
-                  formatPreciseBackupTime={formatPreciseBackupTime}
-
-                  getBackupMethodLabel={getBackupMethodLabel}
-
-                />
-
-              </div>
-
-            )}
-
-          />
-
-        </OverlayBackdrop>
-
-      ) : null}
-
-
-
-      {globalSearch.isOpen ? (
-
-        <OverlayBackdrop
-
-          onBack={globalSearch.closeSearch}
-
-          className="layout-layer layout-layer--left layout-layer--search"
-
-          style={{
-
-            position: 'fixed',
-
-            inset: 0,
-
-            zIndex: 90,
-
-            display: 'grid',
-
-            placeItems: 'start center',
-
-            padding: '74px 24px 24px',
-
-            background: 'var(--modal-backdrop)'
-
-          }}
-
-        >
-
-          <GlobalSearchPanel {...globalSearch.panelProps} />
-
-        </OverlayBackdrop>
-
-      ) : null}
-
-
-
-      {globalSearch.currentNavigationTarget ? (
-
-        <SearchFloatingNavigator
-
-          currentTarget={globalSearch.currentNavigationTarget}
-
-          canMove={globalSearch.canMoveNavigation}
-
-          onPrevious={globalSearch.moveToPreviousTarget}
-
-          onNext={globalSearch.moveToNextTarget}
-
-          onReturn={globalSearch.returnFromNavigation}
-
-          onExit={globalSearch.exitNavigation}
-
-        />
-
-      ) : null}
-
-
-
-      {toastMessages.length > 0 ? (
-
-        <div
-
-          aria-live="polite"
-
-          style={{
-
-            position: 'fixed',
-
-            right: 22,
-
-            bottom: 22,
-
-            zIndex: 120,
-
-            display: 'grid',
-
-            gap: 10,
-
-            width: 'min(320px, calc(100vw - 44px))',
-
-            pointerEvents: 'none'
-
-          }}
-
-        >
-
-          {toastMessages.map((toast) => (
-
-            <div
-
-              key={toast.id}
-
-              style={{
-
-                border: `1px solid ${
-
-                  toast.tone === 'success'
-
-                    ? 'rgba(22, 163, 74, 0.18)'
-
-                    : toast.tone === 'error'
-
-                      ? 'rgba(185, 28, 28, 0.18)'
-
-                      : 'var(--border-soft)'
-
-                }`,
-
-                borderRadius: 'var(--radius-card)',
-
-                padding: '11px 13px',
-
-                background:
-
-                  toast.tone === 'success'
-
-                    ? 'rgba(240, 253, 244, 0.94)'
-
-                    : toast.tone === 'error'
-
-                      ? 'rgba(254, 242, 242, 0.94)'
-
-                      : 'var(--panel-bg-strong)',
-
-                color:
-
-                  toast.tone === 'success'
-
-                    ? '#166534'
-
-                    : toast.tone === 'error'
-
-                      ? '#991b1b'
-
-                      : 'var(--text-main)',
-
-                boxShadow: 'var(--shadow-popover)',
-
-                backdropFilter: 'blur(10px)',
-
-                fontSize: '0.92rem',
-
-                fontWeight: 700
-
-              }}
-
-            >
-
-              {toast.message}
-
-            </div>
-
-          ))}
-
-        </div>
-
-      ) : null}
-
-
-
-      {noticeDialog ? (
-        <NoticeDialog
-          title={noticeDialog.title}
-          message={noticeDialog.message}
-          closeLabel={noticeDialog.confirmLabel}
-          onClose={closeNoticeDialog}
-        />
-      ) : null}
-
-      {inputDialog ? (
-        <InputDialog
-          title={inputDialog.title}
-          message={inputDialog.message}
-          label={inputDialog.label}
-          value={inputDialogValue}
-          placeholder={inputDialog.placeholder}
-          confirmLabel={inputDialog.confirmLabel}
-          cancelLabel={inputDialog.cancelLabel}
-          inputType={inputDialog.inputType}
-          autoComplete={inputDialog.autoComplete}
-          onValueChange={setInputDialogValue}
-          onConfirm={confirmInputDialog}
-          onCancel={closeInputDialog}
-        />
-      ) : null}
-
-      {confirmationDialog ? (
-        <ConfirmDialog
-          title={confirmationDialog.title}
-          message={confirmationDialog.message}
-          confirmLabel={confirmationDialog.confirmLabel}
-          cancelLabel={confirmationDialog.cancelLabel}
-          eyebrow={confirmationDialog.eyebrow}
-          tone={confirmationDialog.tone}
-          onConfirm={confirmAndClose}
-          onCancel={closeConfirmationDialog}
-        />
-      ) : null}
-
-
-
-      {resetConfirmation ? (
-
-        <OverlayBackdrop onBack={closeResetConfirmation} className="modal-backdrop">
-
-          <form
-
-            role="dialog"
-
-            aria-modal="true"
-
-            aria-labelledby="reset-confirmation-title"
-
-            onClick={(event) => event.stopPropagation()}
-
-            onSubmit={(event) => {
-
-              event.preventDefault();
-
-              confirmResetAction();
-
-            }}
-
-            className="modal-card"
-
-          >
-
-            <p className="eyebrow" style={{ marginBottom: 8 }}>
-
-              重置功能
-
-            </p>
-
-            <h2
-
-              id="reset-confirmation-title"
-
-              style={{ margin: '0 0 10px', fontSize: '1.26rem' }}
-
-            >
-
-              {getResetActionLabel(resetConfirmation.action)}
-
-            </h2>
-
-            <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.94rem' }}>
-
-              您正在进行{getResetActionLabel(resetConfirmation.action)}操作，请注意该操作无法恢复
-
-            </p>
-
-              <div className="reset-confirmation-code" aria-label="确认数字">
-
-              {resetConfirmation.code}
-
-            </div>
-
-            <label className="right-panel-label" style={{ marginTop: 14 }}>
-
-              输入上方 4 位数字
-
-              <input
-
-                autoFocus
-
-                type="text"
-
-                inputMode="numeric"
-
-                pattern="[0-9]*"
-
-                maxLength={4}
-
-                value={resetConfirmationInput}
-
-                onChange={(event) => setResetConfirmationInput(event.target.value)}
-
-              />
-
-            </label>
-
-            {resetConfirmationInput && resetConfirmationInput !== resetConfirmation.code ? (
-
-              <p className="global-settings-note">数字不匹配</p>
-
-            ) : null}
-
-            <div className="modal-actions">
-
-              <button
-
-                type="button"
-
-                onClick={closeResetConfirmation}
-
-                className="modal-button modal-button--secondary"
-
-              >
-
-                取消
-
-              </button>
-
-              <button
-
-                type="submit"
-
-                disabled={resetConfirmationInput !== resetConfirmation.code}
-
-                className="modal-button modal-button--danger"
-
-              >
-
-                确认执行
-
-              </button>
-
-            </div>
-
-          </form>
-
-        </OverlayBackdrop>
-
-      ) : null}
-
-
-
-      {isQuickSingleEntryAccountPickerOpen ? (
-
-        <OverlayBackdrop
-
-          onBack={closeQuickSingleEntryAccountPicker}
-
-          className="modal-backdrop"
-
-        >
-
-          <QuickEntryPanel accountPickerContent={renderQuickSingleEntryAccountPicker()} />
-
-        </OverlayBackdrop>
-
-      ) : null}
-
-
-
-      {editingAccount && currentAccount ? (
-        <AccountAmountEditorDialog
-          title={`${currentGroup?.name ?? editingAccount.groupName ?? ''} - ${currentAccount.name}`}
-          editMode={editMode}
-          draftAmount={draftAmount}
-          setAmountDatePicker={renderAccountOperationDatePicker({
-            value: setAmountDateInput,
-            selectedDate: setAmountSelectedDate,
-            parsedDate: parsedSetAmountDate,
-            visibleMonth: setAmountVisibleMonth,
-            futureHint: setAmountDateFutureHint,
-            onInputChange: updateSetAmountDateInput,
-            onCalendarSelect: selectSetAmountCalendarDate,
-            onVisibleMonthChange: setSetAmountVisibleMonth
-          })}
-          setAmountNote={setAmountNoteInput}
-          adjustAmount={adjustAmountInput}
-          adjustDirection={adjustDirection}
-          isAdjustAmountInvalid={isAdjustAmountInvalid}
-          currentAmountLabel={formatMoney(currentAccount.amount)}
-          nextAdjustedAmountLabel={formatMoney(
-            toStoredGroupAmount(editingAccount.groupId, nextAdjustedEditableAmount)
-          )}
-          signedAdjustAmountLabel={signedAdjustAmountLabel}
-          signedAdjustAmountColor={
-            getSignedAmountTone(
-              signedAdjustAmount,
-              globalSettings.positiveNegativeColorMode
-            ).color
+      <ArchivedAccountsLayer
+        state={{
+          isOpen: isArchivedAccountsOpen,
+          archivedAccounts,
+          panelRef: leftLayerPanelRef
+        }}
+        formatters={{
+          formatMoney,
+          formatArchivedTime: formatShortTime
+        }}
+        callbacks={{
+          onBack: () => currentLayerBack?.(),
+          onClose: () => setIsArchivedAccountsOpen(false),
+          onSelect: (account) => openAccountDetail(account.groupId, account),
+          onRestore: (account) => {
+            restoreAccount(account.groupId, account, 'archived-accounts-list');
+          },
+          onPanelScroll: (scrollTop) => {
+            sessionLeftLayerScrollPositionsRef.current[leftLayerKey] = scrollTop;
           }
-          adjustDatePicker={renderAccountOperationDatePicker({
-            value: adjustAmountDateInput,
-            selectedDate: adjustAmountSelectedDate,
-            parsedDate: parsedAdjustAmountDate,
-            visibleMonth: adjustAmountVisibleMonth,
-            futureHint: adjustAmountDateFutureHint,
-            onInputChange: updateAdjustAmountDateInput,
-            onCalendarSelect: selectAdjustAmountCalendarDate,
-            onVisibleMonthChange: setAdjustAmountVisibleMonth
-          })}
-          adjustAmountNote={adjustAmountNoteInput}
-          isEditingArchivedAccount={isEditingArchivedAccount}
-          isSubmitDisabled={isAmountEditorSubmitDisabled}
-          onEditModeChange={(mode) => {
-            setEditMode(mode);
-            setAdjustAmountInput('');
-            setAdjustDirection('increase');
-          }}
-          onDraftAmountInputChange={(value) => {
-            const nextValue = sanitizeNonNegativeInput(value);
+        }}
+      />
 
-            if (isNonNegativeInput(nextValue)) {
-              setDraftAmount(nextValue);
+
+
+      <HistoryBackupLayer
+        state={{
+          isOpen: isHistoryOpen,
+          view: historyPanelView
+        }}
+        history={{
+          filter: {
+            rangeInput: historyRangeInput,
+            rangeInputPlaceholder: historyRangeInputPlaceholder,
+            isCalendarVisible
+          },
+          calendar: {
+            calendarMonth,
+            calendarSecondMonth,
+            isNextDisabled: historyController.isHistoryCalendarNextDisabled,
+            getCalendarDays: historyController.getCalendarDays,
+            getDateValue: historyController.getDateValue,
+            getDateState: historyController.getHistoryCalendarDateState
+          },
+          records: filteredHistory,
+          highlightedRecordId: searchTargetHighlight.highlightedHistoryRecordId,
+          emptyText: '暂无匹配记录',
+          recordListProps: historyRecordListProps
+        }}
+        backup={{
+          records: backupRecords,
+          formatPreciseBackupTime,
+          getBackupMethodLabel
+        }}
+        callbacks={{
+          onBack: () => currentLayerBack?.(),
+          onPanelScroll: (scrollTop) => {
+            sessionLeftLayerScrollPositionsRef.current[leftLayerKey] = scrollTop;
+          },
+          history: {
+            filter: {
+              onRangeInputFocus: historyController.clearHistoryRange,
+              onRangeInputClick: historyController.clearHistoryRange,
+              onRangeInputConfirm: historyController.confirmSingleHistoryDate,
+              onRangeInputChange: historyController.handleHistoryRangeInput,
+              onToggleCalendar: historyController.toggleCalendarVisibility,
+              onSelectPreviousWeek: historyController.setLastWeekHistoryRange,
+              onSelectRecentSevenDays: historyController.setRecent7HistoryRange,
+              onClearRange: historyController.clearHistoryRange
+            },
+            calendar: {
+              onPreviousMonth: historyController.showPreviousCalendarMonth,
+              onNextMonth: historyController.showNextCalendarMonth,
+              onDateClick: historyController.selectCalendarDate
             }
-          }}
-          onSetAmountNoteChange={setSetAmountNoteInput}
-          onAdjustAmountInputChange={(value) => {
-            const nextValue = sanitizeNonNegativeInput(value);
-
-            if (isNonNegativeInput(nextValue)) {
-              setAdjustAmountInput(nextValue);
-            }
-          }}
-          onAdjustDirectionChange={setAdjustDirection}
-          onAdjustAmountNoteChange={setAdjustAmountNoteInput}
-          onSubmit={saveAmount}
-          onCancel={requestCloseEditor}
-        />
-
-      ) : null}
-
-
-
-      {editingAccountInfo && accountInfoEntry ? (
-        <AccountInfoEditorDialog
-          title={accountInfoEntry.name}
-          accountName={accountNameDraft}
-          accountAlias={accountAliasDraft}
-          aliasPreview={(
-            <AccountMark
-              account={{
-                name: accountNameDraft.trim() || accountInfoEntry.name,
-                alias: accountAliasDraft
-              }}
-              className="account-mark--list"
-            />
-          )}
-          error={accountInfoError}
-          onAccountNameChange={(value) => {
-            setAccountNameDraft(value);
-            setAccountInfoError('');
-          }}
-          onAccountAliasChange={setAccountAliasDraft}
-          onSubmit={saveAccountInfo}
-          onCancel={requestCloseAccountInfoEditor}
-        />
-
-      ) : null}
-
-
-
-      {isAddingAccount ? (
-        <AccountRestoreDialog
-          archivedAccounts={archivedAccounts}
-          filteredAccounts={filteredArchivedAccountsForRestore}
-          searchQuery={archivedAccountSearchQuery}
-          onSearchQueryChange={setArchivedAccountSearchQuery}
-          getRestoreTitle={getArchivedAccountRestoreTitle}
-          getArchivedAtLabel={getArchivedAccountArchivedAtLabel}
-          formatMoney={formatMoney}
-          onRestore={(account) => {
-            if (restoreAccount(account.groupId, account, 'account-restore-dialog')) {
-              closeAddAccount();
-            }
-          }}
-          onCancel={requestCloseAddAccount}
-        />
-
-      ) : null}
-
-
-
-      {pendingArchivedRestore && pendingArchivedRestoreAccount ? (
-        <AccountRestoreTargetDialog
-          groups={archivedRestoreTargetGroups}
-          onChooseGroup={choosePendingArchivedRestoreGroup}
-          onCancel={cancelPendingArchivedRestore}
-        />
-
-      ) : null}
-
-
-
-      {isAddingAccount ? (
-        <AccountCreateDialog
-          accountTypeInputRef={newAccountTypeInputRef}
-          accountTypeInput={newAccountTypeInput}
-          accountTypeGhostText={newAccountTypeGhostText}
-          accountTypeCount={groups.length}
-          newAccountName={newAccountName}
-          newAccountAmount={newAccountAmount}
-          error={newAccountError}
-          onAccountTypeInputChange={updateNewAccountTypeInput}
-          onConfirmAccountTypeInput={confirmNewAccountTypeInput}
-          onAccountTypeWheel={handleNewAccountGroupWheel}
-          onSwitchAccountType={switchNewAccountGroup}
-          onOpenCreateAccountType={() => openCreateAccountType()}
-          onNameChange={(value) => {
-            setNewAccountName(value);
-            setNewAccountError('');
-          }}
-          onAmountInputChange={(value) => {
-            const nextValue = sanitizeNonNegativeInput(value);
-
-            if (isNonNegativeInput(nextValue)) {
-              setNewAccountAmount(nextValue);
-              setNewAccountError('');
-            }
-          }}
-          onSubmit={saveNewAccount}
-          onCancel={requestCloseAddAccount}
-        />
-
-      ) : null}
-
-
-
-      {accountTypeEditor && isAccountTypeEditorVisible ? (
-
-        <OverlayBackdrop
-
-          onBack={requestCloseAccountTypeEditor}
-
-          className="layout-layer layout-layer--right"
-
-          style={{
-
-            position: 'fixed',
-
-            inset: 0,
-
-            zIndex: 40,
-
-            display: 'grid',
-
-            placeItems: 'center',
-
-            padding: 24,
-
-            background: 'var(--modal-backdrop)'
-
-          }}
-
-        >
-
-          <form
-
-            onClick={(event) => event.stopPropagation()}
-
-            onSubmit={(event) => {
-
-              event.preventDefault();
-
-              saveAccountType();
-
-            }}
-
-            className="account-type-editor-panel"
-
-            style={{
-
-              width: 'min(400px, 100%)',
-
-              borderRadius: 'var(--radius-section)',
-
-              padding: 24,
-
-              background: 'var(--panel-bg)',
-
-              boxShadow: 'var(--shadow-panel)'
-
-            }}
-
-          >
-
-            <h2 className="account-add-restore-panel__title" style={{ margin: '0 0 18px' }}>
-
-              {accountTypeEditor.mode === 'create' ? '新增账户类型' : '编辑账户类型'}
-
-            </h2>
-
-
-
-            <label style={{ display: 'grid', gap: 8, color: 'var(--text-secondary)' }}>
-
-              账户类型名称
-
-              <input
-
-                autoFocus
-
-                type="text"
-
-                value={accountTypeNameDraft}
-
-                onChange={(event) => {
-
-                  setAccountTypeNameDraft(event.target.value);
-
+          },
+          backup: {
+            onImportBackup: importBackup
+          }
+        }}
+        refs={{
+          panelRef: leftLayerPanelRef,
+          backupFileInputRef
+        }}
+      />
+
+
+
+
+
+      <SearchOverlayLayer
+        isOpen={globalSearch.isOpen}
+        panelProps={globalSearch.panelProps}
+        floatingNavigator={
+          globalSearch.currentNavigationTarget
+            ? {
+                currentTarget: globalSearch.currentNavigationTarget,
+                canMove: globalSearch.canMoveNavigation,
+                onPrevious: globalSearch.moveToPreviousTarget,
+                onNext: globalSearch.moveToNextTarget,
+                onReturn: globalSearch.returnFromNavigation,
+                onExit: globalSearch.exitNavigation
+              }
+            : null
+        }
+        onClose={globalSearch.closeSearch}
+      />
+
+
+
+      <ToastViewport messages={toastMessages} />
+
+
+
+      <AppDialogLayer
+        confirmationDialog={confirmationDialog}
+        noticeDialog={noticeDialog}
+        inputDialog={inputDialog}
+        inputDialogValue={inputDialogValue}
+        closeConfirmationDialog={closeConfirmationDialog}
+        confirmAndClose={confirmAndClose}
+        closeNoticeDialog={closeNoticeDialog}
+        closeInputDialog={closeInputDialog}
+        confirmInputDialog={confirmInputDialog}
+        setInputDialogValue={setInputDialogValue}
+      />
+
+
+
+      <ResetDangerDialogLayer
+        confirmation={resetConfirmation}
+        inputValue={resetConfirmationInput}
+        getActionLabel={getResetActionLabel}
+        onInputChange={setResetConfirmationInput}
+        onCancel={closeResetConfirmation}
+        onConfirm={confirmResetAction}
+      />
+
+
+
+      <QuickEntryPickerLayer
+        panel={{
+          isOpen: isQuickSingleEntryAccountPickerOpen
+        }}
+        accountPicker={{
+          groups: quickSingleEntryAccountGroups
+        }}
+        callbacks={{
+          onClose: closeQuickSingleEntryAccountPicker,
+          onChooseAccount: chooseQuickSingleEntryAccountById
+        }}
+      />
+
+
+
+      <AccountDialogLayer
+        amountEditor={
+          editingAccount && currentAccount
+            ? {
+                title: `${currentGroup?.name ?? editingAccount.groupName ?? ''} - ${currentAccount.name}`,
+                editMode,
+                draftAmount,
+                setAmountDatePicker: renderAccountOperationDatePicker({
+                  value: setAmountDateInput,
+                  selectedDate: setAmountSelectedDate,
+                  parsedDate: parsedSetAmountDate,
+                  visibleMonth: setAmountVisibleMonth,
+                  futureHint: setAmountDateFutureHint,
+                  onInputChange: updateSetAmountDateInput,
+                  onCalendarSelect: selectSetAmountCalendarDate,
+                  onVisibleMonthChange: setSetAmountVisibleMonth
+                }),
+                setAmountNote: setAmountNoteInput,
+                adjustAmount: adjustAmountInput,
+                adjustDirection,
+                isAdjustAmountInvalid,
+                currentAmountLabel: formatMoney(currentAccount.amount),
+                nextAdjustedAmountLabel: formatMoney(
+                  toStoredGroupAmount(editingAccount.groupId, nextAdjustedEditableAmount)
+                ),
+                signedAdjustAmountLabel,
+                signedAdjustAmountColor: getSignedAmountTone(
+                  signedAdjustAmount,
+                  globalSettings.positiveNegativeColorMode
+                ).color,
+                adjustDatePicker: renderAccountOperationDatePicker({
+                  value: adjustAmountDateInput,
+                  selectedDate: adjustAmountSelectedDate,
+                  parsedDate: parsedAdjustAmountDate,
+                  visibleMonth: adjustAmountVisibleMonth,
+                  futureHint: adjustAmountDateFutureHint,
+                  onInputChange: updateAdjustAmountDateInput,
+                  onCalendarSelect: selectAdjustAmountCalendarDate,
+                  onVisibleMonthChange: setAdjustAmountVisibleMonth
+                }),
+                adjustAmountNote: adjustAmountNoteInput,
+                isEditingArchivedAccount,
+                isSubmitDisabled: isAmountEditorSubmitDisabled,
+                onEditModeChange: (mode) => {
+                  setEditMode(mode);
+                  setAdjustAmountInput('');
+                  setAdjustDirection('increase');
+                },
+                onDraftAmountInputChange: (value) => {
+                  const nextValue = sanitizeNonNegativeInput(value);
+
+                  if (isNonNegativeInput(nextValue)) {
+                    setDraftAmount(nextValue);
+                  }
+                },
+                onSetAmountNoteChange: setSetAmountNoteInput,
+                onAdjustAmountInputChange: (value) => {
+                  const nextValue = sanitizeNonNegativeInput(value);
+
+                  if (isNonNegativeInput(nextValue)) {
+                    setAdjustAmountInput(nextValue);
+                  }
+                },
+                onAdjustDirectionChange: setAdjustDirection,
+                onAdjustAmountNoteChange: setAdjustAmountNoteInput,
+                onSubmit: saveAmount,
+                onCancel: requestCloseEditor
+              }
+            : null
+        }
+        infoEditor={
+          editingAccountInfo && accountInfoEntry
+            ? {
+                title: accountInfoEntry.name,
+                accountName: accountNameDraft,
+                accountAlias: accountAliasDraft,
+                aliasPreview: (
+                  <AccountMark
+                    account={{
+                      name: accountNameDraft.trim() || accountInfoEntry.name,
+                      alias: accountAliasDraft
+                    }}
+                    className="account-mark--list"
+                  />
+                ),
+                error: accountInfoError,
+                onAccountNameChange: (value) => {
+                  setAccountNameDraft(value);
+                  setAccountInfoError('');
+                },
+                onAccountAliasChange: setAccountAliasDraft,
+                onSubmit: saveAccountInfo,
+                onCancel: requestCloseAccountInfoEditor
+              }
+            : null
+        }
+        restore={
+          isAddingAccount
+            ? {
+                archivedAccounts,
+                filteredAccounts: filteredArchivedAccountsForRestore,
+                searchQuery: archivedAccountSearchQuery,
+                onSearchQueryChange: setArchivedAccountSearchQuery,
+                getRestoreTitle: getArchivedAccountRestoreTitle,
+                getArchivedAtLabel: getArchivedAccountArchivedAtLabel,
+                formatMoney,
+                onRestore: (account) => {
+                  if (restoreAccount(account.groupId, account, 'account-restore-dialog')) {
+                    closeAddAccount();
+                  }
+                },
+                onCancel: requestCloseAddAccount
+              }
+            : null
+        }
+        restoreTarget={
+          pendingArchivedRestore && pendingArchivedRestoreAccount
+            ? {
+                groups: archivedRestoreTargetGroups,
+                onChooseGroup: choosePendingArchivedRestoreGroup,
+                onCancel: cancelPendingArchivedRestore
+              }
+            : null
+        }
+        create={
+          isAddingAccount
+            ? {
+                accountTypeInputRef: newAccountTypeInputRef,
+                accountTypeInput: newAccountTypeInput,
+                accountTypeGhostText: newAccountTypeGhostText,
+                accountTypeCount: groups.length,
+                newAccountName,
+                newAccountAmount,
+                error: newAccountError,
+                onAccountTypeInputChange: updateNewAccountTypeInput,
+                onConfirmAccountTypeInput: confirmNewAccountTypeInput,
+                onAccountTypeWheel: handleNewAccountGroupWheel,
+                onSwitchAccountType: switchNewAccountGroup,
+                onOpenCreateAccountType: () => openCreateAccountType(),
+                onNameChange: (value) => {
+                  setNewAccountName(value);
+                  setNewAccountError('');
+                },
+                onAmountInputChange: (value) => {
+                  const nextValue = sanitizeNonNegativeInput(value);
+
+                  if (isNonNegativeInput(nextValue)) {
+                    setNewAccountAmount(nextValue);
+                    setNewAccountError('');
+                  }
+                },
+                onSubmit: saveNewAccount,
+                onCancel: requestCloseAddAccount
+              }
+            : null
+        }
+        accountType={
+          accountTypeEditor && isAccountTypeEditorVisible
+            ? {
+                editor: accountTypeEditor,
+                nameDraft: accountTypeNameDraft,
+                natureDraft: accountTypeNatureDraft,
+                statsDraft: accountTypeStatsDraft,
+                error: accountTypeError,
+                natureOptions: accountTypeNatureOptions,
+                onNameChange: (value) => {
+                  setAccountTypeNameDraft(value);
                   setAccountTypeError('');
-
-                }}
-
-                style={{
-
-                  width: '100%',
-
-                  border: '1px solid var(--border-medium)',
-
-                  borderRadius: 'var(--radius-input)',
-
-                  padding: '10px 12px',
-
-                  background: 'transparent',
-
-                  color: 'var(--text-main)',
-
-                  font: 'inherit'
-
-                }}
-
-              />
-
-            </label>
-
-
-
-            <div style={{ display: 'grid', gap: 8, color: 'var(--text-secondary)', marginTop: 14 }}>
-
-              <span>类型性质</span>
-
-              <div
-
-                style={{
-
-                  display: 'grid',
-
-                  gridTemplateColumns: 'repeat(3, 1fr)',
-
-                  gap: 4,
-
-                  height: 'var(--segmented-control-height)',
-
-                  borderRadius: 'var(--radius-card)',
-
-                  padding: 4,
-
-                  background: 'var(--surface-muted)'
-
-                }}
-
-              >
-
-                {accountTypeNatureOptions.map((option) => (
-
-                  <button
-
-                    key={option.value}
-
-                    type="button"
-
-                    onClick={() => {
-
-                      setAccountTypeNatureDraft(option.value);
-
-                      setAccountTypeError('');
-
-                    }}
-
-                    style={{
-
-                      border: 0,
-
-                      borderRadius: 'var(--radius-control)',
-
-                      padding: '8px 0',
-
-                      background:
-
-                        accountTypeNatureDraft === option.value
-
-                          ? 'var(--button-primary-bg)'
-
-                          : 'transparent',
-
-                      color:
-
-                        accountTypeNatureDraft === option.value
-
-                          ? 'var(--button-primary-text)'
-
-                          : 'var(--text-secondary)',
-
-                      cursor: 'pointer',
-
-                      font: 'inherit',
-
-                      fontWeight: 700
-
-                    }}
-
-                  >
-
-                    {option.label}
-
-                  </button>
-
-                ))}
-
-              </div>
-
-            </div>
-
-
-
-            <div style={{ display: 'grid', gap: 8, color: 'var(--text-secondary)', marginTop: 14 }}>
-
-              <span>是否参与统计</span>
-
-              <div
-
-                style={{
-
-                  display: 'grid',
-
-                  gridTemplateColumns: '1fr 1fr',
-
-                  gap: 4,
-
-                  height: 'var(--segmented-control-height)',
-
-                  borderRadius: 'var(--radius-card)',
-
-                  padding: 4,
-
-                  background: 'var(--surface-muted)'
-
-                }}
-
-              >
-
-                {[
-
-                  { value: true, label: '是' },
-
-                  { value: false, label: '否' }
-
-                ].map((option) => (
-
-                  <button
-
-                    key={option.label}
-
-                    type="button"
-
-                    onClick={() => {
-
-                      setAccountTypeStatsDraft(option.value);
-
-                      setAccountTypeError('');
-
-                    }}
-
-                    style={{
-
-                      border: 0,
-
-                      borderRadius: 'var(--radius-control)',
-
-                      padding: '8px 0',
-
-                      background:
-
-                        accountTypeStatsDraft === option.value
-
-                          ? 'var(--button-primary-bg)'
-
-                          : 'transparent',
-
-                      color:
-
-                        accountTypeStatsDraft === option.value
-
-                          ? 'var(--button-primary-text)'
-
-                          : 'var(--text-secondary)',
-
-                      cursor: 'pointer',
-
-                      font: 'inherit',
-
-                      fontWeight: 700
-
-                    }}
-
-                  >
-
-                    {option.label}
-
-                  </button>
-
-                ))}
-
-              </div>
-
-            </div>
-
-
-
-            {accountTypeError ? (
-
-              <p style={{ margin: '12px 0 0', color: '#b91c1c', fontSize: '0.92rem' }}>
-
-                {accountTypeError}
-
-              </p>
-
-            ) : null}
-
-
-
-            <div
-
-              style={{
-
-                display: 'flex',
-
-                justifyContent: 'flex-end',
-
-                gap: 10,
-
-                marginTop: 22
-
-              }}
-
-            >
-
-              <button
-
-                type="button"
-
-                onClick={requestCloseAccountTypeEditor}
-
-                style={{
-
-                  border: '1px solid var(--border-medium)',
-
-                  borderRadius: 'var(--radius-control)',
-
-                  padding: '9px 14px',
-
-                  background: 'var(--surface-strong)',
-
-                  color: 'var(--text-secondary)',
-
-                  cursor: 'pointer',
-
-                  font: 'inherit'
-
-                }}
-
-              >
-
-                取消
-
-              </button>
-
-              <button
-
-                type="submit"
-
-                style={{
-
-                  border: 0,
-
-                  borderRadius: 'var(--radius-control)',
-
-                  padding: '9px 14px',
-
-                  background: 'var(--button-primary-bg)',
-
-                  color: 'var(--button-primary-text)',
-
-                  cursor: 'pointer',
-
-                  font: 'inherit'
-
-                }}
-
-              >
-
-                确定
-
-              </button>
-
-            </div>
-
-          </form>
-
-        </OverlayBackdrop>
-
-      ) : null}
-
-      {renderFirstWelcome()}
-
-      {renderLockScreen()}
+                },
+                onNatureChange: (value) => {
+                  setAccountTypeNatureDraft(value);
+                  setAccountTypeError('');
+                },
+                onStatsChange: (value) => {
+                  setAccountTypeStatsDraft(value);
+                  setAccountTypeError('');
+                },
+                onSubmit: saveAccountType,
+                onCancel: requestCloseAccountTypeEditor
+              }
+            : null
+        }
+      />
+
+
+      <FirstWelcomeLayer
+        stage={firstWelcomeStage}
+        storyRoutes={FIRST_WELCOME_STORY_ROUTES}
+        onComplete={completeFirstWelcome}
+        onOpenStory={openFirstWelcomeStory}
+        onChooseStoryRoute={chooseFirstWelcomeStoryRoute}
+      />
+
+      <LockScreenLayer
+        isLocked={isLocked}
+        productIconPath={PRODUCT_ICON_PATH}
+        password={unlockPasswordInput}
+        error={unlockError}
+        isUnlocking={isUnlocking}
+        onPasswordChange={(value) => {
+          setUnlockPasswordInput(value);
+          setUnlockError('');
+        }}
+        onSubmit={unlockApp}
+      />
 
       {isSecretConsoleOpen ? (
-
-        <div
-
-          className="secret-console-layer"
-
-          onMouseDown={closeSecretConsole}
-
-          onTouchStart={closeSecretConsole}
-
-        >
-
-          <input
-
-            ref={secretConsoleInputRef}
-
-            className={`secret-console-input${
-
-              isSecretConsoleHighlighted ? ' is-highlighted' : ''
-
-            }`}
-
-            value={secretConsoleInput}
-
-            placeholder={secretConsolePlaceholder}
-
-            aria-label="隐藏控制台"
-
-            spellCheck={false}
-
-            autoComplete="off"
-
-            onMouseDown={(event) => {
-
-              event.stopPropagation();
-
-              clearSecretConsoleResultPlaceholder();
-
-            }}
-
-            onTouchStart={(event) => {
-
-              event.stopPropagation();
-
-              clearSecretConsoleResultPlaceholder();
-
-            }}
-
-            onChange={(event) => {
-
-              clearSecretConsoleResultPlaceholder();
-
-              setSecretConsoleInput(event.target.value);
-
-            }}
-
-            onKeyDown={handleSecretConsoleKeyDown}
-
-          />
-
-        </div>
-
+        <SecretConsoleLayer
+          ref={secretConsoleInputRef}
+          value={secretConsoleInput}
+          placeholder={secretConsolePlaceholder}
+          isHighlighted={isSecretConsoleHighlighted}
+          onClose={closeSecretConsole}
+          onClearResultPlaceholder={clearSecretConsoleResultPlaceholder}
+          onChange={setSecretConsoleInput}
+          onKeyDown={handleSecretConsoleKeyDown}
+        />
       ) : null}
 
-      </main>
+      </AppShell>
 
-    </div>
+    </WindowFrame>
 
   );
 

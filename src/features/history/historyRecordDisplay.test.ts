@@ -9,11 +9,12 @@ const readProjectFile = (path: string) =>
 
 test('account history displays use date-only labels while snapshots keep precise time', () => {
   const appSource = readProjectFile('src/App.tsx');
+  const rightPanelRendererSource = readProjectFile('src/app/rightPanel/RightPanelRenderer.tsx');
   const backupListSource = readProjectFile('src/features/history/BackupRecordList.tsx');
   const searchEngineSource = readProjectFile('src/search/searchEngine.ts');
 
   assert.equal(appSource.includes('formatShortTime: formatHistoryRecordDate'), true);
-  assert.equal(appSource.includes('formatShortTime={formatHistoryRecordDate}'), true);
+  assert.equal(rightPanelRendererSource.includes('<SearchPreviewPanel {...search} />'), true);
   assert.equal(
     appSource.includes('return `${year}-${month}-${day} ${hour}:${minute}:${second}`;'),
     true

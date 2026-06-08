@@ -4,8 +4,7 @@ import type { AccountDangerActionsPanelProps } from './accountOperationTypes';
 function AccountDangerActionsPanel({
   isArchived,
   onArchiveAccount,
-  onDeleteAccount,
-  onBackToAccountDetail
+  onDeleteAccount
 }: AccountDangerActionsPanelProps) {
   return (
     <section className="right-panel-page">
@@ -13,11 +12,10 @@ function AccountDangerActionsPanel({
         <h2 className="right-panel-title">危险操作</h2>
       </div>
       <div className="right-panel-stack">
-      {!isArchived ? (
-        <RightPanelActionButton label="归档账户" onClick={onArchiveAccount} />
-      ) : null}
-      <RightPanelActionButton label="删除账户" tone="danger" onClick={onDeleteAccount} />
-      <RightPanelActionButton label="返回账户明细" onClick={onBackToAccountDetail} />
+        {!isArchived ? (
+          <RightPanelActionButton label="归档账户" onClick={onArchiveAccount} />
+        ) : null}
+        <RightPanelActionButton label="删除账户" tone="danger" onClick={onDeleteAccount} />
       </div>
     </section>
   );

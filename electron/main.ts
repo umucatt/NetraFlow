@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron';
 import fs from 'node:fs/promises';
 import {
   appendFileSync,
@@ -21,6 +21,7 @@ const USERDATA_DIR_NAME = 'userdata';
 const RUNTIME_DIR_NAME = 'runtime';
 const LOGS_DIR_NAME = 'logs';
 const NF_STORAGE_FILE_NAME = 'storage.json';
+const GLOBAL_SETTINGS_STORAGE_KEY = 'netraflowGlobalSettings';
 const NF_STORAGE_WHITELIST_KEYS = [
   'asset-overview-groups',
   'asset-overview-accounts',
@@ -30,7 +31,7 @@ const NF_STORAGE_WHITELIST_KEYS = [
   'backupRecords',
   'autoBackupSettings',
   'assetChartSettings',
-  'netraflowGlobalSettings',
+  GLOBAL_SETTINGS_STORAGE_KEY,
   'netraflowFirstWelcomeState',
   'netraflowRollupImportHashes',
   'netraflow_backup_before_migration',
@@ -50,6 +51,29 @@ const BILIBILI_PROFILE_URL = 'https://space.bilibili.com/1738773145';
 const GITHUB_RELEASES_URL = 'https://github.com/umucatt/NetraFlow/releases';
 const ALLOWED_GITHUB_RELEASES_HOSTS = new Set(['github.com', 'www.github.com']);
 const JSON_INTEGRITY_ALGORITHM = 'SHA-256';
+type ThemeMode = 'light' | 'dark' | 'system';
+type ResolvedTheme = 'light' | 'dark';
+type ThemeStyle = 'default' | 'nyaa';
+type ThemeBootstrapSettings = {
+  themeMode: ThemeMode;
+  themeStyle: ThemeStyle;
+  nyaaThemeUnlocked: boolean;
+};
+const DEFAULT_THEME_MODE: ThemeMode = 'system';
+const DEFAULT_THEME_STYLE: ThemeStyle = 'default';
+const THEME_BOOTSTRAP_BACKGROUND_COLORS: Record<
+  ThemeStyle,
+  Record<ResolvedTheme, string>
+> = {
+  default: {
+    light: '#f6f3ea',
+    dark: '#171a1f'
+  },
+  nyaa: {
+    light: '#fff6fa',
+    dark: '#18141b'
+  }
+};
 let mainWindow: BrowserWindow | null = null;
 let pendingRendererLock = process.argv.includes('--lock');
 
@@ -190,6 +214,75 @@ const getSortedNfStorageKeys = () => {
   const items = readNfStorageItems();
 
   return NF_STORAGE_WHITELIST_KEYS.filter((key) => Object.hasOwn(items, key));
+};
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isThemeMode = (value: unknown): value is ThemeMode =>
+  value === 'light' || value === 'dark' || value === 'system';
+
+const isThemeStyle = (value: unknown): value is ThemeStyle =>
+  value === 'default' || value === 'nyaa';
+
+const normalizeThemeBootstrapSettings = (value: unknown): ThemeBootstrapSettings => {
+  if (!isPlainObject(value)) {
+    return {
+      themeMode: DEFAULT_THEME_MODE,
+      themeStyle: DEFAULT_THEME_STYLE,
+      nyaaThemeUnlocked: false
+    };
+  }
+
+  const nyaaThemeUnlocked = value.nyaaThemeUnlocked === true;
+
+  return {
+    themeMode: isThemeMode(value.themeMode) ? value.themeMode : DEFAULT_THEME_MODE,
+    themeStyle:
+      nyaaThemeUnlocked && isThemeStyle(value.themeStyle)
+        ? value.themeStyle
+        : DEFAULT_THEME_STYLE,
+    nyaaThemeUnlocked
+  };
+};
+
+const readThemeBootstrapSettings = () => {
+  const storedSettings = readNfStorageItems()[GLOBAL_SETTINGS_STORAGE_KEY];
+
+  if (!storedSettings) {
+    return normalizeThemeBootstrapSettings(null);
+  }
+
+  try {
+    return normalizeThemeBootstrapSettings(JSON.parse(storedSettings));
+  } catch (error) {
+    console.warn('[NetraFlow theme] Failed to read global theme settings.', error);
+    return normalizeThemeBootstrapSettings(null);
+  }
+};
+
+const getSystemThemeForBootstrap = (): ResolvedTheme => {
+  try {
+    return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+  } catch (error) {
+    console.warn('[NetraFlow theme] Failed to resolve native theme.', error);
+    return 'light';
+  }
+};
+
+const resolveThemeForBootstrap = (themeMode: ThemeMode): ResolvedTheme =>
+  themeMode === 'system' ? getSystemThemeForBootstrap() : themeMode;
+
+const getThemeBootstrapBackgroundColor = (
+  resolvedTheme: ResolvedTheme,
+  themeStyle: ThemeStyle
+) => THEME_BOOTSTRAP_BACKGROUND_COLORS[themeStyle][resolvedTheme];
+
+const getBrowserWindowBackgroundColor = () => {
+  const settings = readThemeBootstrapSettings();
+  const resolvedTheme = resolveThemeForBootstrap(settings.themeMode);
+
+  return getThemeBootstrapBackgroundColor(resolvedTheme, settings.themeStyle);
 };
 
 const migrateLegacyItemsToNfStorage = (legacyItems: unknown) => {
@@ -693,7 +786,7 @@ function createWindow() {
     icon: getAppIconPath(),
     width: 960,
     height: 640,
-    backgroundColor: '#181b20',
+    backgroundColor: getBrowserWindowBackgroundColor(),
     minWidth: 720,
     minHeight: 480,
     frame: false,

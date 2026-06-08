@@ -42,6 +42,7 @@ export type SettingsPageProps = {
   onHomeAssetStatCompactChange: (value: string) => void;
   onThemeModeChange: (value: string) => void;
   onThemeStyleChange: (value: string) => void;
+  onMainContentPositionChange: (value: string) => void;
   onPagePositionMemoryModeChange: (value: string) => void;
   onChartColorAssignmentModeChange: (value: string) => void;
   onGlobalChartControlModeChange: (value: string) => void;
