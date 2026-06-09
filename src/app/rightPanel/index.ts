@@ -1,4 +1,8 @@
 export { default as RightPanelRenderer } from './RightPanelRenderer';
+export {
+  createRightPanelRendererProps,
+  getRightPanelMode
+} from './createRightPanelRendererProps';
 export type {
   ArchivedRightPanelProps,
   GroupDetailRightPanelProps,

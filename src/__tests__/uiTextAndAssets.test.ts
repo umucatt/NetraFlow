@@ -6,6 +6,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { getPageCoverage } from '../app/navigation/pageCoverageLogic';
+import {
+  forgetPageScrollTop,
+  readPageScrollTop,
+  rememberPageScrollTop
+} from '../app/scroll/pageScrollMemoryLogic';
+
 const readProjectFile = (path: string) =>
   readFileSync(new URL(`../../../${path}`, import.meta.url), 'utf8');
 
@@ -498,6 +505,7 @@ test('global search includes manual settings category without old result contain
   const searchOverlayLayerSource = readProjectFile(
     'src/app/searchOverlay/SearchOverlayLayer.tsx'
   );
+  const overlayLayerPropsSource = readProjectFile('src/app/layers/createOverlayLayerProps.ts');
   const searchPreviewPanelSource = readProjectFile('src/components/search/SearchPreviewPanel.tsx');
   const searchFloatingNavigatorSource = readProjectFile(
     'src/components/search/SearchFloatingNavigator.tsx'
@@ -522,7 +530,8 @@ test('global search includes manual settings category without old result contain
   assert.equal(appSource.includes('setGlobalSettingsSection(intent.section)'), true);
   assert.equal(appSource.includes('setIsGlobalSettingsOpen(true)'), true);
   assert.equal(appSource.includes('<SearchOverlayLayer'), true);
-  assert.equal(appSource.includes('panelProps={globalSearch.panelProps}'), true);
+  assert.equal(appSource.includes('panelProps: globalSearch.panelProps'), true);
+  assert.equal(overlayLayerPropsSource.includes('floatingNavigator: currentNavigationTarget'), true);
   assert.equal(searchOverlayLayerSource.includes('<GlobalSearchPanel {...panelProps} />'), true);
   assert.equal(
     searchOverlayLayerSource.includes('<SearchFloatingNavigator {...floatingNavigator} />'),
@@ -693,6 +702,9 @@ test('overlay backdrop and back helpers live in shared overlay infrastructure', 
 
 test('theme bootstrap resolves first frame before React mounts', () => {
   const appSource = readProjectFile('src/App.tsx');
+  const globalSettingsLogicSource = readProjectFile(
+    'src/app/globalSettings/globalSettingsLogic.ts'
+  );
   const indexSource = readProjectFile('index.html');
   const mainSource = readProjectFile('electron/main.ts');
   const bootstrapSource = indexSource.slice(
@@ -700,7 +712,7 @@ test('theme bootstrap resolves first frame before React mounts', () => {
     indexSource.indexOf('</script>')
   );
 
-  assert.equal(appSource.includes("themeMode: 'system'"), true);
+  assert.equal(globalSettingsLogicSource.includes("themeMode: 'system'"), true);
   assert.equal(indexSource.indexOf('<script>') < indexSource.indexOf('<script type="module"'), true);
   assert.equal(
     indexSource.indexOf("window.netraflowStorage.getItem('netraflowGlobalSettings')") <
@@ -753,6 +765,12 @@ test('theme bootstrap resolves first frame before React mounts', () => {
 
 test('NF storage adapter owns persisted renderer data and legacy localStorage migration', () => {
   const appSource = readProjectFile('src/App.tsx');
+  const globalSettingsLogicSource = readProjectFile(
+    'src/app/globalSettings/globalSettingsLogic.ts'
+  );
+  const firstWelcomeStateSource = readProjectFile(
+    'src/app/firstWelcome/firstWelcomeStateLogic.ts'
+  );
   const lifecycleLogicSource = readProjectFile('src/app/appDataLifecycleLogic.ts');
   const storageKeysSource = readProjectFile('src/app/storageKeys.ts');
   const nfStorageSource = readProjectFile('src/app/nfStorage.ts');
@@ -762,7 +780,12 @@ test('NF storage adapter owns persisted renderer data and legacy localStorage mi
   const mainSource = readProjectFile('electron/main.ts');
   const preloadSource = readProjectFile('electron/preload.ts');
   const indexSource = readProjectFile('index.html');
-  const persistedStorageSource = `${appSource}\n${lifecycleLogicSource}`;
+  const persistedStorageSource = [
+    appSource,
+    lifecycleLogicSource,
+    globalSettingsLogicSource,
+    firstWelcomeStateSource
+  ].join('\n');
   const assertNfStorageSetItem = (key: string) => {
     assert.match(persistedStorageSource, new RegExp(`nfStorage\\.setItem\\(\\s*${key}\\b`));
   };
@@ -872,6 +895,9 @@ test('page position memory copy and settings search keywords stay wired', () => 
 
 test('main content position setting keeps left default and swaps only app shell columns', () => {
   const appSource = readProjectFile('src/App.tsx');
+  const globalSettingsLogicSource = readProjectFile(
+    'src/app/globalSettings/globalSettingsLogic.ts'
+  );
   const appShellSource = readProjectFile('src/app/shell/AppShell.tsx');
   const appShellTypesSource = readProjectFile('src/app/shell/appShellTypes.ts');
   const settingsPageSource = readProjectFile('src/features/settings/SettingsPage.tsx');
@@ -885,13 +911,13 @@ test('main content position setting keeps left default and swaps only app shell 
     'src/features/security/securitySettingsTypes.ts'
   );
   const stylesSource = readProjectFile('src/styles.css');
-  const defaultGlobalSettingsSource = appSource.slice(
-    appSource.indexOf('const DEFAULT_GLOBAL_SETTINGS'),
-    appSource.indexOf('const DEFAULT_FIRST_WELCOME_STATE')
+  const defaultGlobalSettingsSource = globalSettingsLogicSource.slice(
+    globalSettingsLogicSource.indexOf('export const DEFAULT_GLOBAL_SETTINGS'),
+    globalSettingsLogicSource.indexOf('export const isPositiveNegativeColorMode')
   );
-  const normalizeGlobalSettingsSource = appSource.slice(
-    appSource.indexOf('const normalizeGlobalSettings'),
-    appSource.indexOf('const loadGlobalSettings')
+  const normalizeGlobalSettingsSource = globalSettingsLogicSource.slice(
+    globalSettingsLogicSource.indexOf('export const normalizeGlobalSettings'),
+    globalSettingsLogicSource.indexOf('export const loadGlobalSettings')
   );
   const mainContentSearchItemStart = settingsSectionLogicSource.indexOf(
     "id: 'appearance-main-content-position'"
@@ -907,7 +933,13 @@ test('main content position setting keeps left default and swaps only app shell 
 
   assert.equal(securitySettingsTypesSource.includes("export type MainContentPosition = 'left' | 'right';"), true);
   assert.equal(defaultGlobalSettingsSource.includes("mainContentPosition: 'left'"), true);
-  assert.equal(appSource.includes('const isMainContentPosition = (value: unknown): value is MainContentPosition'), true);
+  assert.equal(appSource.includes('const DEFAULT_GLOBAL_SETTINGS'), false);
+  assert.equal(
+    globalSettingsLogicSource.includes(
+      'export const isMainContentPosition = (value: unknown): value is MainContentPosition'
+    ),
+    true
+  );
   assert.equal(normalizeGlobalSettingsSource.includes('mainContentPosition: isMainContentPosition(value.mainContentPosition)'), true);
   assert.equal(normalizeGlobalSettingsSource.includes(': DEFAULT_GLOBAL_SETTINGS.mainContentPosition'), true);
 
@@ -1371,6 +1403,9 @@ test('Windows installer install directory and uninstall cleanup rules are wired'
 
 test('packaged first launch starts with empty real data and excludes runtime storage', () => {
   const appSource = readProjectFile('src/App.tsx');
+  const firstWelcomeStateSource = readProjectFile(
+    'src/app/firstWelcome/firstWelcomeStateLogic.ts'
+  );
   const firstWelcomeLayerSource = readProjectFile(
     'src/app/firstWelcome/FirstWelcomeLayer.tsx'
   );
@@ -1396,6 +1431,15 @@ test('packaged first launch starts with empty real data and excludes runtime sto
   assert.equal(appSource.includes('default-bank-card'), false);
   assert.equal(appSource.includes('default-stock'), false);
   assert.equal(appSource.includes('default-credit-card'), false);
+  assert.equal(appSource.includes('const DEFAULT_FIRST_WELCOME_STATE'), false);
+  assert.equal(firstWelcomeStateSource.includes('export const DEFAULT_FIRST_WELCOME_STATE'), true);
+  assert.equal(firstWelcomeStateSource.includes('const FIRST_WELCOME_FOOTPRINT_STORAGE_KEYS'), true);
+  assert.equal(firstWelcomeStateSource.includes('export const normalizeFirstWelcomeState'), true);
+  assert.equal(firstWelcomeStateSource.includes('export const loadFirstWelcomeState'), true);
+  assert.equal(firstWelcomeStateSource.includes('export const saveFirstWelcomeState'), true);
+  assert.equal(firstWelcomeStateSource.includes('export const shouldShowFirstWelcome'), true);
+  assert.equal(firstWelcomeStateSource.includes('FIRST_WELCOME_STORAGE_KEY'), true);
+  assert.equal(firstWelcomeStateSource.includes('GLOBAL_SETTINGS_STORAGE_KEY'), true);
   assert.equal(appSource.includes('<FirstWelcomeLayer'), true);
   assert.equal(appSource.includes('<SecretConsoleLayer'), true);
   assert.equal(firstWelcomeLayerSource.includes('Halo, 你好像是第一次来到净流，需要跟我一起看看吗？'), true);
@@ -1919,15 +1963,17 @@ test('quick entry picker and example account aliases use current title and mark 
   const quickEntryLayerSource = readProjectFile(
     'src/app/quickEntryLayer/QuickEntryPickerLayer.tsx'
   );
+  const overlayLayerPropsSource = readProjectFile('src/app/layers/createOverlayLayerProps.ts');
   const quickEntryHostSource = appSource.slice(
-    appSource.indexOf('<QuickEntryPickerLayer'),
-    appSource.indexOf('<AccountDialogLayer')
+    appSource.indexOf('const quickEntryPickerLayerProps'),
+    appSource.indexOf('const lockScreenLayerProps')
   );
   const quickPanelSource = readProjectFile('src/features/quickEntry/QuickEntryPanel.tsx');
   const quickPickerSource = readProjectFile('src/features/quickEntry/QuickEntryAccountPicker.tsx');
 
-  assert.equal(quickEntryHostSource.includes('<QuickEntryPickerLayer'), true);
+  assert.equal(appSource.includes('<QuickEntryPickerLayer {...quickEntryPickerLayerProps} />'), true);
   assert.equal(quickEntryHostSource.includes('chooseQuickSingleEntryAccountById'), true);
+  assert.equal(overlayLayerPropsSource.includes('createQuickEntryPickerLayerProps'), true);
   assert.equal(quickEntryLayerSource.includes('<QuickEntryPanel'), true);
   assert.equal(quickEntryLayerSource.includes('<QuickEntryAccountPicker'), true);
   assert.equal(`${quickEntryLayerSource}\n${quickPanelSource}`.includes('<p className="eyebrow">记一笔</p>'), false);
@@ -2068,15 +2114,35 @@ test('account detail operation copy and editor previews stay visually scoped', (
 
 test('page coverage scroll reset stays scoped away from view and form state', () => {
   const appSource = readProjectFile('src/App.tsx');
+  const pageCoverageLogicSource = readProjectFile('src/app/navigation/pageCoverageLogic.ts');
+  const navigationIndexSource = readProjectFile('src/app/navigation/index.ts');
+  const pageScrollMemoryLogicSource = readProjectFile('src/app/scroll/pageScrollMemoryLogic.ts');
+  const scrollIndexSource = readProjectFile('src/app/scroll/index.ts');
   const scrollEffectsSource = appSource.slice(
     appSource.indexOf('const previousMainPageKey = previousMainPageKeyRef.current;'),
     appSource.indexOf('const snapshotSecurityDialogLayerProps')
   );
 
-  assert.equal(appSource.includes("type PageCoverage = 'full' | 'right-panel-only' | 'none';"), true);
-  assert.equal(appSource.includes('const getPageCoverage = ('), true);
+  assert.equal(pageCoverageLogicSource.includes("export type PageCoverage = 'full' | 'right-panel-only' | 'none';"), true);
+  assert.equal(pageCoverageLogicSource.includes('export const getPageCoverage = ('), true);
+  assert.equal(pageCoverageLogicSource.includes('previousPageKey === nextPageKey'), true);
+  assert.equal(pageCoverageLogicSource.includes("return 'none';"), true);
+  assert.equal(pageCoverageLogicSource.includes("panel === 'main' ? 'full' : 'right-panel-only'"), true);
+  assert.equal(navigationIndexSource.includes('getPageCoverage'), true);
+  assert.match(appSource, /import\s+\{\s*getPageCoverage\s*\}\s+from\s+'\.\/app\/navigation';/);
+  assert.equal(appSource.includes('const getPageCoverage = ('), false);
   assert.equal(appSource.includes("getPageCoverage(previousMainPageKey, mainPageKey, 'main')"), true);
   assert.equal(appSource.includes("getPageCoverage(previousRightPanelKey, rightPanelKey, 'right')"), true);
+  assert.equal(getPageCoverage('home', 'home', 'main'), 'none');
+  assert.equal(getPageCoverage('home', 'settings', 'main'), 'full');
+  assert.equal(getPageCoverage('home-actions', 'search', 'right'), 'right-panel-only');
+  assert.equal(pageScrollMemoryLogicSource.includes('export const readPageScrollTop = ('), true);
+  assert.equal(pageScrollMemoryLogicSource.includes('export const rememberPageScrollTop = ('), true);
+  assert.equal(pageScrollMemoryLogicSource.includes('export const forgetPageScrollTop = ('), true);
+  assert.equal(scrollIndexSource.includes('readPageScrollTop'), true);
+  assert.equal(appSource.includes('readPageScrollTop(sessionMainScrollPositionsRef.current, mainPageKey)'), true);
+  assert.equal(appSource.includes('rememberPageScrollTop('), true);
+  assert.equal(appSource.includes('forgetPageScrollTop('), true);
   assert.equal(appSource.includes("leftLayerCoverage === 'full' && !previousLeftLayerKey && Boolean(leftLayerKey)"), true);
   assert.equal(appSource.includes('mainContentRef.current?.scrollTo({ top: 0 });'), true);
   assert.equal(appSource.includes('leftLayerPanelRef.current?.scrollTo({ top: 0 });'), true);
@@ -2088,6 +2154,14 @@ test('page coverage scroll reset stays scoped away from view and form state', ()
   assert.equal(scrollEffectsSource.includes("setAccountNameDraft('')"), false);
   assert.equal(scrollEffectsSource.includes("setRollupPasteText('')"), false);
   assert.equal(scrollEffectsSource.includes('window.localStorage'), false);
+
+  const scrollMemory = { home: 128 };
+  assert.equal(readPageScrollTop(scrollMemory, 'home'), 128);
+  assert.equal(readPageScrollTop(scrollMemory, 'settings'), 0);
+  rememberPageScrollTop(scrollMemory, 'settings', 256);
+  assert.equal(readPageScrollTop(scrollMemory, 'settings'), 256);
+  forgetPageScrollTop(scrollMemory, 'home');
+  assert.equal(readPageScrollTop(scrollMemory, 'home'), 0);
 });
 
 test('home asset stat label stays above amount with muted visual weight', () => {
@@ -2609,16 +2683,15 @@ test('NF tooltip replaces high frequency native hover titles', () => {
 
 test('home account type edit mode exposes centered sort and delete actions', () => {
   const appSource = readProjectFile('src/App.tsx');
+  const mainContentPropsSource = readProjectFile(
+    'src/app/mainContent/createMainContentRendererProps.tsx'
+  );
   const overviewSource = readProjectFile('src/features/overview/AssetOverviewPage.tsx');
   const stylesSource = readProjectFile('src/styles.css');
   const entryStart = overviewSource.indexOf('data-account-type-entry="true"');
   const entrySource = overviewSource.slice(
     entryStart,
     overviewSource.indexOf('{expanded ? (', entryStart)
-  );
-  const dashboardWiringSource = appSource.slice(
-    appSource.indexOf('dashboard: {'),
-    appSource.indexOf('account: {', appSource.indexOf('dashboard: {'))
   );
   const longPressSource = appSource.slice(
     appSource.indexOf('const startGroupPointerInteraction'),
@@ -2643,14 +2716,14 @@ test('home account type edit mode exposes centered sort and delete actions', () 
   assert.equal(entrySource.includes("'请先归档或删除未归档账户'"), false);
   assert.equal(entrySource.includes('title="拖拽排序"'), false);
   assert.equal(entrySource.includes('title={currentCanDeleteGroup'), false);
-  assert.equal(dashboardWiringSource.includes('NfSortIcon'), true);
-  assert.equal(dashboardWiringSource.includes('NfWindowCloseIcon'), true);
+  assert.equal(mainContentPropsSource.includes('NfSortIcon'), true);
+  assert.equal(mainContentPropsSource.includes('NfWindowCloseIcon'), true);
   assert.equal(entrySource.includes('data-interactive'), true);
   assert.equal(entrySource.includes('disabled={!currentCanDeleteGroup}'), true);
   assert.equal(entrySource.includes('onDeleteGroup(group.id)'), true);
   assert.equal(overviewSource.includes('currentCanDeleteGroup = canDeleteGroup(group.id)'), true);
-  assert.equal(dashboardWiringSource.includes('canDeleteAssetGroup(groupId, accounts)'), true);
-  assert.equal(dashboardWiringSource.includes('onDeleteGroup: deleteAssetGroup'), true);
+  assert.equal(mainContentPropsSource.includes('canDeleteAssetGroup(groupId, dashboard.accounts)'), true);
+  assert.equal(appSource.includes('onDeleteGroup: deleteAssetGroup'), true);
   assert.equal(entrySource.indexOf('</button>') < entrySource.indexOf('account-type-entry-actions'), true);
   assert.equal(entrySource.includes('draggable={isGroupEditMode}'), true);
   assert.equal(entrySource.includes('onGroupDragStart(event, group.id)'), true);
@@ -2658,11 +2731,11 @@ test('home account type edit mode exposes centered sort and delete actions', () 
   assert.equal(entrySource.includes('onGroupDragLeave(event, group.id)'), true);
   assert.equal(entrySource.includes('onGroupDrop(event, group.id)'), true);
   assert.equal(entrySource.includes('onDragEnd={onGroupDragEnd}'), true);
-  assert.equal(dashboardWiringSource.includes('onGroupDragStart: handleGroupDragStart'), true);
-  assert.equal(dashboardWiringSource.includes('onGroupDragOver: handleGroupDragOver'), true);
-  assert.equal(dashboardWiringSource.includes('onGroupDragLeave: handleGroupDragLeave'), true);
-  assert.equal(dashboardWiringSource.includes('onGroupDrop: handleGroupDrop'), true);
-  assert.equal(dashboardWiringSource.includes('onGroupDragEnd: handleGroupDragEnd'), true);
+  assert.equal(appSource.includes('onGroupDragStart: handleGroupDragStart'), true);
+  assert.equal(appSource.includes('onGroupDragOver: handleGroupDragOver'), true);
+  assert.equal(appSource.includes('onGroupDragLeave: handleGroupDragLeave'), true);
+  assert.equal(appSource.includes('onGroupDrop: handleGroupDrop'), true);
+  assert.equal(appSource.includes('onGroupDragEnd: handleGroupDragEnd'), true);
   assert.equal(entrySource.includes('data-account-type-drop-indicator'), true);
   assert.equal(overviewSource.includes('account-type-entry--drop-${groupDropPosition}'), true);
   assert.equal(appSource.includes('const getGroupDropPosition'), true);

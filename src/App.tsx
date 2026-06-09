@@ -33,15 +33,9 @@ import {
 } from './app/accountNature';
 import {
   ACCOUNTS_STORAGE_KEY,
-  AUTO_BACKUP_SETTINGS_STORAGE_KEY,
-  BACKUP_RECORDS_STORAGE_KEY,
   CHART_SETTINGS_STORAGE_KEY,
-  FIRST_WELCOME_STORAGE_KEY,
-  GLOBAL_SETTINGS_STORAGE_KEY,
   GROUPS_STORAGE_KEY,
   HISTORY_STORAGE_KEY,
-  LAST_BACKUP_HISTORY_COUNT_STORAGE_KEY,
-  LAST_BACKUP_STORAGE_KEY,
   LEGACY_ACCOUNTS_STORAGE_KEY,
   LEGACY_ACCOUNT_TYPES_STORAGE_KEY,
   LEGACY_ARCHIVED_ACCOUNTS_STORAGE_KEY,
@@ -53,6 +47,8 @@ import {
   migrateLegacyLocalStorageToNfStorage,
   nfStorage
 } from './app/nfStorage';
+import { isPlainObject } from './app/objectUtils';
+import { readStorageJson } from './app/storageJson';
 import {
   canDeleteAssetGroup,
   cloneAppData,
@@ -65,35 +61,60 @@ import {
 } from './app/accountData';
 import { createStableGroupId } from './app/ids';
 import {
-  NfFlashnoteSourceIcon,
-  NfSortIcon,
-  NfWindowCloseIcon
+  NfFlashnoteSourceIcon
 } from './assets/icons';
 import { WindowFrame } from './app/windowFrame';
 import { AppShell } from './app/shell';
 import {
+  createMainContentRendererProps,
+  getMainContentMode,
   MainContentRenderer,
-  type MainContentMode,
   type MainContentRendererProps
 } from './app/mainContent';
-import { AppDialogLayer, ToastViewport, useToastController } from './app/feedback';
+import {
+  AppDialogLayer,
+  ToastViewport,
+  createAppDialogLayerProps,
+  useToastController
+} from './app/feedback';
 import { AccountDialogLayer } from './app/accountDialogs';
 import {
+  createSnapshotSecurityDialogLayerProps,
   SnapshotSecurityDialogLayer,
   type SnapshotSecurityDialogLayerProps
 } from './app/snapshotSecurityDialogs';
 import {
   FirstWelcomeLayer,
+  loadFirstWelcomeState,
+  saveFirstWelcomeState,
+  shouldShowFirstWelcome,
   type FirstWelcomeStage,
+  type FirstWelcomeState,
   type FirstWelcomeStoryRoute
 } from './app/firstWelcome';
+import {
+  DEFAULT_GLOBAL_SETTINGS,
+  THEME_MEDIA_QUERY,
+  getSystemTheme,
+  isMainContentPosition,
+  isPagePositionMemoryMode,
+  isPositiveNegativeColorMode,
+  isSearchLogicMode,
+  isThemeMode,
+  isThemeStyle,
+  loadGlobalSettings,
+  normalizeGlobalSettings,
+  resolveThemeMode,
+  saveGlobalSettings
+} from './app/globalSettings';
 import { SecretConsoleLayer } from './app/secretConsole';
 import {
   SearchOverlayLayer
 } from './app/searchOverlay';
 import {
+  createRightPanelRendererProps,
+  getRightPanelMode,
   RightPanelRenderer,
-  type RightPanelMode,
   type RightPanelRendererProps
 } from './app/rightPanel';
 import { ResetDangerDialogLayer } from './app/resetDangerDialog';
@@ -101,7 +122,21 @@ import { LockScreenLayer } from './app/lockScreen';
 import { QuickEntryPickerLayer } from './app/quickEntryLayer';
 import { ArchivedAccountsLayer } from './app/archivedAccountsLayer';
 import { HistoryBackupLayer } from './app/historyBackupLayer';
+import {
+  createArchivedAccountsLayerProps,
+  createHistoryBackupLayerProps,
+  createLockScreenLayerProps,
+  createQuickEntryPickerLayerProps,
+  createResetDangerDialogLayerProps,
+  createSearchOverlayLayerProps
+} from './app/layers';
 import { useOverlayBack } from './app/overlay';
+import { getPageCoverage } from './app/navigation';
+import {
+  forgetPageScrollTop,
+  readPageScrollTop,
+  rememberPageScrollTop
+} from './app/scroll';
 
 import AccountMark from './components/AccountMark';
 import NfSvgIcon from './components/NfSvgIcon';
@@ -186,7 +221,6 @@ import {
 } from './chartLogic';
 import { EXAMPLE_TEMPLATES, createExampleData } from './exampleData';
 import {
-  DEFAULT_HOME_ASSET_STAT_SETTINGS,
   isHomeAssetStatLabelMode,
   isHomeAssetStatMetric
 } from './homeAssetStats';
@@ -202,7 +236,6 @@ import {
   resolveSearchNavigationTarget
 } from './search/searchNavigationLogic';
 import { useGlobalSearchController } from './search/useGlobalSearchController';
-import { isPasswordHash } from './security/passwordHash';
 
 import type {
   Account,
@@ -228,16 +261,12 @@ import type {
 import type { ExampleTemplateId } from './exampleData';
 import type {
   CreateSearchIndexOptions,
-  SearchLogicMode,
   SearchNavigationTarget
 } from './search/searchTypes';
 import type {
   GlobalSettings,
-  MainContentPosition,
-  PagePositionMemoryMode,
   PositiveNegativeColorMode,
   ResolvedTheme,
-  ThemeMode,
   ThemeStyle
 } from './features/security/securitySettingsTypes';
 
@@ -359,20 +388,6 @@ type SearchNavigationSnapshot = {
 
 
 
-type PageCoverage = 'full' | 'right-panel-only' | 'none';
-
-
-
-type FirstWelcomeState = {
-
-  completed: boolean;
-
-  pendingAfterClearAll: boolean;
-
-};
-
-
-
 const PRODUCT_NAME_EN = 'NetraFlow';
 
 const PRODUCT_NAME_ZH = '净流';
@@ -467,46 +482,6 @@ const DEFAULT_ASSET_CHART_SETTINGS: AssetChartSettings = {
 
 };
 
-const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
-
-  positiveNegativeColorMode: 'red-positive',
-
-  themeMode: 'system',
-
-  themeStyle: 'default',
-
-  nyaaThemeUnlocked: false,
-
-  mainContentPosition: 'left',
-
-  pagePositionMemoryMode: 'global',
-
-  searchLogicMode: 'infer',
-
-  chartColorAssignmentMode: 'createdAt',
-
-  ...DEFAULT_HOME_ASSET_STAT_SETTINGS,
-
-  passwordProtectionEnabled: false,
-
-  passwordHash: null,
-
-  autoLockMinutes: 10,
-
-  snapshotEncryptionEnabled: false,
-
-  snapshotPasswordHash: null
-
-};
-
-const DEFAULT_FIRST_WELCOME_STATE: FirstWelcomeState = {
-
-  completed: false,
-
-  pendingAfterClearAll: false
-
-};
-
 const SIGNED_AMOUNT_COLORS = {
 
   red: 'var(--signed-red)',
@@ -526,38 +501,6 @@ const SIGNED_AMOUNT_BACKGROUNDS = {
   neutral: 'var(--surface-muted)'
 
 } as const;
-
-const FIRST_WELCOME_FOOTPRINT_STORAGE_KEYS = [
-
-  GROUPS_STORAGE_KEY,
-
-  ACCOUNTS_STORAGE_KEY,
-
-  HISTORY_STORAGE_KEY,
-
-  LAST_BACKUP_STORAGE_KEY,
-
-  LAST_BACKUP_HISTORY_COUNT_STORAGE_KEY,
-
-  BACKUP_RECORDS_STORAGE_KEY,
-
-  AUTO_BACKUP_SETTINGS_STORAGE_KEY,
-
-  CHART_SETTINGS_STORAGE_KEY,
-
-  GLOBAL_SETTINGS_STORAGE_KEY,
-
-  LEGACY_ACCOUNTS_STORAGE_KEY,
-
-  LEGACY_ACCOUNT_TYPES_STORAGE_KEY,
-
-  LEGACY_HISTORY_STORAGE_KEY,
-
-  LEGACY_ARCHIVED_ACCOUNTS_STORAGE_KEY,
-
-  LEGACY_DELETED_RECORDS_STORAGE_KEY
-
-] as const;
 
 migrateLegacyLocalStorageToNfStorage();
 
@@ -652,12 +595,6 @@ const isTextEditingElement = (element: Element | null): element is HTMLElement =
 
 
 const initialGroups: AssetGroup[] = [];
-
-
-
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-
-  typeof value === 'object' && value !== null;
 
 
 
@@ -828,38 +765,6 @@ const saveBackupBeforeMigration = (reason: string) => {
   } catch (error) {
 
     console.warn('[NetraFlow storage] Failed to create migration snapshot.', error);
-
-  }
-
-};
-
-
-
-const readStorageJson = (key: string) => {
-
-  const raw = nfStorage.getItem(key);
-
-
-
-  if (raw === null) {
-
-    return { exists: false, parsed: false, value: undefined, raw };
-
-  }
-
-
-
-  try {
-
-    return { exists: true, parsed: true, value: JSON.parse(raw) as unknown, raw };
-
-  } catch (error) {
-
-    console.warn(`[NetraFlow storage] Failed to parse storage key "${key}".`, error);
-
-
-
-    return { exists: true, parsed: false, value: undefined, raw };
 
   }
 
@@ -1260,296 +1165,6 @@ const saveAssetChartSettings = (settings: AssetChartSettings) => {
   );
 
 };
-
-
-
-const isPositiveNegativeColorMode = (value: unknown): value is PositiveNegativeColorMode =>
-
-  value === 'red-positive' || value === 'green-positive';
-
-
-
-const isThemeMode = (value: unknown): value is ThemeMode =>
-
-  value === 'light' || value === 'dark' || value === 'system';
-
-
-
-const isThemeStyle = (value: unknown): value is ThemeStyle =>
-
-  value === 'default' || value === 'nyaa';
-
-
-
-const isPagePositionMemoryMode = (value: unknown): value is PagePositionMemoryMode =>
-
-  value === 'global' || value === 'covered-reset';
-
-const isMainContentPosition = (value: unknown): value is MainContentPosition =>
-
-  value === 'left' || value === 'right';
-
-
-
-const isSearchLogicMode = (value: unknown): value is SearchLogicMode =>
-
-  value === 'strict' || value === 'infer';
-
-
-
-const THEME_MEDIA_QUERY = '(prefers-color-scheme: dark)';
-
-
-
-const getSystemTheme = (): ResolvedTheme => {
-
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-
-    return 'light';
-
-  }
-
-
-
-  return window.matchMedia(THEME_MEDIA_QUERY).matches ? 'dark' : 'light';
-
-};
-
-
-
-const resolveThemeMode = (
-
-  themeMode: ThemeMode,
-
-  systemTheme: ResolvedTheme
-
-): ResolvedTheme => (themeMode === 'system' ? systemTheme : themeMode);
-
-
-
-const normalizeAutoLockMinutes = (value: unknown) => {
-
-  const numericValue = typeof value === 'number' ? value : Number(value);
-
-
-
-  return Number.isFinite(numericValue) && numericValue >= 1
-
-    ? Math.floor(numericValue)
-
-    : DEFAULT_GLOBAL_SETTINGS.autoLockMinutes;
-
-};
-
-
-
-const normalizeGlobalSettings = (value: unknown): GlobalSettings => {
-
-  if (!isPlainObject(value)) {
-
-    return DEFAULT_GLOBAL_SETTINGS;
-
-  }
-
-
-
-  const passwordHash = isPasswordHash(value.passwordHash) ? value.passwordHash : null;
-
-  const snapshotPasswordHash = isPasswordHash(value.snapshotPasswordHash)
-
-    ? value.snapshotPasswordHash
-
-    : null;
-
-  const nyaaThemeUnlocked = value.nyaaThemeUnlocked === true;
-
-
-
-  return {
-
-    positiveNegativeColorMode: isPositiveNegativeColorMode(value.positiveNegativeColorMode)
-
-      ? value.positiveNegativeColorMode
-
-      : DEFAULT_GLOBAL_SETTINGS.positiveNegativeColorMode,
-
-    themeMode: isThemeMode(value.themeMode)
-
-      ? value.themeMode
-
-      : DEFAULT_GLOBAL_SETTINGS.themeMode,
-
-    themeStyle:
-
-      nyaaThemeUnlocked && isThemeStyle(value.themeStyle)
-
-        ? value.themeStyle
-
-        : DEFAULT_GLOBAL_SETTINGS.themeStyle,
-
-    nyaaThemeUnlocked,
-
-    mainContentPosition: isMainContentPosition(value.mainContentPosition)
-
-      ? value.mainContentPosition
-
-      : DEFAULT_GLOBAL_SETTINGS.mainContentPosition,
-
-    pagePositionMemoryMode: isPagePositionMemoryMode(value.pagePositionMemoryMode)
-
-      ? value.pagePositionMemoryMode
-
-      : DEFAULT_GLOBAL_SETTINGS.pagePositionMemoryMode,
-
-    searchLogicMode: isSearchLogicMode(value.searchLogicMode)
-
-      ? value.searchLogicMode
-
-      : DEFAULT_GLOBAL_SETTINGS.searchLogicMode,
-
-    chartColorAssignmentMode: isChartColorAssignmentMode(value.chartColorAssignmentMode)
-
-      ? value.chartColorAssignmentMode
-
-      : DEFAULT_GLOBAL_SETTINGS.chartColorAssignmentMode,
-
-    homeAssetStatMetric: isHomeAssetStatMetric(value.homeAssetStatMetric)
-
-      ? value.homeAssetStatMetric
-
-      : DEFAULT_GLOBAL_SETTINGS.homeAssetStatMetric,
-
-    homeAssetStatLabelMode: isHomeAssetStatLabelMode(value.homeAssetStatLabelMode)
-
-      ? value.homeAssetStatLabelMode
-
-      : DEFAULT_GLOBAL_SETTINGS.homeAssetStatLabelMode,
-
-    homeAssetStatCompact:
-
-      typeof value.homeAssetStatCompact === 'boolean'
-
-        ? value.homeAssetStatCompact
-
-        : DEFAULT_GLOBAL_SETTINGS.homeAssetStatCompact,
-
-    passwordProtectionEnabled: value.passwordProtectionEnabled === true && passwordHash !== null,
-
-    passwordHash,
-
-    autoLockMinutes: normalizeAutoLockMinutes(value.autoLockMinutes),
-
-    snapshotEncryptionEnabled:
-
-      value.snapshotEncryptionEnabled === true && snapshotPasswordHash !== null,
-
-    snapshotPasswordHash
-
-  };
-
-};
-
-
-
-const loadGlobalSettings = () => {
-
-  const storedSettings = readStorageJson(GLOBAL_SETTINGS_STORAGE_KEY);
-
-
-
-  return storedSettings.parsed
-
-    ? normalizeGlobalSettings(storedSettings.value)
-
-    : DEFAULT_GLOBAL_SETTINGS;
-
-};
-
-
-
-const saveGlobalSettings = (settings: GlobalSettings) => {
-
-  nfStorage.setItem(
-
-    GLOBAL_SETTINGS_STORAGE_KEY,
-
-    JSON.stringify(normalizeGlobalSettings(settings))
-
-  );
-
-};
-
-
-
-const normalizeFirstWelcomeState = (value: unknown): FirstWelcomeState => {
-
-  if (!isPlainObject(value)) {
-
-    return DEFAULT_FIRST_WELCOME_STATE;
-
-  }
-
-
-
-  return {
-
-    completed: value.completed === true,
-
-    pendingAfterClearAll: value.pendingAfterClearAll === true
-
-  };
-
-};
-
-
-
-const hasExistingFirstWelcomeFootprint = () =>
-
-  FIRST_WELCOME_FOOTPRINT_STORAGE_KEYS.some((key) => nfStorage.getItem(key) !== null);
-
-
-
-const loadFirstWelcomeState = (): FirstWelcomeState => {
-
-  const storedState = readStorageJson(FIRST_WELCOME_STORAGE_KEY);
-
-
-
-  if (storedState.parsed) {
-
-    return normalizeFirstWelcomeState(storedState.value);
-
-  }
-
-
-
-  return hasExistingFirstWelcomeFootprint()
-
-    ? { completed: true, pendingAfterClearAll: false }
-
-    : DEFAULT_FIRST_WELCOME_STATE;
-
-};
-
-
-
-const saveFirstWelcomeState = (state: FirstWelcomeState) => {
-
-  nfStorage.setItem(
-
-    FIRST_WELCOME_STORAGE_KEY,
-
-    JSON.stringify(normalizeFirstWelcomeState(state))
-
-  );
-
-};
-
-
-
-const shouldShowFirstWelcome = (state: FirstWelcomeState) =>
-
-  state.pendingAfterClearAll || !state.completed;
 
 
 
@@ -2579,30 +2194,6 @@ const getAccountDetailTitle = (groupName: string | undefined, accountName: strin
 
 
   return trimmedGroupName ? `${trimmedGroupName} - ${accountName}` : accountName;
-
-};
-
-
-
-const getPageCoverage = (
-
-  previousPageKey: string,
-
-  nextPageKey: string,
-
-  panel: 'main' | 'right'
-
-): PageCoverage => {
-
-  if (previousPageKey === nextPageKey) {
-
-    return 'none';
-
-  }
-
-
-
-  return panel === 'main' ? 'full' : 'right-panel-only';
 
 };
 
@@ -6820,51 +6411,19 @@ function App() {
 
                       : 'home-actions';
 
-  const rightPanelMode: RightPanelMode = globalSearch.isOpen
-
-    ? 'search'
-
-    : isRollupImportOpen
-
-      ? 'rollup-import'
-
-      : isDangerActionsOpen && selectedAccount && selectedAccountEntry
-
-        ? 'account-danger'
-
-        : isAccountChartsOpen && selectedAccount && selectedAccountEntry
-
-          ? 'account-chart-settings'
-
-          : selectedAccount && selectedAccountEntry
-
-            ? 'account-actions'
-
-            : isHistoryOpen && historyPanelView === 'backup'
-
-              ? 'snapshot'
-
-              : isHistoryOpen
-
-                ? 'history'
-
-                : isArchivedAccountsOpen
-
-                  ? 'archived'
-
-                  : isTotalChartsOpen
-
-                    ? 'chart-settings'
-
-                    : selectedGroupDetail
-
-                      ? 'group-detail'
-
-                      : isGlobalSettingsOpen
-
-                        ? 'settings'
-
-                        : 'home';
+  const rightPanelMode = getRightPanelMode({
+    isSearchOpen: globalSearch.isOpen,
+    isRollupImportOpen,
+    isDangerActionsOpen,
+    hasSelectedAccountDetail: Boolean(selectedAccount && selectedAccountEntry),
+    isAccountChartsOpen,
+    isHistoryOpen,
+    isHistoryBackupView: historyPanelView === 'backup',
+    isArchivedAccountsOpen,
+    isTotalChartsOpen,
+    hasSelectedGroupDetail: Boolean(selectedGroupDetail),
+    isGlobalSettingsOpen
+  });
 
   useEffect(() => {
 
@@ -7510,13 +7069,9 @@ function App() {
 
         if (isMainKeyChange) {
 
-          const savedScrollTop = sessionMainScrollPositionsRef.current[mainPageKey];
-
-
-
           mainContentRef.current?.scrollTo({
 
-            top: typeof savedScrollTop === 'number' ? savedScrollTop : 0
+            top: readPageScrollTop(sessionMainScrollPositionsRef.current, mainPageKey)
 
           });
 
@@ -7526,13 +7081,13 @@ function App() {
 
         if (isMainKeyChange) {
 
-          delete sessionMainScrollPositionsRef.current[previousMainPageKey];
+          forgetPageScrollTop(sessionMainScrollPositionsRef.current, previousMainPageKey);
 
           mainContentRef.current?.scrollTo({ top: 0 });
 
         } else {
 
-          delete sessionMainScrollPositionsRef.current[mainPageKey];
+          forgetPageScrollTop(sessionMainScrollPositionsRef.current, mainPageKey);
 
           mainContentRef.current?.scrollTo({ top: 0 });
 
@@ -7600,19 +7155,18 @@ function App() {
 
       if (memoryMode === 'global') {
 
-        const savedScrollTop = sessionLeftLayerScrollPositionsRef.current[leftLayerKey];
-
-
-
         leftLayerPanelRef.current?.scrollTo({
 
-          top: typeof savedScrollTop === 'number' ? savedScrollTop : 0
+          top: readPageScrollTop(sessionLeftLayerScrollPositionsRef.current, leftLayerKey)
 
         });
 
       } else {
 
-        delete sessionLeftLayerScrollPositionsRef.current[previousLeftLayerPanelKey];
+        forgetPageScrollTop(
+          sessionLeftLayerScrollPositionsRef.current,
+          previousLeftLayerPanelKey
+        );
 
         leftLayerPanelRef.current?.scrollTo({ top: 0 });
 
@@ -7652,19 +7206,15 @@ function App() {
 
       if (memoryMode === 'global') {
 
-        const savedScrollTop = sessionRightPanelScrollPositionsRef.current[rightPanelKey];
-
-
-
         rightActionPanelRef.current?.scrollTo({
 
-          top: typeof savedScrollTop === 'number' ? savedScrollTop : 0
+          top: readPageScrollTop(sessionRightPanelScrollPositionsRef.current, rightPanelKey)
 
         });
 
       } else {
 
-        delete sessionRightPanelScrollPositionsRef.current[previousRightPanelKey];
+        forgetPageScrollTop(sessionRightPanelScrollPositionsRef.current, previousRightPanelKey);
 
         rightActionPanelRef.current?.scrollTo({ top: 0 });
 
@@ -7789,86 +7339,82 @@ function App() {
 
 
 
-  const snapshotSecurityDialogLayerProps: SnapshotSecurityDialogLayerProps = {
-    passwordEditor: passwordEditorMode
-      ? {
-          mode: passwordEditorMode,
-          oldPassword: oldPasswordInput,
-          newPassword: newPasswordInput,
-          confirmPassword: confirmPasswordInput,
-          error: passwordEditorError,
-          isSaving: isSavingPassword,
-          onOldPasswordChange: (value) => {
-            setOldPasswordInput(value);
-            setPasswordEditorError('');
-          },
-          onNewPasswordChange: (value) => {
-            setNewPasswordInput(value);
-            setPasswordEditorError('');
-          },
-          onConfirmPasswordChange: (value) => {
-            setConfirmPasswordInput(value);
-            setPasswordEditorError('');
-          },
-          onSubmit: saveLoginPassword,
-          onCancel: resetPasswordEditor
-        }
-      : null,
-    snapshotPasswordEditor: snapshotPasswordEditorMode
-      ? {
-          mode: snapshotPasswordEditorMode,
-          oldPassword: oldSnapshotPasswordInput,
-          newPassword: newSnapshotPasswordInput,
-          confirmPassword: confirmSnapshotPasswordInput,
-          visibleField: visibleSnapshotPasswordField,
-          error: snapshotPasswordEditorError,
-          isSaving: isSavingSnapshotPassword,
-          onOldPasswordChange: (value) => {
-            setOldSnapshotPasswordInput(value);
-            setSnapshotPasswordEditorError('');
-          },
-          onNewPasswordChange: (value) => {
-            setNewSnapshotPasswordInput(value);
-            setSnapshotPasswordEditorError('');
-          },
-          onConfirmPasswordChange: (value) => {
-            setConfirmSnapshotPasswordInput(value);
-            setSnapshotPasswordEditorError('');
-          },
-          onToggleVisibility: toggleSnapshotPasswordVisibility,
-          onSubmit: saveSnapshotPassword,
-          onCancel: resetSnapshotPasswordEditor
-        }
-      : null,
-    passwordProtectionDisable: isPasswordDisableConfirmOpen
-      ? {
-          password: passwordDisableInput,
-          error: passwordDisableError,
-          isLoading: isDisablingPasswordProtection,
-          onPasswordChange: (value) => {
-            setPasswordDisableInput(value);
-            setPasswordDisableError('');
-          },
-          onSubmit: confirmDisablePasswordProtection,
-          onCancel: closePasswordDisableConfirm
-        }
-      : null,
-    snapshotEncryptionDisable: isSnapshotEncryptionDisableConfirmOpen
-      ? {
-          password: snapshotEncryptionDisableInput,
-          error: snapshotEncryptionDisableError,
-          isLoading: isDisablingSnapshotEncryption,
-          onPasswordChange: (value) => {
-            setSnapshotEncryptionDisableInput(value);
-            setSnapshotEncryptionDisableError('');
-          },
-          onSubmit: confirmDisableSnapshotEncryption,
-          onCancel: closeSnapshotEncryptionDisableConfirm
-        }
-      : null
-  };
+  const snapshotSecurityDialogLayerProps: SnapshotSecurityDialogLayerProps =
+    createSnapshotSecurityDialogLayerProps({
+      passwordEditor: {
+        mode: passwordEditorMode,
+        oldPassword: oldPasswordInput,
+        newPassword: newPasswordInput,
+        confirmPassword: confirmPasswordInput,
+        error: passwordEditorError,
+        isSaving: isSavingPassword,
+        onOldPasswordChange: (value) => {
+          setOldPasswordInput(value);
+          setPasswordEditorError('');
+        },
+        onNewPasswordChange: (value) => {
+          setNewPasswordInput(value);
+          setPasswordEditorError('');
+        },
+        onConfirmPasswordChange: (value) => {
+          setConfirmPasswordInput(value);
+          setPasswordEditorError('');
+        },
+        onSubmit: saveLoginPassword,
+        onCancel: resetPasswordEditor
+      },
+      snapshotPasswordEditor: {
+        mode: snapshotPasswordEditorMode,
+        oldPassword: oldSnapshotPasswordInput,
+        newPassword: newSnapshotPasswordInput,
+        confirmPassword: confirmSnapshotPasswordInput,
+        visibleField: visibleSnapshotPasswordField,
+        error: snapshotPasswordEditorError,
+        isSaving: isSavingSnapshotPassword,
+        onOldPasswordChange: (value) => {
+          setOldSnapshotPasswordInput(value);
+          setSnapshotPasswordEditorError('');
+        },
+        onNewPasswordChange: (value) => {
+          setNewSnapshotPasswordInput(value);
+          setSnapshotPasswordEditorError('');
+        },
+        onConfirmPasswordChange: (value) => {
+          setConfirmSnapshotPasswordInput(value);
+          setSnapshotPasswordEditorError('');
+        },
+        onToggleVisibility: toggleSnapshotPasswordVisibility,
+        onSubmit: saveSnapshotPassword,
+        onCancel: resetSnapshotPasswordEditor
+      },
+      passwordProtectionDisable: {
+        isOpen: isPasswordDisableConfirmOpen,
+        password: passwordDisableInput,
+        error: passwordDisableError,
+        isLoading: isDisablingPasswordProtection,
+        onPasswordChange: (value) => {
+          setPasswordDisableInput(value);
+          setPasswordDisableError('');
+        },
+        onSubmit: confirmDisablePasswordProtection,
+        onCancel: closePasswordDisableConfirm
+      },
+      snapshotEncryptionDisable: {
+        isOpen: isSnapshotEncryptionDisableConfirmOpen,
+        password: snapshotEncryptionDisableInput,
+        error: snapshotEncryptionDisableError,
+        isLoading: isDisablingSnapshotEncryption,
+        onPasswordChange: (value) => {
+          setSnapshotEncryptionDisableInput(value);
+          setSnapshotEncryptionDisableError('');
+        },
+        onSubmit: confirmDisableSnapshotEncryption,
+        onCancel: closeSnapshotEncryptionDisableConfirm
+      }
+    });
   const isSecuritySettingsPageDisabled =
     isGlobalSettingsOpen && globalSettingsSection === 'security' && isExampleMode;
+  const selectedGroupDetailIdForRightPanel = selectedGroupDetail?.id ?? '';
 
   const mainPanelClassName = [
     flashNote.isOpen ? 'flash-note-container left-browse-panel' : 'card left-browse-panel',
@@ -7927,138 +7473,90 @@ function App() {
     onClearVersionLongPress: clearSecretConsoleLongPress
   };
 
-  const mainContentMode: MainContentMode = flashNote.isOpen
-    ? 'flash-note'
-    : isRollupImportOpen
-      ? 'rollup-import'
-      : isGlobalSettingsOpen
-        ? 'settings'
-        : isTotalChartsOpen
-          ? 'total-chart'
-          : isAccountChartsOpen && selectedAccount && selectedAccountEntry
-            ? 'account-chart'
-            : selectedGroupDetail && selectedGroupDetailStructureData && selectedGroupDetailTrendData
-              ? 'group-detail'
-              : selectedAccount && selectedAccountEntry
-                ? 'account-detail'
-                : 'dashboard';
+  const mainContentMode = getMainContentMode({
+    isFlashNoteOpen: flashNote.isOpen,
+    isRollupImportOpen,
+    isGlobalSettingsOpen,
+    isTotalChartsOpen,
+    isAccountChartsOpen,
+    hasSelectedAccountDetail: Boolean(selectedAccount && selectedAccountEntry),
+    hasSelectedGroupDetail: Boolean(
+      selectedGroupDetail && selectedGroupDetailStructureData && selectedGroupDetailTrendData
+    )
+  });
 
-  const mainContentRendererProps: MainContentRendererProps = {
+  const mainContentRendererProps: MainContentRendererProps = createMainContentRendererProps({
     mode: mainContentMode,
     dashboard: {
-      pageProps: {
-        homeAssetStat,
-        recentNetWorthChange,
-        chartPreview: {
-          shouldShowCharts: shouldShowL0Charts,
-          showStructure: assetChartSettings.l0.showStructure,
-          showTrend: assetChartSettings.l0.showTrend,
-          structureData: assetStructureData,
-          showDebtMultiple: assetChartSettings.structure.showDebtMultiple,
-          trendPoints: homeThumbnailTrendPoints,
-          trendSettings: homeThumbnailTrendSettings
-        },
-        overview: {
-          groups: groupTotals,
-          expandedGroupIds,
-          isGroupEditMode,
-          draggingGroupId,
-          groupDropIndicator,
-          legendColorByName: homeGroupLegendColorByName,
-          productIconPath: PRODUCT_ICON_PATH,
-          productNameZh: PRODUCT_NAME_ZH,
-          productNameEn: PRODUCT_NAME_EN,
-          productTagline: PRODUCT_TAGLINE,
-          sortIcon: (
-            <NfSvgIcon svg={NfSortIcon} className="account-sort-icon" decorative />
-          ),
-          deleteIcon: (
-            <NfSvgIcon
-              svg={NfWindowCloseIcon}
-              className="account-type-delete-icon"
-              decorative
-            />
-          ),
-          formatMoney: formatHomeMoneyAmount,
-          canDeleteGroup: (groupId) => canDeleteAssetGroup(groupId, accounts),
-          onGroupClick: handleGroupClick,
-          onOpenAccount: openAccountDetail,
-          onDeleteGroup: deleteAssetGroup,
-          onGroupPointerDown: startGroupPointerInteraction,
-          onGroupPointerMove: moveGroupPointerInteraction,
-          onGroupPointerUp: finishGroupPointerInteraction,
-          onGroupPointerLeave: cancelGroupPointerInteraction,
-          onGroupPointerCancel: cancelGroupPointerInteraction,
-          onGroupDragStart: handleGroupDragStart,
-          onGroupDragOver: handleGroupDragOver,
-          onGroupDragLeave: handleGroupDragLeave,
-          onGroupDrop: handleGroupDrop,
-          onGroupDragEnd: handleGroupDragEnd
-        },
-        formatHomeMoneyAmount,
-        formatChartMoney: formatChartNumber,
-        onOpenTotalCharts: openTotalChartsPage,
-        onOpenSearch: globalSearch.openSearch,
-        onOpenArchivedAccounts: () => setIsArchivedAccountsOpen(true),
-        onOpenHistory: openHistoryPanel,
-        onOpenAddAccount: openAddAccount
-      }
+      homeAssetStat,
+      recentNetWorthChange,
+      shouldShowL0Charts,
+      showStructure: assetChartSettings.l0.showStructure,
+      showTrend: assetChartSettings.l0.showTrend,
+      structureData: assetStructureData,
+      showDebtMultiple: assetChartSettings.structure.showDebtMultiple,
+      trendPoints: homeThumbnailTrendPoints,
+      trendSettings: homeThumbnailTrendSettings,
+      groups: groupTotals,
+      accounts,
+      expandedGroupIds,
+      isGroupEditMode,
+      draggingGroupId,
+      groupDropIndicator,
+      legendColorByName: homeGroupLegendColorByName,
+      productIconPath: PRODUCT_ICON_PATH,
+      productNameZh: PRODUCT_NAME_ZH,
+      productNameEn: PRODUCT_NAME_EN,
+      productTagline: PRODUCT_TAGLINE,
+      formatHomeMoneyAmount,
+      formatChartMoney: formatChartNumber,
+      onGroupClick: handleGroupClick,
+      onOpenAccount: openAccountDetail,
+      onDeleteGroup: deleteAssetGroup,
+      onGroupPointerDown: startGroupPointerInteraction,
+      onGroupPointerMove: moveGroupPointerInteraction,
+      onGroupPointerUp: finishGroupPointerInteraction,
+      onGroupPointerLeave: cancelGroupPointerInteraction,
+      onGroupPointerCancel: cancelGroupPointerInteraction,
+      onGroupDragStart: handleGroupDragStart,
+      onGroupDragOver: handleGroupDragOver,
+      onGroupDragLeave: handleGroupDragLeave,
+      onGroupDrop: handleGroupDrop,
+      onGroupDragEnd: handleGroupDragEnd,
+      onOpenTotalCharts: openTotalChartsPage,
+      onOpenSearch: globalSearch.openSearch,
+      onOpenArchivedAccounts: () => setIsArchivedAccountsOpen(true),
+      onOpenHistory: openHistoryPanel,
+      onOpenAddAccount: openAddAccount
     },
     account: {
-      detail: selectedAccount && selectedAccountEntry
-        ? {
-            panelProps: {
-              groupName: selectedGroup?.name ?? selectedAccount.groupName ?? '',
-              account: selectedAccountEntry,
-              currentAmount: selectedAccountEntry.amount,
-              historyRecords: selectedAccountHistory,
-              formatMoney
-            },
-            chartPreview: {
-              chartProps: {
-                points: selectedAccountTrendPoints,
-                settings: selectedAccountPreviewTrendSettings,
-                formatMoney: formatChartNumber
-              },
-              onOpenChart: openAccountChartsPage
-            },
-            historyList: {
-              groups: selectedAccountHistoryByDate,
-              expandedDates: expandedDetailDates,
-              onToggleDate: toggleDetailDate,
-              ...accountHistoryRecordListProps
-            }
-          }
-        : null,
-      chart: selectedAccount && selectedAccountEntry
-        ? {
-            title: selectedAccountTitle,
-            currentAmount: selectedAccountEntry.amount,
-            points: selectedAccountTrendPoints,
-            settings: selectedAccountChartSettings,
-            formatMoney: formatChartNumber
-          }
-        : null
+      selectedAccount,
+      selectedGroup,
+      selectedAccountEntry,
+      selectedAccountHistory,
+      selectedAccountTrendPoints,
+      selectedAccountPreviewTrendSettings,
+      selectedAccountHistoryByDate,
+      expandedDetailDates,
+      accountHistoryRecordListProps,
+      selectedAccountTitle,
+      selectedAccountChartSettings,
+      formatMoney,
+      formatChartMoney: formatChartNumber,
+      onOpenChart: openAccountChartsPage,
+      onToggleDate: toggleDetailDate
     },
     charts: {
-      total: {
-        totalAssets,
-        structureData: assetStructureData,
-        trendPoints: assetTrendPoints,
-        settings: assetChartSettings,
-        formatMoney: formatChartNumber
-      },
-      groupDetail:
-        selectedGroupDetail && selectedGroupDetailStructureData && selectedGroupDetailTrendData
-          ? {
-              groupName: selectedGroupDetail.name,
-              structureData: selectedGroupDetailStructureData,
-              trendData: selectedGroupDetailTrendData,
-              settings: selectedGroupDetailChartSettings,
-              visibility: assetChartSettings.categoryVisibility,
-              formatMoney: formatChartNumber
-            }
-          : null
+      totalAssets,
+      structureData: assetStructureData,
+      trendPoints: assetTrendPoints,
+      assetChartSettings,
+      selectedGroupDetail,
+      selectedGroupDetailStructureData,
+      selectedGroupDetailTrendData,
+      selectedGroupDetailChartSettings,
+      categoryVisibility: assetChartSettings.categoryVisibility,
+      formatMoney: formatChartNumber
     },
     settings: {
       pageProps: settingsPageProps
@@ -8067,29 +7565,21 @@ function App() {
       pageProps: rollupImport.pageProps
     },
     flashNote: {
-      hostProps: {
-        page: {
-          isOpen: flashNote.isOpen,
-          pageProps: flashNote.pageProps
-        },
-        exitConfirm: {
-          isOpen: flashNote.isExitConfirmOpen,
-          onCancel: flashNote.dismissExitConfirm,
-          onConfirm: flashNote.confirmExit
-        },
-        returnDateConfirm: {
-          isOpen: flashNote.isReturnDateConfirmOpen,
-          onCancel: flashNote.dismissReturnDateConfirm,
-          onConfirm: flashNote.confirmReturnDateSelection
-        }
-      }
+      isOpen: flashNote.isOpen,
+      pageProps: flashNote.pageProps,
+      isExitConfirmOpen: flashNote.isExitConfirmOpen,
+      onCancelExit: flashNote.dismissExitConfirm,
+      onConfirmExit: flashNote.confirmExit,
+      isReturnDateConfirmOpen: flashNote.isReturnDateConfirmOpen,
+      onCancelReturnDate: flashNote.dismissReturnDateConfirm,
+      onConfirmReturnDate: flashNote.confirmReturnDateSelection
     },
     security: {
       isSettingsPageDisabled: isSecuritySettingsPageDisabled
     }
-  };
+  });
 
-  const rightPanelRendererProps: RightPanelRendererProps = {
+  const rightPanelRendererProps: RightPanelRendererProps = createRightPanelRendererProps({
     mode: rightPanelMode,
     search: {
       hasQuery: globalSearch.output.hasQuery,
@@ -8103,112 +7593,69 @@ function App() {
       getAccountNatureLabel
     },
     account: {
+      selectedAccount,
+      selectedAccountEntry,
       actions: accountActionsPanelProps,
       dangerActions: accountDangerActionsPanelProps,
-      chartSettings:
-        selectedAccount && selectedAccountEntry
-          ? {
-              isLockedByGlobal: assetChartSettings.globalChartControlMode === 'locked',
-              settings: selectedAccountChartSettings,
-              onUpdateSettings: (updater) =>
-                updateLocalAccountDetailChartSettings(
-                  selectedAccountEntry.id,
-                  (currentSettings) => {
-                    const nextSettings = updater(currentSettings);
-
-                    return {
-                      ...currentSettings,
-                      adaptiveYAxis: nextSettings.adaptiveYAxis,
-                      xAxisRange:
-                        nextSettings.xAxisRange as AccountDetailChartSettings['xAxisRange'],
-                      pointValueMode:
-                        nextSettings.pointValueMode as AccountDetailChartSettings['pointValueMode']
-                    };
-                  }
-                ),
-              onBackToAccountDetail: closeAccountChartsPage
-            }
-          : null
+      assetChartSettings,
+      selectedAccountChartSettings,
+      onUpdateLocalAccountDetailChartSettings: updateLocalAccountDetailChartSettings,
+      onBackToAccountDetail: closeAccountChartsPage
     },
     history: {
-      actions: {
-        onOpenBackupPanel: openBackupPanel
-      },
-      snapshot: {
-        summaryItems: [
-          {
-            label: '上次快照',
-            value:
-              backupRecords.length === 0
-                ? '从未备份'
-                : formatRelativeBackupTime(backupRecords[0].backedUpAt)
-          },
-          { label: '账户数量', value: `${accountCount}` },
-          { label: '历史记录', value: `${history.length}` },
-          { label: '增量记录', value: incrementalRecordValue }
-        ],
-        autoBackupDraft,
-        autoBackupCycleValueInput,
-        autoSnapshotCycleInputRef,
-        isExampleMode,
-        hasAutoBackupDraftChanges,
-        canSaveAutoBackupSettings,
-        onExportBackup: exportBackup,
-        onImportBackup: () => backupFileInputRef.current?.click(),
-        onAutoBackupEnabledChange: updateAutoBackupEnabled,
-        onAutoBackupCycleValueChange: updateAutoBackupCycleValue,
-        onAutoBackupCycleValueInputReset: setAutoBackupCycleValueInput,
-        onAdjustAutoBackupCycleValue: adjustAutoBackupCycleValue,
-        onAutoBackupCycleUnitChange: updateAutoBackupCycleUnit,
-        onSelectAutoBackupDirectory: selectAutoBackupDirectory,
-        onSaveAutoBackupDraft: saveAutoBackupDraft
-      }
+      onOpenBackupPanel: openBackupPanel,
+      backupRecordCount: backupRecords.length,
+      latestBackupLabel: backupRecords.length === 0
+        ? ''
+        : formatRelativeBackupTime(backupRecords[0].backedUpAt),
+      accountCount,
+      historyCount: history.length,
+      incrementalRecordValue,
+      autoBackupDraft,
+      autoBackupCycleValueInput,
+      autoSnapshotCycleInputRef,
+      isExampleMode,
+      hasAutoBackupDraftChanges,
+      canSaveAutoBackupSettings,
+      onExportBackup: exportBackup,
+      onImportBackup: () => backupFileInputRef.current?.click(),
+      onAutoBackupEnabledChange: updateAutoBackupEnabled,
+      onAutoBackupCycleValueChange: updateAutoBackupCycleValue,
+      onAutoBackupCycleValueInputReset: setAutoBackupCycleValueInput,
+      onAdjustAutoBackupCycleValue: adjustAutoBackupCycleValue,
+      onAutoBackupCycleUnitChange: updateAutoBackupCycleUnit,
+      onSelectAutoBackupDirectory: selectAutoBackupDirectory,
+      onSaveAutoBackupDraft: saveAutoBackupDraft
     },
     archived: {
       accountCount: archivedAccounts.length,
       onBackToOverview: () => setIsArchivedAccountsOpen(false)
     },
     totalChart: {
-      isLockedByGlobal: assetChartSettings.globalChartControlMode === 'locked',
-      settings: assetChartSettings,
-      onUpdateSettings: (updater) =>
-        updateAssetChartSettings((currentSettings) => {
-          const nextSettings = updater(currentSettings);
-
-          return {
-            ...currentSettings,
-            structure: nextSettings.structure,
-            trend: {
-              ...nextSettings.trend,
-              xAxisRange: nextSettings.trend.xAxisRange as AssetChartSettings['trend']['xAxisRange'],
-              pointValueMode:
-                nextSettings.trend.pointValueMode as AssetChartSettings['trend']['pointValueMode']
-            }
-          };
-        }),
+      assetChartSettings,
+      onUpdateAssetChartSettings: updateAssetChartSettings,
       onBackToOverview: closeTotalChartsPage
     },
-    groupDetail: selectedGroupDetail
-      ? {
-          nameDraft: groupDetailNameDraft,
-          statsDraft: groupDetailStatsDraft,
-          error: groupDetailError,
-          chartSettings: selectedGroupDetailChartSettings,
-          isLockedByGlobal: assetChartSettings.globalChartControlMode === 'locked',
-          onNameDraftChange: (value) => {
-            setGroupDetailNameDraft(value);
-            setGroupDetailError('');
-          },
-          onStatsDraftChange: (value) => {
-            setGroupDetailStatsDraft(value);
-            setGroupDetailError('');
-          },
-          onSaveInfo: saveGroupDetailInfo,
-          onUpdateChartSettings: (updater) =>
-            updateLocalCategoryDetailChartSettings(selectedGroupDetail.id, updater),
-          onBackToOverview: closeGroupDetailPage
-        }
-      : null,
+    groupDetail: {
+      selectedGroupDetail,
+      nameDraft: groupDetailNameDraft,
+      statsDraft: groupDetailStatsDraft,
+      error: groupDetailError,
+      chartSettings: selectedGroupDetailChartSettings,
+      isLockedByGlobal: assetChartSettings.globalChartControlMode === 'locked',
+      onNameDraftChange: (value) => {
+        setGroupDetailNameDraft(value);
+        setGroupDetailError('');
+      },
+      onStatsDraftChange: (value) => {
+        setGroupDetailStatsDraft(value);
+        setGroupDetailError('');
+      },
+      onSaveInfo: saveGroupDetailInfo,
+      onUpdateChartSettings: (updater) =>
+        updateLocalCategoryDetailChartSettings(selectedGroupDetailIdForRightPanel, updater),
+      onBackToOverview: closeGroupDetailPage
+    },
     settings: {
       selectedSection: globalSettingsSection,
       onSelectSection: setGlobalSettingsSection,
@@ -8231,7 +7678,126 @@ function App() {
       onOpenGlobalSettings: openGlobalSettings,
       onOpenExampleDataSettings: openExampleDataSettingsFromHome
     }
-  };
+  });
+
+  const appDialogLayerProps = createAppDialogLayerProps({
+    confirmationDialog,
+    noticeDialog,
+    inputDialog,
+    inputDialogValue,
+    closeConfirmationDialog,
+    confirmAndClose,
+    closeNoticeDialog,
+    closeInputDialog,
+    confirmInputDialog,
+    setInputDialogValue
+  });
+
+  const archivedAccountsLayerProps = createArchivedAccountsLayerProps({
+    isOpen: isArchivedAccountsOpen,
+    archivedAccounts,
+    panelRef: leftLayerPanelRef,
+    formatMoney,
+    formatArchivedTime: formatShortTime,
+    onBack: () => currentLayerBack?.(),
+    onClose: () => setIsArchivedAccountsOpen(false),
+    onSelect: (account) => openAccountDetail(account.groupId, account),
+    onRestore: (account) => {
+      restoreAccount(account.groupId, account, 'archived-accounts-list');
+    },
+    onPanelScroll: (scrollTop) => {
+      rememberPageScrollTop(
+        sessionLeftLayerScrollPositionsRef.current,
+        leftLayerKey,
+        scrollTop
+      );
+    }
+  });
+
+  const historyBackupLayerProps = createHistoryBackupLayerProps({
+    isOpen: isHistoryOpen,
+    view: historyPanelView,
+    rangeInput: historyRangeInput,
+    rangeInputPlaceholder: historyRangeInputPlaceholder,
+    isCalendarVisible,
+    calendarMonth,
+    calendarSecondMonth,
+    isNextDisabled: historyController.isHistoryCalendarNextDisabled,
+    getCalendarDays: historyController.getCalendarDays,
+    getDateValue: historyController.getDateValue,
+    getDateState: historyController.getHistoryCalendarDateState,
+    records: filteredHistory,
+    highlightedRecordId: searchTargetHighlight.highlightedHistoryRecordId,
+    emptyText: '暂无匹配记录',
+    recordListProps: historyRecordListProps,
+    backupRecords,
+    formatPreciseBackupTime,
+    getBackupMethodLabel,
+    onBack: () => currentLayerBack?.(),
+    onPanelScroll: (scrollTop) => {
+      rememberPageScrollTop(
+        sessionLeftLayerScrollPositionsRef.current,
+        leftLayerKey,
+        scrollTop
+      );
+    },
+    onRangeInputFocus: historyController.clearHistoryRange,
+    onRangeInputClick: historyController.clearHistoryRange,
+    onRangeInputConfirm: historyController.confirmSingleHistoryDate,
+    onRangeInputChange: historyController.handleHistoryRangeInput,
+    onToggleCalendar: historyController.toggleCalendarVisibility,
+    onSelectPreviousWeek: historyController.setLastWeekHistoryRange,
+    onSelectRecentSevenDays: historyController.setRecent7HistoryRange,
+    onClearRange: historyController.clearHistoryRange,
+    onPreviousMonth: historyController.showPreviousCalendarMonth,
+    onNextMonth: historyController.showNextCalendarMonth,
+    onDateClick: historyController.selectCalendarDate,
+    onImportBackup: importBackup,
+    panelRef: leftLayerPanelRef,
+    backupFileInputRef
+  });
+
+  const searchOverlayLayerProps = createSearchOverlayLayerProps({
+    isOpen: globalSearch.isOpen,
+    panelProps: globalSearch.panelProps,
+    currentNavigationTarget: globalSearch.currentNavigationTarget,
+    canMoveNavigation: globalSearch.canMoveNavigation,
+    onPreviousNavigationTarget: globalSearch.moveToPreviousTarget,
+    onNextNavigationTarget: globalSearch.moveToNextTarget,
+    onReturnFromNavigation: globalSearch.returnFromNavigation,
+    onExitNavigation: globalSearch.exitNavigation,
+    onClose: globalSearch.closeSearch
+  });
+
+  const resetDangerDialogLayerProps = createResetDangerDialogLayerProps({
+    confirmation: resetConfirmation,
+    inputValue: resetConfirmationInput,
+    getActionLabel: getResetActionLabel,
+    onInputChange: setResetConfirmationInput,
+    onCancel: closeResetConfirmation,
+    onConfirm: confirmResetAction
+  });
+
+  const quickEntryPickerLayerProps = createQuickEntryPickerLayerProps({
+    isOpen: isQuickSingleEntryAccountPickerOpen,
+    groups: quickSingleEntryAccountGroups,
+    onClose: closeQuickSingleEntryAccountPicker,
+    onChooseAccount: chooseQuickSingleEntryAccountById
+  });
+
+  const lockScreenLayerProps = createLockScreenLayerProps({
+    isLocked,
+    productIconPath: PRODUCT_ICON_PATH,
+    password: unlockPasswordInput,
+    error: unlockError,
+    isUnlocking,
+    onPasswordChange: (value) => {
+      setUnlockPasswordInput(value);
+      setUnlockError('');
+    },
+    onSubmit: unlockApp
+  });
+
 
 
 
@@ -8275,7 +7841,11 @@ function App() {
         mainContentAriaDisabled={isSecuritySettingsPageDisabled}
         onMainContentClick={handleMainContentBlankClick}
         onMainContentScroll={(event) => {
-          sessionMainScrollPositionsRef.current[mainPageKey] = event.currentTarget.scrollTop;
+          rememberPageScrollTop(
+            sessionMainScrollPositionsRef.current,
+            mainPageKey,
+            event.currentTarget.scrollTop
+          );
         }}
         rightPanel={
           flashNote.isOpen ? null : <RightPanelRenderer {...rightPanelRendererProps} />
@@ -8284,8 +7854,11 @@ function App() {
         rightPanelAriaLabel="操作面板"
         onRightPanelClick={(event) => event.stopPropagation()}
         onRightPanelScroll={(event) => {
-          sessionRightPanelScrollPositionsRef.current[rightPanelKey] =
-            event.currentTarget.scrollTop;
+          rememberPageScrollTop(
+            sessionRightPanelScrollPositionsRef.current,
+            rightPanelKey,
+            event.currentTarget.scrollTop
+          );
         }}
         mainContent={(
           <MainContentRenderer {...mainContentRendererProps} />
@@ -8300,113 +7873,16 @@ function App() {
 
       <SnapshotSecurityDialogLayer {...snapshotSecurityDialogLayerProps} />
 
-      <ArchivedAccountsLayer
-        state={{
-          isOpen: isArchivedAccountsOpen,
-          archivedAccounts,
-          panelRef: leftLayerPanelRef
-        }}
-        formatters={{
-          formatMoney,
-          formatArchivedTime: formatShortTime
-        }}
-        callbacks={{
-          onBack: () => currentLayerBack?.(),
-          onClose: () => setIsArchivedAccountsOpen(false),
-          onSelect: (account) => openAccountDetail(account.groupId, account),
-          onRestore: (account) => {
-            restoreAccount(account.groupId, account, 'archived-accounts-list');
-          },
-          onPanelScroll: (scrollTop) => {
-            sessionLeftLayerScrollPositionsRef.current[leftLayerKey] = scrollTop;
-          }
-        }}
-      />
+      <ArchivedAccountsLayer {...archivedAccountsLayerProps} />
 
 
 
-      <HistoryBackupLayer
-        state={{
-          isOpen: isHistoryOpen,
-          view: historyPanelView
-        }}
-        history={{
-          filter: {
-            rangeInput: historyRangeInput,
-            rangeInputPlaceholder: historyRangeInputPlaceholder,
-            isCalendarVisible
-          },
-          calendar: {
-            calendarMonth,
-            calendarSecondMonth,
-            isNextDisabled: historyController.isHistoryCalendarNextDisabled,
-            getCalendarDays: historyController.getCalendarDays,
-            getDateValue: historyController.getDateValue,
-            getDateState: historyController.getHistoryCalendarDateState
-          },
-          records: filteredHistory,
-          highlightedRecordId: searchTargetHighlight.highlightedHistoryRecordId,
-          emptyText: '暂无匹配记录',
-          recordListProps: historyRecordListProps
-        }}
-        backup={{
-          records: backupRecords,
-          formatPreciseBackupTime,
-          getBackupMethodLabel
-        }}
-        callbacks={{
-          onBack: () => currentLayerBack?.(),
-          onPanelScroll: (scrollTop) => {
-            sessionLeftLayerScrollPositionsRef.current[leftLayerKey] = scrollTop;
-          },
-          history: {
-            filter: {
-              onRangeInputFocus: historyController.clearHistoryRange,
-              onRangeInputClick: historyController.clearHistoryRange,
-              onRangeInputConfirm: historyController.confirmSingleHistoryDate,
-              onRangeInputChange: historyController.handleHistoryRangeInput,
-              onToggleCalendar: historyController.toggleCalendarVisibility,
-              onSelectPreviousWeek: historyController.setLastWeekHistoryRange,
-              onSelectRecentSevenDays: historyController.setRecent7HistoryRange,
-              onClearRange: historyController.clearHistoryRange
-            },
-            calendar: {
-              onPreviousMonth: historyController.showPreviousCalendarMonth,
-              onNextMonth: historyController.showNextCalendarMonth,
-              onDateClick: historyController.selectCalendarDate
-            }
-          },
-          backup: {
-            onImportBackup: importBackup
-          }
-        }}
-        refs={{
-          panelRef: leftLayerPanelRef,
-          backupFileInputRef
-        }}
-      />
+      <HistoryBackupLayer {...historyBackupLayerProps} />
 
 
 
 
-
-      <SearchOverlayLayer
-        isOpen={globalSearch.isOpen}
-        panelProps={globalSearch.panelProps}
-        floatingNavigator={
-          globalSearch.currentNavigationTarget
-            ? {
-                currentTarget: globalSearch.currentNavigationTarget,
-                canMove: globalSearch.canMoveNavigation,
-                onPrevious: globalSearch.moveToPreviousTarget,
-                onNext: globalSearch.moveToNextTarget,
-                onReturn: globalSearch.returnFromNavigation,
-                onExit: globalSearch.exitNavigation
-              }
-            : null
-        }
-        onClose={globalSearch.closeSearch}
-      />
+      <SearchOverlayLayer {...searchOverlayLayerProps} />
 
 
 
@@ -8414,44 +7890,15 @@ function App() {
 
 
 
-      <AppDialogLayer
-        confirmationDialog={confirmationDialog}
-        noticeDialog={noticeDialog}
-        inputDialog={inputDialog}
-        inputDialogValue={inputDialogValue}
-        closeConfirmationDialog={closeConfirmationDialog}
-        confirmAndClose={confirmAndClose}
-        closeNoticeDialog={closeNoticeDialog}
-        closeInputDialog={closeInputDialog}
-        confirmInputDialog={confirmInputDialog}
-        setInputDialogValue={setInputDialogValue}
-      />
+      <AppDialogLayer {...appDialogLayerProps} />
 
 
 
-      <ResetDangerDialogLayer
-        confirmation={resetConfirmation}
-        inputValue={resetConfirmationInput}
-        getActionLabel={getResetActionLabel}
-        onInputChange={setResetConfirmationInput}
-        onCancel={closeResetConfirmation}
-        onConfirm={confirmResetAction}
-      />
+      <ResetDangerDialogLayer {...resetDangerDialogLayerProps} />
 
 
 
-      <QuickEntryPickerLayer
-        panel={{
-          isOpen: isQuickSingleEntryAccountPickerOpen
-        }}
-        accountPicker={{
-          groups: quickSingleEntryAccountGroups
-        }}
-        callbacks={{
-          onClose: closeQuickSingleEntryAccountPicker,
-          onChooseAccount: chooseQuickSingleEntryAccountById
-        }}
-      />
+      <QuickEntryPickerLayer {...quickEntryPickerLayerProps} />
 
 
 
@@ -8648,18 +8095,8 @@ function App() {
         onChooseStoryRoute={chooseFirstWelcomeStoryRoute}
       />
 
-      <LockScreenLayer
-        isLocked={isLocked}
-        productIconPath={PRODUCT_ICON_PATH}
-        password={unlockPasswordInput}
-        error={unlockError}
-        isUnlocking={isUnlocking}
-        onPasswordChange={(value) => {
-          setUnlockPasswordInput(value);
-          setUnlockError('');
-        }}
-        onSubmit={unlockApp}
-      />
+      <LockScreenLayer {...lockScreenLayerProps} />
+
 
       {isSecretConsoleOpen ? (
         <SecretConsoleLayer
