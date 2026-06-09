@@ -1,4 +1,8 @@
 export { MainContentRenderer } from './MainContentRenderer';
+export {
+  createMainContentRendererProps,
+  getMainContentMode
+} from './createMainContentRendererProps';
 export type {
   AccountMainContentPropsGroup,
   ChartMainContentPropsGroup,
