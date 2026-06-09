@@ -21,6 +21,7 @@ const cardStyle: CSSProperties = {
 type AccountInfoEditorDialogProps = {
   title: ReactNode;
   accountName: string;
+  accountNamePlaceholder?: string;
   accountAlias: string;
   aliasPreview: ReactNode;
   error: string;
@@ -33,6 +34,7 @@ type AccountInfoEditorDialogProps = {
 function AccountInfoEditorDialog({
   title,
   accountName,
+  accountNamePlaceholder,
   accountAlias,
   aliasPreview,
   error,
@@ -52,7 +54,7 @@ function AccountInfoEditorDialog({
       title={title}
       titleStyle={{ margin: '0 0 18px', fontSize: '1.45rem' }}
       className="account-operation-panel"
-      backdropClassName="layout-layer layout-layer--right"
+      backdropClassName="modal-backdrop"
       backdropStyle={backdropStyle}
       cardStyle={cardStyle}
       onClose={onCancel}
@@ -76,6 +78,7 @@ function AccountInfoEditorDialog({
           autoFocus
           type="text"
           value={accountName}
+          placeholder={accountNamePlaceholder}
           onChange={(event) => onAccountNameChange(event.target.value)}
         />
       </label>

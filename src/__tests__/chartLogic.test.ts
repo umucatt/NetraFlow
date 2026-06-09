@@ -12,7 +12,10 @@ import {
   getChartValueLabelIndexes,
   getChartValueLabelLayout,
   getEffectiveCategoryChartSettings,
+  getEffectiveAccountChartSettings,
+  getLineChartYAxisScale,
   getNearestChangeDatePointIndex,
+  resolveLinePointLabelLayout,
   getVisibleTrendMarkerIndexes,
   buildSteppedStackLayers,
   buildDisplayChartItems,
@@ -27,8 +30,18 @@ import {
   normalizeChartPointValueMode,
   normalizeGlobalChartControlMode,
   syncCategoryChartSettingsFromGlobal,
+  type BasicAccountChartSettings,
   type BasicCategoryChartSettings
 } from '../chartLogic';
+
+const rectsOverlap = (
+  left: { left: number; top: number; right: number; bottom: number },
+  right: { left: number; top: number; right: number; bottom: number }
+) =>
+  left.left < right.right &&
+  left.right > right.left &&
+  left.top < right.bottom &&
+  left.bottom > right.top;
 
 test('keeps the fixed NetraFlow chart palette order', () => {
   assert.deepEqual([...NETRAFLOW_CHART_PALETTE], [
@@ -273,6 +286,227 @@ test('chart value labels choose safe positions near plot edges', () => {
   assert.ok(bottomEdge.y <= plot.plotTop + plot.plotHeight);
 });
 
+test('line point value labels prefer clear space above the point', () => {
+  const layout = resolveLinePointLabelLayout({
+    pointX: 100,
+    pointY: 70,
+    plotLeft: 0,
+    plotTop: 0,
+    plotWidth: 220,
+    plotHeight: 140,
+    labelWidth: 56,
+    labelHeight: 12,
+    lineSegments: [
+      { x1: 60, y1: 118, x2: 140, y2: 118 }
+    ]
+  });
+
+  assert.equal(layout.placement, 'above');
+  assert.equal(layout.textAnchor, 'middle');
+  assert.equal(layout.dominantBaseline, 'central');
+  assert.ok(layout.bounds.bottom < 70);
+});
+
+test('line point value labels strongly avoid the right-edge terminal stepped line', () => {
+  const lineY = 92;
+  const pointY = 106;
+  const lineSafeGap = 8;
+  const pointSafeTop = pointY - 3 - 6;
+  const layout = resolveLinePointLabelLayout({
+    pointX: 606,
+    pointY,
+    plotLeft: 56,
+    plotTop: 28,
+    plotWidth: 552,
+    plotHeight: 206,
+    labelWidth: 64,
+    labelHeight: 14,
+    lineSegments: [
+      { x1: 520, y1: lineY, x2: 606, y2: lineY },
+      { x1: 606, y1: lineY, x2: 606, y2: pointY }
+    ],
+    pointRadius: 3,
+    isEndPoint: true
+  });
+
+  assert.ok(layout.placement === 'above' || layout.placement === 'left-above');
+  assert.equal(layout.dominantBaseline, 'central');
+  assert.ok(layout.bounds.right <= 608 - 2);
+  assert.ok(layout.x < 606);
+  assert.ok(layout.bounds.bottom + lineSafeGap <= lineY);
+  assert.ok(layout.bounds.bottom <= pointSafeTop);
+});
+
+test('line point value labels keep right-edge end labels above or left of the point', () => {
+  const layout = resolveLinePointLabelLayout({
+    pointX: 214,
+    pointY: 70,
+    plotLeft: 0,
+    plotTop: 0,
+    plotWidth: 220,
+    plotHeight: 140,
+    labelWidth: 70,
+    labelHeight: 12,
+    isEndPoint: true
+  });
+
+  assert.ok(layout.placement === 'above' || layout.placement === 'left-above');
+  assert.ok(layout.bounds.bottom < 70);
+  assert.ok(layout.bounds.right <= 220);
+  assert.ok(layout.x < 214);
+});
+
+test('line point value labels stay inside top and side plot edges', () => {
+  const basePlot = {
+    plotLeft: 0,
+    plotTop: 0,
+    plotWidth: 220,
+    plotHeight: 140,
+    labelWidth: 56,
+    labelHeight: 12
+  };
+  const nearTop = resolveLinePointLabelLayout({
+    ...basePlot,
+    pointX: 100,
+    pointY: 8
+  });
+  const nearRight = resolveLinePointLabelLayout({
+    ...basePlot,
+    pointX: 214,
+    pointY: 70
+  });
+  const nearLeft = resolveLinePointLabelLayout({
+    ...basePlot,
+    pointX: 6,
+    pointY: 70
+  });
+
+  assert.ok(nearTop.bounds.top >= basePlot.plotTop);
+  assert.ok(nearTop.bounds.top > 8);
+  assert.ok(nearRight.bounds.right <= basePlot.plotLeft + basePlot.plotWidth);
+  assert.ok(nearRight.x < 214);
+  assert.ok(nearLeft.bounds.left >= basePlot.plotLeft);
+  assert.ok(nearLeft.x > 6);
+});
+
+test('line point value labels avoid nearby line segments when another side is clear', () => {
+  const lineY = 54;
+  const layout = resolveLinePointLabelLayout({
+    pointX: 100,
+    pointY: 70,
+    plotLeft: 0,
+    plotTop: 0,
+    plotWidth: 220,
+    plotHeight: 140,
+    labelWidth: 56,
+    labelHeight: 12,
+    lineSegments: [
+      { x1: 68, y1: lineY, x2: 132, y2: lineY }
+    ]
+  });
+
+  assert.ok(layout.bounds.bottom + 8 <= lineY || layout.bounds.top - 8 >= lineY);
+});
+
+test('line point value labels keep an expanded safety gap from line segments', () => {
+  const lineY = 64;
+  const lineSafeGap = 8;
+  const layout = resolveLinePointLabelLayout({
+    pointX: 100,
+    pointY: 70,
+    plotLeft: 0,
+    plotTop: 0,
+    plotWidth: 220,
+    plotHeight: 140,
+    labelWidth: 56,
+    labelHeight: 12,
+    lineSegments: [
+      { x1: 60, y1: lineY, x2: 140, y2: lineY }
+    ]
+  });
+
+  assert.ok(
+    layout.bounds.bottom + lineSafeGap <= lineY ||
+      layout.bounds.top - lineSafeGap >= lineY ||
+      layout.bounds.right + lineSafeGap <= 60 ||
+      layout.bounds.left - lineSafeGap >= 140
+  );
+});
+
+test('line point value labels recheck collisions after edge clamping', () => {
+  const lineY = 54;
+  const layout = resolveLinePointLabelLayout({
+    pointX: 216,
+    pointY: 70,
+    plotLeft: 0,
+    plotTop: 0,
+    plotWidth: 220,
+    plotHeight: 140,
+    labelWidth: 64,
+    labelHeight: 12,
+    lineSegments: [
+      { x1: 128, y1: lineY, x2: 216, y2: lineY }
+    ],
+    isEndPoint: true
+  });
+
+  assert.ok(layout.bounds.right <= 220);
+  assert.ok(layout.bounds.bottom + 8 <= lineY || layout.bounds.top - 8 >= lineY);
+});
+
+test('line point value labels avoid already placed labels', () => {
+  const placedRect = { left: 72, top: 48, right: 128, bottom: 60 };
+  const layout = resolveLinePointLabelLayout({
+    pointX: 100,
+    pointY: 70,
+    plotLeft: 0,
+    plotTop: 0,
+    plotWidth: 220,
+    plotHeight: 140,
+    labelWidth: 56,
+    labelHeight: 12,
+    placedLabelRects: [placedRect]
+  });
+
+  assert.equal(rectsOverlap(layout.bounds, placedRect), false);
+});
+
+test('adaptive line point labels can hide when every candidate would press onto a line', () => {
+  const blockingLines = Array.from({ length: 16 }, (_, index) => 8 + index * 8).map((y) => ({
+    x1: 0,
+    y1: y,
+    x2: 220,
+    y2: y
+  }));
+  const adaptiveLayout = resolveLinePointLabelLayout({
+    pointX: 100,
+    pointY: 70,
+    plotLeft: 0,
+    plotTop: 0,
+    plotWidth: 220,
+    plotHeight: 140,
+    labelWidth: 56,
+    labelHeight: 12,
+    lineSegments: blockingLines,
+    allowHide: true
+  });
+  const minMaxLayout = resolveLinePointLabelLayout({
+    pointX: 100,
+    pointY: 70,
+    plotLeft: 0,
+    plotTop: 0,
+    plotWidth: 220,
+    plotHeight: 140,
+    labelWidth: 56,
+    labelHeight: 12,
+    lineSegments: blockingLines,
+    allowHide: false
+  });
+
+  assert.equal(adaptiveLayout.hidden, true);
+  assert.equal(minMaxLayout.hidden, undefined);
+});
+
 test('chart detail lookup only snaps to real change-date points', () => {
   const points = [
     { kind: 'change-date' as const },
@@ -322,6 +556,80 @@ test('nice y-axis ticks avoid arbitrary values and decimals', () => {
   assert.ok(scale.ticks.every((tick) => Number.isInteger(tick)));
 });
 
+test('line chart baseline y-axis always includes zero with nice ticks', () => {
+  const positiveScale = getLineChartYAxisScale([931340, 1483860, 2352580], {
+    rangeMode: 'baseline'
+  });
+  const negativeScale = getLineChartYAxisScale([-2352580, -1483860, -931340], {
+    rangeMode: 'baseline'
+  });
+
+  assert.ok(positiveScale.domain[0] <= 0);
+  assert.ok(positiveScale.domain[1] >= 2352580);
+  assert.ok(positiveScale.ticks.includes(0));
+  assert.ok(negativeScale.domain[0] <= -2352580);
+  assert.ok(negativeScale.domain[1] >= 0);
+  assert.ok(negativeScale.ticks.includes(0));
+  assert.ok([...positiveScale.ticks, ...negativeScale.ticks].every((tick) => Number.isInteger(tick)));
+});
+
+test('line chart dynamic y-axis keeps zero for crossing and near-zero ranges', () => {
+  const crossingScale = getLineChartYAxisScale([-100000, 50000, 200000], {
+    rangeMode: 'dynamic'
+  });
+  const nearZeroPositiveScale = getLineChartYAxisScale([2000, 100000, 120000], {
+    rangeMode: 'dynamic'
+  });
+  const nearZeroNegativeScale = getLineChartYAxisScale([-120000, -100000, -2000], {
+    rangeMode: 'dynamic'
+  });
+
+  assert.ok(crossingScale.domain[0] <= 0);
+  assert.ok(crossingScale.domain[1] >= 0);
+  assert.ok(crossingScale.ticks.includes(0));
+  assert.ok(nearZeroPositiveScale.domain[0] <= 0);
+  assert.ok(nearZeroPositiveScale.ticks.includes(0));
+  assert.ok(nearZeroNegativeScale.domain[1] >= 0);
+  assert.ok(nearZeroNegativeScale.ticks.includes(0));
+});
+
+test('line chart dynamic y-axis uses local range for far-from-zero values', () => {
+  const positiveScale = getLineChartYAxisScale([931340, 1483860, 2352580], {
+    rangeMode: 'dynamic'
+  });
+  const negativeScale = getLineChartYAxisScale([-2352580, -1483860, -931340], {
+    rangeMode: 'dynamic'
+  });
+
+  assert.ok(positiveScale.domain[0] > 0);
+  assert.ok(positiveScale.domain[1] >= 2352580);
+  assert.equal(positiveScale.ticks.includes(0), false);
+  assert.ok(negativeScale.domain[1] < 0);
+  assert.ok(negativeScale.domain[0] <= -2352580);
+  assert.equal(negativeScale.ticks.includes(0), false);
+  assert.ok([...positiveScale.ticks, ...negativeScale.ticks].every((tick) => Number.isInteger(tick)));
+});
+
+test('line chart y-axis handles empty and flat data with stable safe ranges', () => {
+  const emptyScale = getLineChartYAxisScale([], { rangeMode: 'dynamic' });
+  const flatDynamicScale = getLineChartYAxisScale([1000, 1000], {
+    rangeMode: 'dynamic'
+  });
+  const flatBaselineScale = getLineChartYAxisScale([1000, 1000], {
+    rangeMode: 'baseline'
+  });
+
+  assert.deepEqual(emptyScale.domain, [0, 1]);
+  assert.deepEqual(emptyScale.ticks, [0, 1]);
+  assert.ok(flatDynamicScale.domain[0] < 1000);
+  assert.ok(flatDynamicScale.domain[1] > 1000);
+  assert.equal(flatDynamicScale.ticks.includes(0), false);
+  assert.ok(flatBaselineScale.domain[0] <= 0);
+  assert.ok(flatBaselineScale.domain[1] > 1000);
+  assert.ok(flatBaselineScale.ticks.includes(0));
+  assert.ok(flatDynamicScale.ticks.every((tick) => Number.isInteger(tick)));
+});
+
 test('global chart control mode normalizes to peer or locked only', () => {
   assert.equal(normalizeGlobalChartControlMode('peer'), 'peer');
   assert.equal(normalizeGlobalChartControlMode('locked'), 'locked');
@@ -349,6 +657,75 @@ test('locked category chart settings read global settings without mutating local
     getEffectiveCategoryChartSettings('peer', globalSettings, settingsById, 'cash'),
     localSettings
   );
+});
+
+test('account chart y-axis setting inherits global default until a local override exists', () => {
+  const dynamicGlobalSettings: BasicAccountChartSettings = {
+    adaptiveYAxis: true,
+    xAxisRange: '6m',
+    pointValueMode: 'adaptive'
+  };
+  const baselineGlobalSettings: BasicAccountChartSettings = {
+    adaptiveYAxis: false,
+    xAxisRange: '6m',
+    pointValueMode: 'adaptive'
+  };
+  const accountSettingsById: Record<string, BasicAccountChartSettings> = {};
+
+  assert.equal(
+    getEffectiveAccountChartSettings(
+      'peer',
+      dynamicGlobalSettings,
+      accountSettingsById,
+      'cash'
+    ).adaptiveYAxis,
+    true
+  );
+  assert.equal(
+    getEffectiveAccountChartSettings(
+      'peer',
+      baselineGlobalSettings,
+      accountSettingsById,
+      'cash'
+    ).adaptiveYAxis,
+    false
+  );
+});
+
+test('account chart local y-axis override survives global default changes', () => {
+  const globalSettings: BasicAccountChartSettings = {
+    adaptiveYAxis: true,
+    xAxisRange: '6m',
+    pointValueMode: 'adaptive'
+  };
+  const localSettings: BasicAccountChartSettings = {
+    adaptiveYAxis: false,
+    xAxisRange: '1y',
+    pointValueMode: 'none'
+  };
+  const accountSettingsById: Record<string, BasicAccountChartSettings> = {
+    cash: localSettings
+  };
+
+  assert.equal(
+    getEffectiveAccountChartSettings(
+      'peer',
+      globalSettings,
+      accountSettingsById,
+      'cash'
+    ),
+    localSettings
+  );
+  assert.equal(
+    getEffectiveAccountChartSettings(
+      'locked',
+      globalSettings,
+      accountSettingsById,
+      'cash'
+    ),
+    globalSettings
+  );
+  assert.deepEqual(accountSettingsById, { cash: localSettings });
 });
 
 test('peer global category settings sync downward while local edits stay local', () => {

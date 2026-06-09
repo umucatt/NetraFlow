@@ -12,6 +12,7 @@ import type {
   HistoryRecordListProps,
   HistoryRecordListRecord
 } from '../../features/history/HistoryRecordList';
+import type { SnapshotImportRecordListRecord } from '../../features/history/SnapshotImportRecordList';
 
 type BackupRecordListProps = ComponentProps<typeof BackupRecordList>;
 type HistoryCalendarPanelProps = ComponentProps<typeof HistoryCalendarPanel>;
@@ -54,7 +55,9 @@ export type HistoryLayerPropsGroup<TRecord extends HistoryRecordListRecord> = {
 export type BackupLayerPropsGroup = Pick<
   BackupRecordListProps,
   'records' | 'formatPreciseBackupTime' | 'getBackupMethodLabel'
->;
+> & {
+  importRecords: SnapshotImportRecordListRecord[];
+};
 
 export type HistoryBackupLayerCallbacks = {
   onBack: () => void;

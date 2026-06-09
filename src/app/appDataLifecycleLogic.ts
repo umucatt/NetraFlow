@@ -11,7 +11,8 @@ import {
   LEGACY_ACCOUNT_TYPES_STORAGE_KEY,
   LEGACY_ARCHIVED_ACCOUNTS_STORAGE_KEY,
   LEGACY_DELETED_RECORDS_STORAGE_KEY,
-  LEGACY_HISTORY_STORAGE_KEY
+  LEGACY_HISTORY_STORAGE_KEY,
+  SNAPSHOT_IMPORT_RECORDS_STORAGE_KEY
 } from './storageKeys';
 import type { AppData, BackupRecord } from './types';
 import type {
@@ -20,6 +21,9 @@ import type {
   AppDataResetConfirmation,
   ExampleGeneratedData
 } from './appDataLifecycleTypes';
+import type { ExampleTemplateId } from '../exampleData';
+
+export const TEST_DATA_TEMPLATE_ID: ExampleTemplateId = 'advanced';
 
 export const createEmptyAppData = (): AppData => ({
   groups: [],
@@ -32,6 +36,7 @@ export const clearPersistedAssetData = () => {
   nfStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify([]));
   nfStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify([]));
   nfStorage.setItem(BACKUP_RECORDS_STORAGE_KEY, JSON.stringify([]));
+  nfStorage.setItem(SNAPSHOT_IMPORT_RECORDS_STORAGE_KEY, JSON.stringify([]));
   nfStorage.removeItem(LAST_BACKUP_STORAGE_KEY);
   nfStorage.setItem(LAST_BACKUP_HISTORY_COUNT_STORAGE_KEY, JSON.stringify(0));
   [
@@ -62,6 +67,12 @@ export const createExampleModeSnapshot = (
 export const createExampleDataApplyResult = (
   generatedData: ExampleGeneratedData
 ): AppDataLifecycleSnapshot => cloneLifecycleSnapshot(generatedData);
+
+export const createTestDataInRealAppData = (
+  createExampleData: (templateId: ExampleTemplateId) => ExampleGeneratedData
+): AppData => createExampleDataApplyResult(
+  createExampleData(TEST_DATA_TEMPLATE_ID)
+).appData;
 
 export const createRestoredRealDataState = ({
   savedSnapshot,

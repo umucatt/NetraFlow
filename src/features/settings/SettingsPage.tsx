@@ -252,18 +252,18 @@ function SettingsChartsPanel({
           }
         />
         <SettingsControlRow
-          label="自适应纵轴"
+          label="纵轴范围"
           options={[
-            { value: 'on', label: '开' },
-            { value: 'off', label: '关' }
+            { value: 'dynamic', label: '动态范围' },
+            { value: 'baseline', label: '基准范围' }
           ]}
-          currentValue={assetChartSettings.trend.adaptiveYAxis ? 'on' : 'off'}
+          currentValue={assetChartSettings.trend.adaptiveYAxis ? 'dynamic' : 'baseline'}
           onChange={(value) =>
             onUpdateAssetChartSettings((currentSettings) => ({
               ...currentSettings,
               trend: {
                 ...currentSettings.trend,
-                adaptiveYAxis: value === 'on'
+                adaptiveYAxis: value === 'dynamic'
               }
             }))
           }

@@ -3,7 +3,8 @@ import {
   HistoryCalendarPanel,
   HistoryFilterToolbar,
   HistoryPanel,
-  HistoryRecordList
+  HistoryRecordList,
+  SnapshotImportRecordList
 } from '../../features/history';
 import type { HistoryRecordListRecord } from '../../features/history/HistoryRecordList';
 import { OverlayBackdrop } from '../overlay';
@@ -89,6 +90,19 @@ export function HistoryBackupLayer<TRecord extends HistoryRecordListRecord>({
               accept="application/json,.json"
               onChange={callbacks.backup.onImportBackup}
               style={{ display: 'none' }}
+            />
+
+            <SnapshotImportRecordList
+              records={backup.importRecords}
+              formatPreciseBackupTime={backup.formatPreciseBackupTime}
+            />
+
+            <div
+              aria-hidden="true"
+              style={{
+                height: 1,
+                background: 'var(--border-soft)'
+              }}
             />
 
             <BackupRecordList

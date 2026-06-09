@@ -105,6 +105,7 @@ export type CreateRightPanelRendererPropsOptions = {
     autoBackupDraft: SnapshotProps['autoBackupDraft'];
     autoBackupCycleValueInput: string;
     autoSnapshotCycleInputRef: SnapshotProps['autoSnapshotCycleInputRef'];
+    latestAutoBackupAt: string;
     isExampleMode: boolean;
     hasAutoBackupDraftChanges: boolean;
     canSaveAutoBackupSettings: boolean;
@@ -132,6 +133,7 @@ export type CreateRightPanelRendererPropsOptions = {
   groupDetail: {
     selectedGroupDetail: AssetGroupWithAccounts | undefined;
     nameDraft: string;
+    namePlaceholder?: string;
     statsDraft: boolean;
     error: string;
     chartSettings: GroupDetailProps['chartSettings'];
@@ -225,6 +227,7 @@ export const createRightPanelRendererProps = ({
         autoBackupDraft: history.autoBackupDraft,
         autoBackupCycleValueInput: history.autoBackupCycleValueInput,
         autoSnapshotCycleInputRef: history.autoSnapshotCycleInputRef,
+        latestAutoBackupAt: history.latestAutoBackupAt,
         isExampleMode: history.isExampleMode,
         hasAutoBackupDraftChanges: history.hasAutoBackupDraftChanges,
         canSaveAutoBackupSettings: history.canSaveAutoBackupSettings,
@@ -264,6 +267,7 @@ export const createRightPanelRendererProps = ({
     groupDetail: groupDetail.selectedGroupDetail
       ? {
           nameDraft: groupDetail.nameDraft,
+          namePlaceholder: groupDetail.namePlaceholder,
           statsDraft: groupDetail.statsDraft,
           error: groupDetail.error,
           chartSettings: groupDetail.chartSettings,

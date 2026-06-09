@@ -4,9 +4,14 @@ import type {
   Account,
   AccountTypeNature,
   AppData,
+  ArchivedAccountEntry,
   AssetGroup,
   AssetGroupWithAccounts
 } from '../../app/types';
+import {
+  DUPLICATE_NAME_PLACEHOLDER,
+  hasDuplicateAccountTypeName
+} from './accountNameUniqueness';
 
 export type AccountTypeEditorState = {
   mode: 'create' | 'edit';
@@ -18,12 +23,14 @@ export const validateAccountTypeName = (name: string) =>
 
 export const createAccountTypeInAppData = ({
   appData,
+  archivedAccounts,
   groupId,
   name,
   nature,
   includeInStats
 }: {
   appData: AppData;
+  archivedAccounts: ArchivedAccountEntry[];
   groupId: string;
   name: string;
   nature: AccountTypeNature;
@@ -33,6 +40,16 @@ export const createAccountTypeInAppData = ({
 
   if (error) {
     return { ok: false as const, error };
+  }
+
+  if (
+    hasDuplicateAccountTypeName({
+      groups: appData.groups,
+      archivedAccounts,
+      name
+    })
+  ) {
+    return { ok: false as const, error: DUPLICATE_NAME_PLACEHOLDER };
   }
 
   const sortOrder =
@@ -60,12 +77,14 @@ export const createAccountTypeInAppData = ({
 
 export const updateAccountTypeInAppData = ({
   appData,
+  archivedAccounts,
   groupId,
   name,
   nature,
   includeInStats
 }: {
   appData: AppData;
+  archivedAccounts: ArchivedAccountEntry[];
   groupId: string;
   name: string;
   nature: AccountTypeNature;
@@ -84,6 +103,18 @@ export const updateAccountTypeInAppData = ({
   }
 
   const nextName = name.trim();
+
+  if (
+    hasDuplicateAccountTypeName({
+      groups: appData.groups,
+      archivedAccounts,
+      name: nextName,
+      exceptGroupId: groupId
+    })
+  ) {
+    return { ok: false as const, error: DUPLICATE_NAME_PLACEHOLDER };
+  }
+
   const targetAccountIds = new Set(
     appData.accounts.filter((account) => account.groupId === groupId).map((account) => account.id)
   );

@@ -473,7 +473,11 @@ export const GLOBAL_SETTINGS_SEARCH_ITEMS = [
 
       '多重叠加数字',
 
-      '自适应纵轴',
+      '纵轴范围',
+
+      '动态范围',
+
+      '基准范围',
 
       '横轴范围显示',
 
@@ -521,7 +525,11 @@ export const GLOBAL_SETTINGS_SEARCH_ITEMS = [
 
       'duo chong die jia shu zi',
 
-      'zi shi ying zong zhou',
+      'zong zhou fan wei',
+
+      'dong tai fan wei',
+
+      'ji zhun fan wei',
 
       'heng zhou fan wei xian shi',
 
@@ -537,7 +545,7 @@ export const GLOBAL_SETTINGS_SEARCH_ITEMS = [
 
     ],
 
-    pinyinInitials: ['tb', 'tbsz', 'tbps', 'zcjgxs', 'zcqsxs', 'dcdjsz', 'zsyzz', 'hzfwxs', 'dzxs', 'jyy', 'jsy', 'jly', 'jyn']
+    pinyinInitials: ['tb', 'tbsz', 'tbps', 'zcjgxs', 'zcqsxs', 'dcdjsz', 'zzfw', 'dtfw', 'jzfw', 'hzfwxs', 'dzxs', 'jyy', 'jsy', 'jly', 'jyn']
 
   },
 

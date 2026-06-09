@@ -18,6 +18,19 @@ const readProjectFile = (path: string) =>
 
 const projectRootPath = fileURLToPath(new URL('../../../', import.meta.url));
 
+const readProjectStyles = () => {
+  const stylesEntrySource = readProjectFile('src/styles.css');
+  const importSources = Array.from(
+    stylesEntrySource.matchAll(/^@import ['"]\.\/(.+)['"];$/gm),
+    (match) => readProjectFile(`src/${match[1]}`)
+  );
+  const stylesEntryBody = stylesEntrySource
+    .replace(/^@import ['"].+['"];\r?\n/gm, '')
+    .replace(/^\r?\n/, '');
+
+  return [...importSources, stylesEntryBody].join('\n');
+};
+
 const readHeadProjectFile = (path: string) =>
   execFileSync('git', ['show', `HEAD:${path}`], {
     cwd: projectRootPath,
@@ -60,6 +73,62 @@ test('global settings chart labels keep only the intended chart controls', () =>
   assert.equal(settingsPageSource.includes('资产结构显示'), true);
   assert.equal(settingsPageSource.includes('资产趋势显示'), true);
   assert.equal(appSource.includes('首页缩略图表'), false);
+});
+
+test('line chart y-axis range copy replaces adaptive y-axis wording everywhere visible', () => {
+  const settingsPageSource = readProjectFile('src/features/settings/SettingsPage.tsx');
+  const chartSettingsPanelSource = readProjectFile('src/features/charts/ChartSettingsPanel.tsx');
+  const accountChartSettingsSource = readProjectFile(
+    'src/features/account/AccountChartSettingsPanel.tsx'
+  );
+  const assetTrendPanelSource = readProjectFile('src/features/charts/AssetTrendPanel.tsx');
+  const settingsSectionLogicSource = readProjectFile(
+    'src/features/settings/settingsSectionLogic.ts'
+  );
+  const chartDisplayPanelSource = readProjectFile('src/features/charts/ChartDisplayPanel.tsx');
+  const visibleCopySource = [
+    settingsPageSource,
+    chartSettingsPanelSource,
+    accountChartSettingsSource,
+    assetTrendPanelSource,
+    settingsSectionLogicSource,
+    chartDisplayPanelSource
+  ].join('\n');
+
+  assert.equal(visibleCopySource.includes('自适应纵轴'), false);
+  assert.equal(visibleCopySource.includes('趋势已放大'), false);
+  assert.match(
+    settingsPageSource,
+    /label="纵轴范围"[\s\S]*value: 'dynamic', label: '动态范围'[\s\S]*value: 'baseline', label: '基准范围'[\s\S]*currentValue=\{assetChartSettings\.trend\.adaptiveYAxis \? 'dynamic' : 'baseline'\}[\s\S]*adaptiveYAxis: value === 'dynamic'/
+  );
+  assert.match(
+    chartSettingsPanelSource,
+    /'纵轴范围'[\s\S]*value: 'dynamic', label: '动态范围'[\s\S]*value: 'baseline', label: '基准范围'[\s\S]*settings\.trend\.adaptiveYAxis \? 'dynamic' : 'baseline'[\s\S]*adaptiveYAxis: value === 'dynamic'/
+  );
+  assert.match(
+    accountChartSettingsSource,
+    /'纵轴范围'[\s\S]*value: 'dynamic', label: '动态范围'[\s\S]*value: 'baseline', label: '基准范围'[\s\S]*settings\.adaptiveYAxis \? 'dynamic' : 'baseline'[\s\S]*adaptiveYAxis: value === 'dynamic'/
+  );
+  assert.equal(chartDisplayPanelSource.includes('adaptiveYAxis'), false);
+});
+
+test('total and account line charts share point value label avoidance layout', () => {
+  const mainContentRendererSource = readProjectFile(
+    'src/app/mainContent/MainContentRenderer.tsx'
+  );
+  const chartDisplayPanelSource = readProjectFile('src/features/charts/ChartDisplayPanel.tsx');
+  const assetTrendPanelSource = readProjectFile('src/features/charts/AssetTrendPanel.tsx');
+
+  assert.equal(chartDisplayPanelSource.includes('<AssetTrendPanel'), true);
+  assert.equal(mainContentRendererSource.includes('<AssetTrendChart'), true);
+  assert.equal(assetTrendPanelSource.includes('resolveLinePointLabelLayout'), true);
+  assert.equal(assetTrendPanelSource.includes('placedLabelRects'), true);
+  assert.equal(assetTrendPanelSource.includes("allowHide: settings.pointValueMode === 'adaptive'"), true);
+  assert.equal(assetTrendPanelSource.includes('isEndPoint: index === series.values.length - 1'), true);
+  assert.equal(assetTrendPanelSource.includes('if (labelLayout.hidden)'), true);
+  assert.equal(assetTrendPanelSource.includes('dominantBaseline={labelLayout.dominantBaseline}'), true);
+  assert.equal(chartDisplayPanelSource.includes('getChartValueLabelLayout'), true);
+  assert.equal(chartDisplayPanelSource.includes('resolveLinePointLabelLayout'), false);
 });
 
 test('global settings security and about copy match the current release text', () => {
@@ -140,7 +209,7 @@ test('global search settings block keeps standard settings layout wiring', () =>
   const searchSettingsPanelSource = readProjectFile(
     'src/features/settings/SearchSettingsPanel.tsx'
   );
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
 
   assert.equal(searchSettingsPanelSource.includes('id="global-settings-search-logic"'), true);
   assert.equal(searchSettingsPanelSource.includes('label="允许推断"'), true);
@@ -158,7 +227,7 @@ test('page surfaces and right panel page frames stay scoped', () => {
   );
   const rightPanelRendererSource = readProjectFile('src/app/rightPanel/RightPanelRenderer.tsx');
   const settingsPageSource = readProjectFile('src/features/settings/SettingsPage.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const searchPreviewPanelSource = readProjectFile('src/components/search/SearchPreviewPanel.tsx');
   const accountActionsSource = readProjectFile('src/features/account/AccountActionsPanel.tsx');
   const dangerActionsSource = readProjectFile('src/features/account/AccountDangerActionsPanel.tsx');
@@ -289,7 +358,7 @@ test('home account type swatches and source icons are wired through source', () 
   const rightPanelRendererSource = readProjectFile('src/app/rightPanel/RightPanelRenderer.tsx');
   const dashboardSummarySource = readProjectFile('src/features/dashboard/DashboardSummaryCards.tsx');
   const overviewSource = readProjectFile('src/features/overview/AssetOverviewPage.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const iconIndexSource = readProjectFile('src/assets/icons/index.ts');
   const homeActionsSource = rightPanelRendererSource.slice(
     rightPanelRendererSource.indexOf("case 'home':"),
@@ -336,7 +405,7 @@ test('chart visual text selection rules stay scoped away from legends', () => {
   const allocationPanelSource = readProjectFile('src/features/charts/AssetAllocationPanel.tsx');
   const trendPanelSource = readProjectFile('src/features/charts/AssetTrendPanel.tsx');
   const legendSource = readProjectFile('src/features/charts/ChartLegendList.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const chartSource = [appSource, allocationPanelSource, trendPanelSource].join('\n');
   const svgTextNodeCount = chartSource.match(/<text(?:\s|>)/g)?.length ?? 0;
   const chartSvgTextClassCount = chartSource.match(/chart-svg-text/g)?.length ?? 0;
@@ -357,7 +426,7 @@ test('chart visual text selection rules stay scoped away from legends', () => {
 test('rollup prompt display stays selectable without touching paste input', () => {
   const promptPanelSource = readProjectFile('src/features/rollupImport/RollupPromptPanel.tsx');
   const dropzoneSource = readProjectFile('src/features/rollupImport/RollupImportDropzone.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const promptDisplayBlock = stylesSource.match(/\.rollup-prompt-display,\s*\.rollup-prompt-display \*\s*\{[^}]*\}/s)?.[0] ?? '';
 
   assert.match(
@@ -371,7 +440,7 @@ test('rollup prompt display stays selectable without touching paste input', () =
 });
 
 test('app-wide selection is disabled except editable and copyable text areas', () => {
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const bodyBlock = stylesSource.match(/body\s*\{[^}]*\}/s)?.[0] ?? '';
   const selectableBlock =
     stylesSource.match(
@@ -389,7 +458,7 @@ test('app-wide selection is disabled except editable and copyable text areas', (
 test('rollup import page copy, confirmation layout, and account picker use current UI contract', () => {
   const appSource = readProjectFile('src/App.tsx');
   const rightPanelRendererSource = readProjectFile('src/app/rightPanel/RightPanelRenderer.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const rollupLogicSource = readProjectFile('src/rollupImportLogic.ts');
   const rollupControllerSource = readProjectFile(
     'src/features/rollupImport/useRollupImportController.ts'
@@ -461,7 +530,7 @@ test('rollup import page copy, confirmation layout, and account picker use curre
 
 test('overview return entries are absent from settings and rollup import', () => {
   const rightPanelRendererSource = readProjectFile('src/app/rightPanel/RightPanelRenderer.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const settingsSectionLogicSource = readProjectFile(
     'src/features/settings/settingsSectionLogic.ts'
   );
@@ -496,7 +565,7 @@ test('overview return entries are absent from settings and rollup import', () =>
 test('global search includes manual settings category without old result containers', () => {
   const appSource = readProjectFile('src/App.tsx');
   const rightPanelRendererSource = readProjectFile('src/app/rightPanel/RightPanelRenderer.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const searchTypesSource = readProjectFile('src/search/searchTypes.ts');
   const settingsSectionLogicSource = readProjectFile(
     'src/features/settings/settingsSectionLogic.ts'
@@ -774,6 +843,9 @@ test('NF storage adapter owns persisted renderer data and legacy localStorage mi
   const lifecycleLogicSource = readProjectFile('src/app/appDataLifecycleLogic.ts');
   const storageKeysSource = readProjectFile('src/app/storageKeys.ts');
   const nfStorageSource = readProjectFile('src/app/nfStorage.ts');
+  const snapshotBackupLogicSource = readProjectFile(
+    'src/features/backup/snapshotBackupLogic.ts'
+  );
   const rollupControllerSource = readProjectFile(
     'src/features/rollupImport/useRollupImportController.ts'
   );
@@ -800,6 +872,10 @@ test('NF storage adapter owns persisted renderer data and legacy localStorage mi
   assertNfStorageSetItem('GLOBAL_SETTINGS_STORAGE_KEY');
   assertNfStorageSetItem('CHART_SETTINGS_STORAGE_KEY');
   assertNfStorageSetItem('BACKUP_RECORDS_STORAGE_KEY');
+  assert.match(
+    snapshotBackupLogicSource,
+    /nfStorage\.setItem\(\s*SNAPSHOT_IMPORT_RECORDS_STORAGE_KEY\b/
+  );
   assertNfStorageSetItem('FIRST_WELCOME_STORAGE_KEY');
   assert.match(
     rollupControllerSource,
@@ -807,6 +883,8 @@ test('NF storage adapter owns persisted renderer data and legacy localStorage mi
   );
   assert.match(persistedStorageSource, /nfStorage\.removeItem\(\s*LAST_BACKUP_STORAGE_KEY\s*\)/);
   assert.equal(storageKeysSource.includes('export const NF_STORAGE_WHITELIST_KEYS = ['), true);
+  assert.equal(storageKeysSource.includes('SNAPSHOT_IMPORT_RECORDS_STORAGE_KEY'), true);
+  assert.equal(mainSource.includes("'snapshotImportRecords'"), true);
   assert.equal(storageKeysSource.includes('MIGRATION_BACKUP_STORAGE_KEY'), true);
   assert.equal(nfStorageSource.includes('collectMigratableLegacyItems'), true);
   assert.equal(nfStorageSource.includes('skippedNonWhitelistKeys'), true);
@@ -910,7 +988,7 @@ test('main content position setting keeps left default and swaps only app shell 
   const securitySettingsTypesSource = readProjectFile(
     'src/features/security/securitySettingsTypes.ts'
   );
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const defaultGlobalSettingsSource = globalSettingsLogicSource.slice(
     globalSettingsLogicSource.indexOf('export const DEFAULT_GLOBAL_SETTINGS'),
     globalSettingsLogicSource.indexOf('export const isPositiveNegativeColorMode')
@@ -1032,7 +1110,7 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
   const appDialogLayerSource = readProjectFile('src/app/feedback/AppDialogLayer.tsx');
   const confirmDialogSource = readProjectFile('src/components/dialogs/ConfirmDialog.tsx');
   const dialogShellSource = readProjectFile('src/components/dialogs/DialogShell.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const mainSource = readProjectFile('electron/main.ts');
   const afterPackSource = readProjectFile('scripts/after-pack-installer.mjs');
   const packageInstallerScriptSource = readProjectFile('scripts/package-installer.mjs');
@@ -1176,6 +1254,83 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
   assert.equal(packageInstallerScriptSource.includes("'builder-debug.yml', 'latest.yml'"), true);
   assert.equal(packageInstallerScriptSource.includes('`${productName}_${version}_Setup.exe`'), true);
   assert.equal(/node:child_process|spawnSync|powershell|cmd(?:\.exe)?|icacls|ExecWait|nsExec::|\.ps1|\.cmd|\.bat/i.test(packageInstallerScriptSource), false);
+});
+
+test('reset number confirmation keeps disabled state without mismatch helper text', () => {
+  const resetDangerDialogLayerSource = readProjectFile(
+    'src/app/resetDangerDialog/ResetDangerDialogLayer.tsx'
+  );
+
+  assert.equal(resetDangerDialogLayerSource.includes('数字不匹配'), false);
+  assert.equal(resetDangerDialogLayerSource.includes('global-settings-note'), false);
+  assert.equal(
+    resetDangerDialogLayerSource.includes('disabled={inputValue !== confirmation.code}'),
+    true
+  );
+  assert.equal(resetDangerDialogLayerSource.includes('onClick={onCancel}'), true);
+  assert.equal(resetDangerDialogLayerSource.includes('type="button"'), true);
+  assert.equal(resetDangerDialogLayerSource.includes('onSubmit={handleSubmit}'), true);
+});
+
+test('toast controller and viewport use one fixed bottom-right edge slide style', () => {
+  const toastControllerSource = readProjectFile('src/app/feedback/useToastController.ts');
+  const toastViewportSource = readProjectFile('src/app/feedback/ToastViewport.tsx');
+  const stylesSource = readProjectStyles();
+  const toastViewportBlock = stylesSource.match(/\.toast-viewport\s*\{[^}]*\}/s)?.[0] ?? '';
+  const toastItemBlock = stylesSource.match(/\.toast-viewport__item\s*\{[^}]*\}/s)?.[0] ?? '';
+  const backupControllerSource = readProjectFile(
+    'src/features/backup/useSnapshotBackupController.tsx'
+  );
+
+  assert.equal(toastControllerSource.includes('const TOAST_AUTO_DISMISS_MS = 2500;'), true);
+  assert.match(stylesSource, /\.toast-viewport__item\s*\{[\s\S]*animation: nf-toast-edge-lifecycle 2500ms ease-out forwards;/);
+  assert.match(stylesSource, /@keyframes nf-toast-edge-lifecycle\s*\{[\s\S]*transform: translateX\(100%\);[\s\S]*transform: translateX\(0\);[\s\S]*transform: translateX\(100%\);/);
+  assert.equal(toastControllerSource.includes('setToastMessages(['), true);
+  assert.equal(toastControllerSource.includes('toastTimerRefs.current = [timerId];'), true);
+  assert.equal(toastControllerSource.includes('toastMessages.concat'), false);
+  assert.equal(toastControllerSource.includes('...currentMessages'), false);
+  assert.equal(toastControllerSource.includes('toastTimerRefs.current.push'), false);
+
+  assert.equal(toastViewportSource.includes('className="toast-viewport"'), true);
+  assert.equal(toastViewportSource.includes('className="toast-viewport__item"'), true);
+  assert.equal(toastViewportSource.includes("style={{"), false);
+  assert.equal(toastViewportSource.includes('<button'), false);
+  assert.equal(toastViewportSource.includes('<svg'), false);
+  assert.equal(toastViewportSource.includes('onClick'), false);
+  assert.equal(toastViewportSource.includes('close'), false);
+
+  assert.match(toastViewportBlock, /position: fixed;/);
+  assert.match(toastViewportBlock, /right: 0;/);
+  assert.match(toastViewportBlock, /bottom: 30px;/);
+  assert.match(toastViewportBlock, /z-index: 120;/);
+  assert.match(toastViewportBlock, /justify-items: end;/);
+  assert.match(toastViewportBlock, /width: 188px;/);
+  assert.match(toastViewportBlock, /max-width: calc\(100vw - 44px\);/);
+  assert.match(toastViewportBlock, /pointer-events: none;/);
+
+  assert.match(toastItemBlock, /place-items: center;/);
+  assert.match(toastItemBlock, /width: 188px;/);
+  assert.match(toastItemBlock, /max-width: calc\(100vw - 44px\);/);
+  assert.match(toastItemBlock, /text-align: center;/);
+  assert.match(toastItemBlock, /overflow-wrap: break-word;/);
+  assert.match(toastItemBlock, /border-right: 0;/);
+  assert.match(toastItemBlock, /border-radius: var\(--radius-section\) 0 0 var\(--radius-section\);/);
+  assert.match(toastItemBlock, /background: color-mix\(in srgb, var\(--panel-bg-strong\) 92%, var\(--surface-muted\)\);/);
+  assert.match(toastItemBlock, /color: var\(--text-main\);/);
+  assert.equal(toastViewportSource.includes("width: 'min(320px, calc(100vw - 44px))'"), false);
+  assert.equal(toastViewportSource.includes("width: 'fit-content'"), false);
+  assert.equal(toastViewportSource.includes('minWidth'), false);
+  assert.equal(toastViewportBlock.includes('min-width: 132px;'), false);
+  assert.equal(toastItemBlock.includes('min-width: 132px;'), false);
+  assert.equal(toastViewportBlock.includes('width: fit-content;'), false);
+  assert.equal(toastItemBlock.includes('width: fit-content;'), false);
+  assert.equal(toastViewportBlock.includes('min(320px, calc(100vw - 44px))'), false);
+  assert.equal(toastItemBlock.includes('min(320px, calc(100vw - 44px))'), false);
+  assert.equal(toastItemBlock.includes('rgba(22, 163, 74'), false);
+  assert.equal(toastItemBlock.includes('rgba(185, 28, 28'), false);
+
+  assert.equal(backupControllerSource.includes("showToast('自动备份进行中')"), true);
+  assert.equal(backupControllerSource.includes("showToast('自动备份完成', 'success')"), true);
 });
 
 test('Windows installer install directory and uninstall cleanup rules are wired', () => {
@@ -1771,7 +1926,7 @@ test('history panel opacity and two-column title alignment use shared structure 
     historyCalendarSource,
     historyListSource
   ].join('\n');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
 
   assert.equal(appSource.includes('<HistoryBackupLayer'), true);
   assert.equal(historyBackupLayerSource.includes('<HistoryPanel'), true);
@@ -1806,7 +1961,7 @@ test('history panel opacity and two-column title alignment use shared structure 
 test('local Noto fonts, emoji fallback, and about-page license copy stay wired', () => {
   const appSource = readProjectFile('src/App.tsx');
   const aboutPanelSource = readProjectFile('src/features/settings/AboutNetraFlowPanel.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
 
   assert.match(stylesSource, /^@font-face\s*\{[\s\S]*font-family: 'NF Noto Sans CJK SC';/);
   assert.equal(stylesSource.includes("NotoSansCJKsc-Regular.otf"), true);
@@ -1864,7 +2019,7 @@ test('account add and restore page copy uses archived metadata without extra tit
   const appSource = readProjectFile('src/App.tsx');
   const accountDialogLayerSource = readProjectFile('src/app/accountDialogs/AccountDialogLayer.tsx');
   const accountEditorSource = readProjectFile('src/features/account/AccountEditorDialog.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const restorePanelSource = accountEditorSource.slice(
     accountEditorSource.indexOf('className="account-add-restore-panel"'),
     accountEditorSource.indexOf('className="account-add-restore-panel account-add-restore-panel--form"')
@@ -1948,8 +2103,11 @@ test('deleted original account category restore uses an explicit unselected cate
     true
   );
   const restoreEntrySources = `${appSource}\n${accountOperationsControllerSource}`;
+  assert.equal(
+    restoreEntrySources.includes("restoreAccount(archivedMatch.groupId, archivedMatch, 'same-name-account')"),
+    false
+  );
   [
-    "restoreAccount(archivedMatch.groupId, archivedMatch, 'same-name-account')",
     "restoreAccount(selectedAccount.groupId, selectedAccountEntry, 'account-detail')",
     "restoreAccount(account.groupId, account, 'archived-accounts-list')",
     "restoreAccount(account.groupId, account, 'account-restore-dialog')"
@@ -1958,7 +2116,7 @@ test('deleted original account category restore uses an explicit unselected cate
 
 test('quick entry picker and example account aliases use current title and mark rules', () => {
   const appSource = readProjectFile('src/App.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const exampleDataSource = readProjectFile('src/exampleData.ts');
   const quickEntryLayerSource = readProjectFile(
     'src/app/quickEntryLayer/QuickEntryPickerLayer.tsx'
@@ -2036,7 +2194,7 @@ test('account detail operation copy and editor previews stay visually scoped', (
     'src/features/account/useAccountOperationsController.ts'
   );
   const accountDialogLayerSource = readProjectFile('src/app/accountDialogs/AccountDialogLayer.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const accountTrendPanelSource = mainContentRendererSource.slice(
     mainContentRendererSource.indexOf('function AccountTrendPanel'),
     mainContentRendererSource.indexOf('export function MainContentRenderer')
@@ -2167,7 +2325,7 @@ test('page coverage scroll reset stays scoped away from view and form state', ()
 test('home asset stat label stays above amount with muted visual weight', () => {
   const dashboardSummarySource = readProjectFile('src/features/dashboard/DashboardSummaryCards.tsx');
   const overviewSource = readProjectFile('src/features/overview/AssetOverviewPage.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const homeHeadingSource = dashboardSummarySource.slice(
     dashboardSummarySource.indexOf('className="net-worth-summary__heading"'),
     dashboardSummarySource.indexOf('className={`net-worth-change')
@@ -2205,7 +2363,7 @@ test('account add form uses aligned add control and weak footer buttons', () => 
   const appSource = readProjectFile('src/App.tsx');
   const accountDialogLayerSource = readProjectFile('src/app/accountDialogs/AccountDialogLayer.tsx');
   const accountEditorSource = readProjectFile('src/features/account/AccountEditorDialog.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
 
   assert.equal(appSource.includes('<AccountDialogLayer'), true);
   assert.equal(accountDialogLayerSource.includes('<AccountCreateDialog'), true);
@@ -2296,7 +2454,7 @@ test('settings and chart copy remove duplicate labels without changing chart wir
 });
 
 test('shared control height drives right panel, settings, segmented, and modal buttons', () => {
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
 
   assert.equal(stylesSource.includes('--nf-control-height: 40px;'), true);
   assert.equal(stylesSource.includes('--input-height: var(--nf-control-height);'), true);
@@ -2319,7 +2477,7 @@ test('shared control height drives right panel, settings, segmented, and modal b
 });
 
 test('global settings right navigation reuses the home right panel action rhythm', () => {
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const navBlock = stylesSource.match(/\.global-settings-nav\s*\{[^}]*\}/s)?.[0] ?? '';
   const navButtonBlock = stylesSource.match(/\.global-settings-nav__item\s*\{[^}]*\}/s)?.[0] ?? '';
   const navButtonStrongBlock = stylesSource.match(/\.global-settings-nav__item strong\s*\{[^}]*\}/s)?.[0] ?? '';
@@ -2502,7 +2660,7 @@ test('flash note visual copy removes extra eyebrows and keeps mode labels explic
   const mainContentRendererSource = readProjectFile(
     'src/app/mainContent/MainContentRenderer.tsx'
   );
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const flashNoteHostLayerSource = readProjectFile(
     'src/app/flashNoteLayer/FlashNoteHostLayer.tsx'
   );
@@ -2602,7 +2760,7 @@ test('flash note visual copy removes extra eyebrows and keeps mode labels explic
 });
 
 test('local responsive tightening stays scoped to home stat, page titles, and right panel controls', () => {
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const bodyBlock = stylesSource.match(/body\s*\{[^}]*\}/s)?.[0] ?? '';
 
   assert.equal(bodyBlock.includes('font-size'), false);
@@ -2618,7 +2776,7 @@ test('local responsive tightening stays scoped to home stat, page titles, and ri
 test('NF tooltip replaces high frequency native hover titles', () => {
   const appSource = readProjectFile('src/App.tsx');
   const rightPanelRendererSource = readProjectFile('src/app/rightPanel/RightPanelRenderer.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const tooltipSource = readProjectFile('src/components/tooltip/NfTooltip.tsx');
   const floatingTooltipSource = readProjectFile('src/components/tooltip/NfFloatingTooltip.tsx');
   const tooltipIndexSource = readProjectFile('src/components/tooltip/index.ts');
@@ -2687,7 +2845,7 @@ test('home account type edit mode exposes centered sort and delete actions', () 
     'src/app/mainContent/createMainContentRendererProps.tsx'
   );
   const overviewSource = readProjectFile('src/features/overview/AssetOverviewPage.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const entryStart = overviewSource.indexOf('data-account-type-entry="true"');
   const entrySource = overviewSource.slice(
     entryStart,
@@ -2775,7 +2933,7 @@ test('home account type mouse click is deferred without delaying keyboard toggle
 
 test('asset group delete action uses danger styling and clears dangling group ui state', () => {
   const appSource = readProjectFile('src/App.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
   const cleanupSource = appSource.slice(
     appSource.indexOf('const clearDeletedAssetGroupUiState'),
     appSource.indexOf('const deleteAssetGroup')

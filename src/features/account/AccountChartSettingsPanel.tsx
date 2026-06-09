@@ -44,16 +44,16 @@ function AccountChartSettingsPanel({
         ariaDisabled={isLockedByGlobal}
       >
         {renderSegmentedControl(
-          '自适应纵轴',
+          '纵轴范围',
           [
-            { value: 'on', label: '开' },
-            { value: 'off', label: '关' }
+            { value: 'dynamic', label: '动态范围' },
+            { value: 'baseline', label: '基准范围' }
           ],
-          settings.adaptiveYAxis ? 'on' : 'off',
+          settings.adaptiveYAxis ? 'dynamic' : 'baseline',
           (value) =>
             onUpdateSettings((currentSettings) => ({
               ...currentSettings,
-              adaptiveYAxis: value === 'on'
+              adaptiveYAxis: value === 'dynamic'
             })),
           isLockedByGlobal
         )}

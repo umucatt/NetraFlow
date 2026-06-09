@@ -77,6 +77,14 @@ export type BackupRecord = {
   method: BackupMethod;
 };
 
+export type SnapshotImportRecord = {
+  id: string;
+  importedAt: string;
+  snapshotCreatedAt: string | null;
+  historyRecordCount: number;
+  changedHistoryRecordCount: number;
+};
+
 export type AutoBackupSettings = {
   enabled: boolean;
   cycle: BackupCycle;

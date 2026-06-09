@@ -134,7 +134,7 @@ function AccountAmountEditorDialog({
       title={title}
       titleStyle={{ margin: '0 0 18px', fontSize: '1.45rem' }}
       className="account-operation-panel"
-      backdropClassName="layout-layer layout-layer--right"
+      backdropClassName="modal-backdrop"
       backdropStyle={centeredBackdropStyle}
       cardStyle={amountEditorCardStyle}
       onClose={onCancel}
@@ -206,7 +206,7 @@ function AccountRestoreDialog({
       titleClassName="account-add-restore-panel__title"
       titleStyle={{ margin: 0 }}
       className="account-add-restore-panel"
-      backdropClassName="layout-layer layout-layer--left"
+      backdropClassName="modal-backdrop"
       backdropStyle={centeredBackdropStyle}
       cardStyle={addRestoreCardStyle}
       onClose={onCancel}
@@ -314,9 +314,11 @@ function AccountRestoreTargetDialog({
 type AccountCreateDialogProps = {
   accountTypeInputRef: RefObject<HTMLInputElement | null>;
   accountTypeInput: string;
+  accountTypeInputPlaceholder?: string;
   accountTypeGhostText: string;
   accountTypeCount: number;
   newAccountName: string;
+  newAccountNamePlaceholder?: string;
   newAccountAmount: string;
   error: string;
   onAccountTypeInputChange: (value: string) => void;
@@ -333,9 +335,11 @@ type AccountCreateDialogProps = {
 function AccountCreateDialog({
   accountTypeInputRef,
   accountTypeInput,
+  accountTypeInputPlaceholder,
   accountTypeGhostText,
   accountTypeCount,
   newAccountName,
+  newAccountNamePlaceholder,
   newAccountAmount,
   error,
   onAccountTypeInputChange,
@@ -372,7 +376,7 @@ function AccountCreateDialog({
       titleClassName="account-add-restore-panel__title"
       titleStyle={{ margin: 0 }}
       className="account-add-restore-panel account-add-restore-panel--form"
-      backdropClassName="layout-layer layout-layer--right"
+      backdropClassName="modal-backdrop"
       backdropStyle={centeredBackdropStyle}
       cardStyle={addAccountCardStyle}
       onClose={onCancel}
@@ -413,6 +417,7 @@ function AccountCreateDialog({
               autoFocus
               type="text"
               value={accountTypeInput}
+              placeholder={accountTypeInputPlaceholder}
               onChange={(event) => onAccountTypeInputChange(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
@@ -495,6 +500,7 @@ function AccountCreateDialog({
         <input
           type="text"
           value={newAccountName}
+          placeholder={newAccountNamePlaceholder}
           onChange={(event) => onNameChange(event.target.value)}
           style={{
             width: '100%',

@@ -1,20 +1,24 @@
 import {
   AUTO_BACKUP_SETTINGS_STORAGE_KEY,
   BACKUP_RECORDS_STORAGE_KEY,
+  FORCE_AUTO_BACKUP_DUE_ONCE_STORAGE_KEY,
   LAST_BACKUP_HISTORY_COUNT_STORAGE_KEY,
-  LAST_BACKUP_STORAGE_KEY
+  LAST_BACKUP_STORAGE_KEY,
+  SNAPSHOT_IMPORT_RECORDS_STORAGE_KEY
 } from '../../app/storageKeys';
 import { nfStorage } from '../../app/nfStorage';
-import { getValidTimestamp } from '../../app/dateUtils';
+import { DAY_MS, getValidTimestamp } from '../../app/dateUtils';
 import type {
   Account,
+  AppData,
   AssetGroup,
   AutoBackupSettings,
   BackupCycle,
   BackupCycleUnit,
   BackupMethod,
   BackupRecord,
-  HistoryRecord
+  HistoryRecord,
+  SnapshotImportRecord
 } from '../../app/types';
 import {
   createEncryptedJsonExportText,
@@ -30,6 +34,8 @@ export const DEFAULT_AUTO_BACKUP_SETTINGS: AutoBackupSettings = {
   },
   directory: ''
 };
+
+export const SNAPSHOT_INCOMPLETE_ERROR_MESSAGE = '快照文件格式不完整，无法导入';
 
 type BackupPayloadOptions = {
   productName: string;
@@ -75,6 +81,105 @@ const createId = (prefix: string) => {
   }
 
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
+const COMPARABLE_HISTORY_RECORD_KEYS = [
+  'id',
+  'accountId',
+  'type',
+  'groupName',
+  'accountName',
+  'beforeAmount',
+  'afterAmount',
+  'time',
+  'relatedTime',
+  'note',
+  'source'
+] as const satisfies readonly (keyof HistoryRecord)[];
+
+export const createComparableHistoryRecordText = (record: HistoryRecord) => {
+  const comparableRecord = COMPARABLE_HISTORY_RECORD_KEYS.reduce<
+    Partial<Record<keyof HistoryRecord, HistoryRecord[keyof HistoryRecord]>>
+  >((snapshot, key) => {
+    const value = record[key];
+
+    if (value !== undefined) {
+      snapshot[key] = value;
+    }
+
+    return snapshot;
+  }, {});
+
+  return JSON.stringify(comparableRecord);
+};
+
+export const countChangedHistoryRecords = (
+  currentRecords: HistoryRecord[],
+  importedRecords: HistoryRecord[],
+  mergedRecords: HistoryRecord[] = importedRecords
+) => {
+  const currentRecordsById = new Map(currentRecords.map((record) => [record.id, record]));
+  const nextRecordsById = new Map(mergedRecords.map((record) => [record.id, record]));
+  const importedRecordsById = new Map(importedRecords.map((record) => [record.id, record]));
+  const recordIds = new Set([
+    ...currentRecordsById.keys(),
+    ...importedRecordsById.keys(),
+    ...nextRecordsById.keys()
+  ]);
+
+  return Array.from(recordIds).reduce((count, recordId) => {
+    const currentRecord = currentRecordsById.get(recordId);
+    const nextRecord = nextRecordsById.get(recordId) ?? importedRecordsById.get(recordId);
+
+    if (!currentRecord || !nextRecord) {
+      return count + 1;
+    }
+
+    return createComparableHistoryRecordText(currentRecord) ===
+      createComparableHistoryRecordText(nextRecord)
+      ? count
+      : count + 1;
+  }, 0);
+};
+
+export const createSnapshotRestoreData = ({
+  currentData,
+  importedAccountData,
+  importedHistory,
+  snapshotFields
+}: {
+  currentData: AppData;
+  importedAccountData: Pick<AppData, 'groups' | 'accounts'>;
+  importedHistory: HistoryRecord[];
+  snapshotFields: {
+    groups: unknown;
+    accounts: unknown;
+    history: unknown;
+  };
+}) => {
+  if (
+    !Array.isArray(snapshotFields.groups) ||
+    !Array.isArray(snapshotFields.accounts) ||
+    !Array.isArray(snapshotFields.history)
+  ) {
+    throw new Error(SNAPSHOT_INCOMPLETE_ERROR_MESSAGE);
+  }
+
+  const nextData: AppData = {
+    groups: importedAccountData.groups,
+    accounts: importedAccountData.accounts,
+    history: importedHistory
+  };
+
+  return {
+    nextData,
+    historyRecordCount: importedHistory.length,
+    changedHistoryRecordCount: countChangedHistoryRecords(
+      currentData.history,
+      importedHistory,
+      nextData.history
+    )
+  };
 };
 
 const readStorageJson = (key: string) => {
@@ -182,6 +287,69 @@ export const mergeBackupRecords = (
   });
 };
 
+export const normalizeSnapshotImportRecords = (
+  value: unknown
+): SnapshotImportRecord[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .flatMap((record): SnapshotImportRecord[] => {
+      if (!isPlainObject(record)) {
+        return [];
+      }
+
+      const importedAt = getStringField(record, ['importedAt', 'time']) ?? '';
+
+      if (getValidTimestamp(importedAt) === null) {
+        return [];
+      }
+
+      const rawSnapshotCreatedAt =
+        getStringField(record, ['snapshotCreatedAt', 'createdAt', 'backupAt']) ?? null;
+      const snapshotCreatedAt =
+        rawSnapshotCreatedAt !== null && getValidTimestamp(rawSnapshotCreatedAt) !== null
+          ? rawSnapshotCreatedAt
+          : null;
+      const rawHistoryRecordCount = getNumberField(record, [
+        'historyRecordCount',
+        'historyCount'
+      ]);
+      const rawChangedHistoryRecordCount = getNumberField(record, [
+        'changedHistoryRecordCount',
+        'changedCount'
+      ]);
+
+      return [
+        {
+          id: getStringField(record, ['id', 'recordId']) ?? createId('snapshot-import-record'),
+          importedAt,
+          snapshotCreatedAt,
+          historyRecordCount:
+            rawHistoryRecordCount === undefined
+              ? 0
+              : Math.max(0, Math.floor(rawHistoryRecordCount)),
+          changedHistoryRecordCount:
+            rawChangedHistoryRecordCount === undefined
+              ? 0
+              : Math.max(0, Math.floor(rawChangedHistoryRecordCount))
+        }
+      ];
+    })
+    .sort((left, right) => {
+      const leftTime = getValidTimestamp(left.importedAt) ?? 0;
+      const rightTime = getValidTimestamp(right.importedAt) ?? 0;
+
+      return rightTime - leftTime;
+    });
+};
+
+export const mergeSnapshotImportRecords = (
+  currentRecords: SnapshotImportRecord[],
+  nextRecord: SnapshotImportRecord
+) => normalizeSnapshotImportRecords([nextRecord, ...currentRecords]);
+
 export const loadBackupRecords = () => {
   const storedRecords = readStorageJson(BACKUP_RECORDS_STORAGE_KEY);
 
@@ -195,11 +363,122 @@ export const saveBackupRecords = (records: BackupRecord[]) => {
   );
 };
 
+export const loadSnapshotImportRecords = () => {
+  const storedRecords = readStorageJson(SNAPSHOT_IMPORT_RECORDS_STORAGE_KEY);
+
+  return storedRecords.parsed ? normalizeSnapshotImportRecords(storedRecords.value) : [];
+};
+
+export const saveSnapshotImportRecords = (records: SnapshotImportRecord[]) => {
+  nfStorage.setItem(
+    SNAPSHOT_IMPORT_RECORDS_STORAGE_KEY,
+    JSON.stringify(normalizeSnapshotImportRecords(records))
+  );
+};
+
 export const getBackupCycleDays = (cycle: BackupCycle) => {
   const unitMultiplier = cycle.unit === 'month' ? 30 : cycle.unit === 'week' ? 7 : 1;
 
   return Math.max(1, Math.floor(cycle.value)) * unitMultiplier;
 };
+
+const getLocalCalendarDayIndex = (date: Date) =>
+  Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / DAY_MS);
+
+const formatPreviousAutoBackupDayLabel = (elapsedDays: number) => {
+  if (elapsedDays <= 0) {
+    return '今天';
+  }
+
+  if (elapsedDays === 1) {
+    return '昨天';
+  }
+
+  return `${elapsedDays} 天前`;
+};
+
+const formatNextAutoBackupDayLabel = (remainingDays: number) => {
+  if (remainingDays <= 0) {
+    return '下次启动';
+  }
+
+  if (remainingDays === 1) {
+    return '明天';
+  }
+
+  return `${remainingDays} 天后`;
+};
+
+export const getAutoSnapshotProgressState = (
+  lastAutoBackupAt: string,
+  cycle: BackupCycle,
+  now: Date | number = Date.now()
+) => {
+  const cycleDays = getBackupCycleDays(cycle);
+  const nowDate = typeof now === 'number' ? new Date(now) : now;
+  const todayIndex = getLocalCalendarDayIndex(nowDate);
+  const lastAutoBackupTimestamp = getValidTimestamp(lastAutoBackupAt);
+
+  if (lastAutoBackupTimestamp === null) {
+    return {
+      progressPercent: 0,
+      previousLabel: '暂未进行',
+      nextLabel: formatNextAutoBackupDayLabel(cycleDays)
+    };
+  }
+
+  const lastAutoBackupDayIndex = getLocalCalendarDayIndex(
+    new Date(lastAutoBackupTimestamp)
+  );
+  const elapsedDays = Math.max(0, todayIndex - lastAutoBackupDayIndex);
+
+  return {
+    progressPercent: Math.min(100, (elapsedDays / cycleDays) * 100),
+    previousLabel: formatPreviousAutoBackupDayLabel(elapsedDays),
+    nextLabel: formatNextAutoBackupDayLabel(cycleDays - elapsedDays)
+  };
+};
+
+export const isAutoBackupCycleDue = (
+  lastAutoBackupAt: string,
+  cycle: BackupCycle,
+  now: Date | number = Date.now()
+) => {
+  const lastAutoBackupTimestamp = getValidTimestamp(lastAutoBackupAt);
+
+  if (lastAutoBackupTimestamp === null) {
+    return true;
+  }
+
+  const nowDate = typeof now === 'number' ? new Date(now) : now;
+  const elapsedDays = Math.max(
+    0,
+    getLocalCalendarDayIndex(nowDate) -
+      getLocalCalendarDayIndex(new Date(lastAutoBackupTimestamp))
+  );
+
+  return elapsedDays >= getBackupCycleDays(cycle);
+};
+
+export const markAutoBackupDueOnce = () => {
+  nfStorage.setItem(FORCE_AUTO_BACKUP_DUE_ONCE_STORAGE_KEY, 'true');
+};
+
+export const consumeAutoBackupDueOnce = () => {
+  const shouldForceDue =
+    nfStorage.getItem(FORCE_AUTO_BACKUP_DUE_ONCE_STORAGE_KEY) === 'true';
+
+  nfStorage.removeItem(FORCE_AUTO_BACKUP_DUE_ONCE_STORAGE_KEY);
+
+  return shouldForceDue;
+};
+
+export const shouldRunStartupAutoBackupCycle = (
+  lastAutoBackupAt: string,
+  cycle: BackupCycle,
+  forceDueOnce: boolean,
+  now: Date | number = Date.now()
+) => forceDueOnce || isAutoBackupCycleDue(lastAutoBackupAt, cycle, now);
 
 export const hasBackupRecordMissingIncrementCount = () => {
   const storedRecords = readStorageJson(BACKUP_RECORDS_STORAGE_KEY);

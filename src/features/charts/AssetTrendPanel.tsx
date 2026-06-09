@@ -9,10 +9,11 @@ import {
   createSteppedLinePath,
   getChartAxisLabelIndexes,
   getChartValueLabelIndexes,
-  getChartValueLabelLayout,
+  getLineChartYAxisScale,
   getNearestChangeDatePointIndex,
-  getNiceYAxisScale,
+  resolveLinePointLabelLayout,
   getVisibleTrendMarkerIndexes,
+  type ChartLineSegment,
   type ChartPointKind,
   type ChartPointValueMode,
   type ChartXAxisRange
@@ -174,6 +175,9 @@ const getValueLabelIndexes = (
   return getChartValueLabelIndexes(series.values, mode, width);
 };
 
+const estimatePointValueLabelWidth = (text: string) =>
+  Math.max(54, Math.ceil(text.length * 6.2 + 6));
+
 const useMeasuredWidth = <T extends HTMLElement>() => {
   const ref = useRef<T | null>(null);
   const [width, setWidth] = useState(0);
@@ -253,38 +257,16 @@ export function AssetTrendChart({
   const plotWidth = viewWidth - padding.left - padding.right;
   const plotHeight = viewHeight - padding.top - padding.bottom;
   const values = visibleSeries.flatMap((series) => series.values);
-  const yScale = compact
-    ? getNiceYAxisScale(values, {
-        includeZero: false,
-        mode: 'mixed',
-        targetTickCount: 4
-      })
-    : settings.assetDisplay === 'net'
-      ? getNiceYAxisScale(values, {
-          includeZero: !settings.adaptiveYAxis,
-          mode: 'mixed',
-          targetTickCount: 5
-        })
-      : getNiceYAxisScale(values, {
-          mode: 'positive',
-          targetTickCount: 5
-        });
+  const yScale = getLineChartYAxisScale(values, {
+    rangeMode: settings.adaptiveYAxis ? 'dynamic' : 'baseline',
+    targetTickCount: compact ? 4 : 5
+  });
   const [yMin, yMax] = yScale.domain;
 
   const getX = (index: number) =>
     padding.left + (points.length === 1 ? 0 : (index / (points.length - 1)) * plotWidth);
   const getY = (value: number) =>
     padding.top + (1 - (value - yMin) / (yMax - yMin)) * plotHeight;
-  const getValueLabelLayout = (index: number, value: number, preferBelow = false) =>
-    getChartValueLabelLayout({
-      pointX: getX(index),
-      pointY: getY(value),
-      plotLeft: padding.left,
-      plotTop: padding.top,
-      plotWidth,
-      plotHeight,
-      preferBelow: preferBelow || value < 0
-    });
   const axisLabelIndexes = compact
     ? []
     : getAxisLabelIndexes(points.length, settings.xAxisRange, densityWidth);
@@ -297,6 +279,94 @@ export function AssetTrendChart({
       ? 2.25
       : 2.5;
   const trendPointRadius = 3.25;
+  const getPointLineSegments = (series: TrendChartSeries, index: number): ChartLineSegment[] => {
+    const value = series.values[index];
+    const segments: ChartLineSegment[] = [];
+
+    if (index > 0) {
+      const previousValue = series.values[index - 1];
+
+      segments.push(
+        {
+          x1: getX(index - 1),
+          y1: getY(previousValue),
+          x2: getX(index),
+          y2: getY(previousValue)
+        },
+        {
+          x1: getX(index),
+          y1: getY(previousValue),
+          x2: getX(index),
+          y2: getY(value)
+        }
+      );
+    }
+
+    if (index < series.values.length - 1) {
+      const nextValue = series.values[index + 1];
+
+      segments.push(
+        {
+          x1: getX(index),
+          y1: getY(value),
+          x2: getX(index + 1),
+          y2: getY(value)
+        },
+        {
+          x1: getX(index + 1),
+          y1: getY(value),
+          x2: getX(index + 1),
+          y2: getY(nextValue)
+        }
+      );
+    }
+
+    return segments;
+  };
+  const valueLabelIndexesBySeries = new Map<TrendChartSeries['key'], number[]>();
+  const markerIndexesBySeries = new Map<TrendChartSeries['key'], number[]>();
+  const valueLabelLayouts = new Map<
+    string,
+    ReturnType<typeof resolveLinePointLabelLayout>
+  >();
+  const placedLabelRects: ReturnType<typeof resolveLinePointLabelLayout>['bounds'][] = [];
+
+  visibleSeries.forEach((series) => {
+    const valueLabelIndexes = compact
+      ? []
+      : getValueLabelIndexes(series, settings.pointValueMode, densityWidth);
+    const markerIndexes = compact
+      ? []
+      : getVisibleTrendMarkerIndexes(valueLabelIndexes, series.values.length);
+
+    valueLabelIndexesBySeries.set(series.key, valueLabelIndexes);
+    markerIndexesBySeries.set(series.key, markerIndexes);
+
+    valueLabelIndexes.forEach((index) => {
+      const value = series.values[index];
+      const labelText = formatMoney(value);
+      const labelLayout = resolveLinePointLabelLayout({
+        pointX: getX(index),
+        pointY: getY(value),
+        plotLeft: padding.left,
+        plotTop: padding.top,
+        plotWidth,
+        plotHeight,
+        preferBelow: series.key === 'negative' || value < 0,
+        labelWidth: estimatePointValueLabelWidth(labelText),
+        pointRadius: trendPointRadius,
+        lineSegments: getPointLineSegments(series, index),
+        placedLabelRects,
+        allowHide: settings.pointValueMode === 'adaptive',
+        isEndPoint: index === series.values.length - 1
+      });
+
+      valueLabelLayouts.set(`${series.key}-${index}`, labelLayout);
+      if (!labelLayout.hidden) {
+        placedLabelRects.push(labelLayout.bounds);
+      }
+    });
+  });
 
   const updateDetailPointFromMouse = (event: MouseEvent<SVGSVGElement>) => {
     if (!isDetailMode) {
@@ -368,9 +438,6 @@ export function AssetTrendChart({
 
   return (
     <div ref={containerRef} className={`asset-trend-chart${compact ? ' is-compact' : ''}`}>
-      {!compact && settings.adaptiveYAxis ? (
-        <span className="asset-trend-chart__scale-note chart-visual-text">趋势已放大</span>
-      ) : null}
       <svg
         viewBox={`0 0 ${viewWidth} ${viewHeight}`}
         role="img"
@@ -444,12 +511,8 @@ export function AssetTrendChart({
 
         {visibleSeries.map((series) => {
           const path = createSteppedLinePath(series.values, getX, getY);
-          const valueLabelIndexes = compact
-            ? []
-            : getValueLabelIndexes(series, settings.pointValueMode, densityWidth);
-          const markerIndexes = compact
-            ? []
-            : getVisibleTrendMarkerIndexes(valueLabelIndexes, series.values.length);
+          const valueLabelIndexes = valueLabelIndexesBySeries.get(series.key) ?? [];
+          const markerIndexes = markerIndexesBySeries.get(series.key) ?? [];
           const strokeColor = compact
             ? series.key === 'net'
               ? CHART_COLORS.compactNetLine
@@ -549,7 +612,27 @@ export function AssetTrendChart({
               })}
               {valueLabelIndexes.map((index) => {
                 const value = series.values[index];
-                const labelLayout = getValueLabelLayout(index, value, series.key === 'negative');
+                const labelText = formatMoney(value);
+                const labelLayout =
+                  valueLabelLayouts.get(`${series.key}-${index}`) ??
+                  resolveLinePointLabelLayout({
+                    pointX: getX(index),
+                    pointY: getY(value),
+                    plotLeft: padding.left,
+                    plotTop: padding.top,
+                    plotWidth,
+                    plotHeight,
+                    preferBelow: series.key === 'negative' || value < 0,
+                    labelWidth: estimatePointValueLabelWidth(labelText),
+                    pointRadius: trendPointRadius,
+                    lineSegments: getPointLineSegments(series, index),
+                    allowHide: settings.pointValueMode === 'adaptive',
+                    isEndPoint: index === series.values.length - 1
+                  });
+
+                if (labelLayout.hidden) {
+                  return null;
+                }
 
                 return (
                   <text
@@ -557,12 +640,13 @@ export function AssetTrendChart({
                     x={labelLayout.x}
                     y={labelLayout.y}
                     textAnchor={labelLayout.textAnchor}
+                    dominantBaseline={labelLayout.dominantBaseline}
                     fill={series.color}
                     fontSize="10"
                     fontWeight="700"
                     className="chart-svg-text chart-value-label"
                   >
-                    {formatMoney(value)}
+                    {labelText}
                   </text>
                 );
               })}

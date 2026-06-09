@@ -52,6 +52,8 @@ export type StackedChartLayer<T extends StackedChartSeries> = {
 
 export type StackedYAxisDirection = 'positive' | 'negative';
 
+export type LineChartYAxisRangeMode = 'dynamic' | 'baseline';
+
 export type NiceYAxisScale = {
   domain: [number, number];
   ticks: number[];
@@ -61,6 +63,35 @@ export type ChartValueLabelLayout = {
   x: number;
   y: number;
   textAnchor: 'start' | 'middle' | 'end';
+  dominantBaseline?: 'central';
+};
+
+export type ChartValueLabelRect = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+};
+
+export type ChartLineSegment = {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+};
+
+export type LinePointValueLabelPlacement =
+  | 'above'
+  | 'right-above'
+  | 'left-above'
+  | 'below'
+  | 'right-below'
+  | 'left-below';
+
+export type LinePointValueLabelLayout = ChartValueLabelLayout & {
+  bounds: ChartValueLabelRect;
+  placement: LinePointValueLabelPlacement;
+  hidden?: boolean;
 };
 
 export type ChartValueLabelLayoutOptions = {
@@ -75,6 +106,16 @@ export type ChartValueLabelLayoutOptions = {
   labelHeight?: number;
   gap?: number;
   padding?: number;
+};
+
+export type ResolveLinePointLabelLayoutOptions = ChartValueLabelLayoutOptions & {
+  lineSegments?: ChartLineSegment[];
+  placedLabelRects?: ChartValueLabelRect[];
+  pointRadius?: number;
+  linePadding?: number;
+  pointPadding?: number;
+  allowHide?: boolean;
+  isEndPoint?: boolean;
 };
 
 export const isChartColorAssignmentMode = (
@@ -441,6 +482,354 @@ export const getChartValueLabelLayout = ({
   };
 };
 
+const getRectWidth = (rect: ChartValueLabelRect) => rect.right - rect.left;
+
+const getRectHeight = (rect: ChartValueLabelRect) => rect.bottom - rect.top;
+
+const shiftRect = (rect: ChartValueLabelRect, dx: number, dy: number): ChartValueLabelRect => ({
+  left: rect.left + dx,
+  top: rect.top + dy,
+  right: rect.right + dx,
+  bottom: rect.bottom + dy
+});
+
+const expandRect = (rect: ChartValueLabelRect, padding: number): ChartValueLabelRect => ({
+  left: rect.left - padding,
+  top: rect.top - padding,
+  right: rect.right + padding,
+  bottom: rect.bottom + padding
+});
+
+const rectsOverlap = (left: ChartValueLabelRect, right: ChartValueLabelRect) =>
+  left.left < right.right &&
+  left.right > right.left &&
+  left.top < right.bottom &&
+  left.bottom > right.top;
+
+const isPointInRect = (x: number, y: number, rect: ChartValueLabelRect) =>
+  x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+
+const getLineOrientation = (
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number
+) => {
+  const value = (by - ay) * (cx - bx) - (bx - ax) * (cy - by);
+
+  if (Math.abs(value) < 0.000001) {
+    return 0;
+  }
+
+  return value > 0 ? 1 : -1;
+};
+
+const isBetween = (value: number, start: number, end: number) =>
+  value >= Math.min(start, end) - 0.000001 && value <= Math.max(start, end) + 0.000001;
+
+const lineSegmentsIntersect = (
+  left: ChartLineSegment,
+  right: ChartLineSegment
+) => {
+  const o1 = getLineOrientation(left.x1, left.y1, left.x2, left.y2, right.x1, right.y1);
+  const o2 = getLineOrientation(left.x1, left.y1, left.x2, left.y2, right.x2, right.y2);
+  const o3 = getLineOrientation(right.x1, right.y1, right.x2, right.y2, left.x1, left.y1);
+  const o4 = getLineOrientation(right.x1, right.y1, right.x2, right.y2, left.x2, left.y2);
+
+  if (o1 !== o2 && o3 !== o4) {
+    return true;
+  }
+
+  return (
+    (o1 === 0 && isBetween(right.x1, left.x1, left.x2) && isBetween(right.y1, left.y1, left.y2)) ||
+    (o2 === 0 && isBetween(right.x2, left.x1, left.x2) && isBetween(right.y2, left.y1, left.y2)) ||
+    (o3 === 0 && isBetween(left.x1, right.x1, right.x2) && isBetween(left.y1, right.y1, right.y2)) ||
+    (o4 === 0 && isBetween(left.x2, right.x1, right.x2) && isBetween(left.y2, right.y1, right.y2))
+  );
+};
+
+const lineSegmentIntersectsRect = (segment: ChartLineSegment, rect: ChartValueLabelRect) => {
+  if (isPointInRect(segment.x1, segment.y1, rect) || isPointInRect(segment.x2, segment.y2, rect)) {
+    return true;
+  }
+
+  const edges: ChartLineSegment[] = [
+    { x1: rect.left, y1: rect.top, x2: rect.right, y2: rect.top },
+    { x1: rect.right, y1: rect.top, x2: rect.right, y2: rect.bottom },
+    { x1: rect.right, y1: rect.bottom, x2: rect.left, y2: rect.bottom },
+    { x1: rect.left, y1: rect.bottom, x2: rect.left, y2: rect.top }
+  ];
+
+  return edges.some((edge) => lineSegmentsIntersect(segment, edge));
+};
+
+const keepRectInside = (
+  rect: ChartValueLabelRect,
+  bounds: ChartValueLabelRect
+) => {
+  const width = getRectWidth(rect);
+  const height = getRectHeight(rect);
+  const maxLeft = bounds.right - width;
+  const maxTop = bounds.bottom - height;
+  const left = clampNumber(rect.left, bounds.left, Math.max(bounds.left, maxLeft));
+  const top = clampNumber(rect.top, bounds.top, Math.max(bounds.top, maxTop));
+
+  return shiftRect(rect, left - rect.left, top - rect.top);
+};
+
+const getLabelPoint = (
+  rect: ChartValueLabelRect,
+  textAnchor: ChartValueLabelLayout['textAnchor']
+) => ({
+  x:
+    textAnchor === 'start'
+      ? rect.left
+      : textAnchor === 'end'
+        ? rect.right
+        : rect.left + getRectWidth(rect) / 2,
+  y: rect.top + getRectHeight(rect) / 2
+});
+
+const isRectInside = (rect: ChartValueLabelRect, bounds: ChartValueLabelRect) =>
+  rect.left >= bounds.left &&
+  rect.right <= bounds.right &&
+  rect.top >= bounds.top &&
+  rect.bottom <= bounds.bottom;
+
+export const resolveLinePointLabelLayout = ({
+  pointX,
+  pointY,
+  plotLeft,
+  plotTop,
+  plotWidth,
+  plotHeight,
+  preferBelow = false,
+  labelWidth = 64,
+  labelHeight = 12,
+  gap = 10,
+  padding = 2,
+  lineSegments = [],
+  placedLabelRects = [],
+  pointRadius = 3,
+  linePadding = 8,
+  pointPadding = 6,
+  allowHide = false,
+  isEndPoint = false
+}: ResolveLinePointLabelLayoutOptions): LinePointValueLabelLayout => {
+  const plotBounds: ChartValueLabelRect = {
+    left: plotLeft + padding,
+    top: plotTop + padding,
+    right: plotLeft + plotWidth - padding,
+    bottom: plotTop + plotHeight - padding
+  };
+  type LabelCandidate = {
+    placement: LinePointValueLabelPlacement;
+    rect: ChartValueLabelRect;
+    textAnchor: ChartValueLabelLayout['textAnchor'];
+    preferenceIndex: number;
+  };
+  const isNearLeftEdge = pointX - labelWidth / 2 < plotBounds.left + padding;
+  const isNearRightEdge = pointX + labelWidth / 2 > plotBounds.right - padding;
+  const aboveSideOrder: LinePointValueLabelPlacement[] = isNearLeftEdge
+    ? ['right-above', 'left-above']
+    : isNearRightEdge
+      ? ['left-above', 'right-above']
+    : ['left-above', 'right-above'];
+  const belowSideOrder: LinePointValueLabelPlacement[] = isNearLeftEdge
+    ? ['right-below', 'left-below']
+    : isNearRightEdge
+      ? ['left-below', 'right-below']
+    : ['left-below', 'right-below'];
+  const abovePlacementOrder: LinePointValueLabelPlacement[] =
+    isEndPoint && isNearRightEdge ? ['above', 'left-above', 'right-above'] : ['above', ...aboveSideOrder];
+  const belowPlacementOrder: LinePointValueLabelPlacement[] =
+    isEndPoint && isNearRightEdge ? ['below', 'left-below', 'right-below'] : ['below', ...belowSideOrder];
+  const basePlacementOrder: LinePointValueLabelPlacement[] = isEndPoint
+    ? [...abovePlacementOrder, ...belowPlacementOrder]
+    : preferBelow
+    ? [...belowPlacementOrder, ...abovePlacementOrder]
+    : [...abovePlacementOrder, ...belowPlacementOrder];
+  const getCandidateRect = (
+    placement: LinePointValueLabelPlacement,
+    currentGap: number
+  ): Pick<LabelCandidate, 'rect' | 'textAnchor'> => {
+    const aboveTop = pointY - currentGap - labelHeight;
+    const belowTop = pointY + currentGap;
+    const centeredLeft = pointX - labelWidth / 2;
+
+    if (placement === 'above') {
+      return {
+        rect: {
+          left: centeredLeft,
+          top: aboveTop,
+          right: centeredLeft + labelWidth,
+          bottom: aboveTop + labelHeight
+        },
+        textAnchor: 'middle'
+      };
+    }
+
+    if (placement === 'below') {
+      return {
+        rect: {
+          left: centeredLeft,
+          top: belowTop,
+          right: centeredLeft + labelWidth,
+          bottom: belowTop + labelHeight
+        },
+        textAnchor: 'middle'
+      };
+    }
+
+    const isLeftPlacement = placement === 'left-above' || placement === 'left-below';
+    const top = placement.endsWith('above') ? aboveTop : belowTop;
+    const left = isLeftPlacement ? pointX - currentGap - labelWidth : pointX + currentGap;
+
+    return {
+      rect: {
+        left,
+        top,
+        right: left + labelWidth,
+        bottom: top + labelHeight
+      },
+      textAnchor: isLeftPlacement ? 'end' : 'start'
+    };
+  };
+  const baseGap = isEndPoint ? Math.max(gap, 16) : gap;
+  const gapOptions = [baseGap, baseGap + 8, baseGap + 16, baseGap + 24];
+  const orderedCandidates = gapOptions.flatMap((currentGap, gapIndex) =>
+    basePlacementOrder.map((placement, placementIndex) => ({
+      placement,
+      ...getCandidateRect(placement, currentGap),
+      preferenceIndex: gapIndex * basePlacementOrder.length + placementIndex
+    }))
+  );
+  const pointBounds = {
+    left: pointX - pointRadius - pointPadding,
+    top: pointY - pointRadius - pointPadding,
+    right: pointX + pointRadius + pointPadding,
+    bottom: pointY + pointRadius + pointPadding
+  };
+  const getCollisionMetrics = (rect: ChartValueLabelRect) => {
+    const hardLineCollisionCount = lineSegments.filter((segment) =>
+      lineSegmentIntersectsRect(segment, rect)
+    ).length;
+    const safeLineCollisionCount = lineSegments.filter((segment) =>
+      lineSegmentIntersectsRect(segment, expandRect(rect, linePadding))
+    ).length;
+    const placedCollisionCount = placedLabelRects.filter((placedRect) =>
+      rectsOverlap(expandRect(rect, 2), expandRect(placedRect, 2))
+    ).length;
+    const pointCollision = rectsOverlap(rect, pointBounds) ? 1 : 0;
+    const hardConflictCount =
+      hardLineCollisionCount + safeLineCollisionCount + pointCollision;
+    const edgeOverflow = isRectInside(rect, plotBounds) ? 0 : 1;
+
+    return {
+      hardLineCollisionCount,
+      safeLineCollisionCount,
+      placedCollisionCount,
+      pointCollision,
+      hardConflictCount,
+      edgeOverflow
+    };
+  };
+  const getBestPushedRect = (rect: ChartValueLabelRect) => {
+    const attempts = [rect];
+
+    for (let step = 1; step <= 5; step += 1) {
+      attempts.push(shiftRect(rect, 0, -step * 4));
+    }
+
+    for (let step = 1; step <= 5; step += 1) {
+      attempts.push(shiftRect(rect, 0, step * 4));
+    }
+
+    const insideAttempts = attempts.filter((attempt) => isRectInside(attempt, plotBounds));
+    const checkedAttempts = insideAttempts.length > 0 ? insideAttempts : [rect];
+
+    return checkedAttempts
+      .map((attempt) => ({
+        rect: attempt,
+        metrics: getCollisionMetrics(attempt)
+      }))
+      .reduce((best, current) => {
+        if (current.metrics.hardConflictCount !== best.metrics.hardConflictCount) {
+          return current.metrics.hardConflictCount < best.metrics.hardConflictCount
+            ? current
+            : best;
+        }
+
+        if (current.metrics.placedCollisionCount !== best.metrics.placedCollisionCount) {
+          return current.metrics.placedCollisionCount < best.metrics.placedCollisionCount
+            ? current
+            : best;
+        }
+
+        return Math.abs(current.rect.top - rect.top) < Math.abs(best.rect.top - rect.top)
+          ? current
+          : best;
+      });
+  };
+  const scoredCandidates = orderedCandidates.map((candidate) => {
+    const clampedRect = keepRectInside(candidate.rect, plotBounds);
+    const pushed = getBestPushedRect(clampedRect);
+    const rect = pushed.rect;
+    const movement =
+      Math.abs(rect.left - candidate.rect.left) + Math.abs(rect.top - candidate.rect.top);
+    const {
+      hardLineCollisionCount,
+      safeLineCollisionCount,
+      placedCollisionCount,
+      pointCollision,
+      hardConflictCount,
+      edgeOverflow
+    } = pushed.metrics;
+    const edgeInset = Math.min(
+      rect.left - plotBounds.left,
+      plotBounds.right - rect.right,
+      rect.top - plotBounds.top,
+      plotBounds.bottom - rect.bottom
+    );
+    const edgePenalty = edgeInset < 4 ? 4 - edgeInset : 0;
+    const score =
+      candidate.preferenceIndex * 10000 +
+      movement * 10 +
+      hardLineCollisionCount * 1000000 +
+      safeLineCollisionCount * 250000 +
+      pointCollision * 500000 +
+      edgeOverflow * 500000 +
+      placedCollisionCount * 30000 +
+      edgePenalty * 20;
+
+    return {
+      ...candidate,
+      rect,
+      score,
+      hardConflictCount
+    };
+  });
+  const clearCandidates = scoredCandidates.filter(
+    (candidate) => candidate.hardConflictCount === 0
+  );
+  const selected = (clearCandidates.length > 0 ? clearCandidates : scoredCandidates).reduce(
+    (best, candidate) => (candidate.score < best.score ? candidate : best)
+  );
+  const labelPoint = getLabelPoint(selected.rect, selected.textAnchor);
+
+  return {
+    x: labelPoint.x,
+    y: labelPoint.y,
+    textAnchor: selected.textAnchor,
+    dominantBaseline: 'central',
+    bounds: selected.rect,
+    placement: selected.placement,
+    hidden: allowHide && selected.hardConflictCount > 0 ? true : undefined
+  };
+};
+
 export const getNearestChangeDatePointIndex = <T extends { kind?: ChartPointKind }>(
   points: T[],
   cursorX: number,
@@ -590,6 +979,71 @@ export const getNiceYAxisScale = (
   const step = getNiceTickStep((maxValue - minValue) / Math.max(1, targetTickCount - 1));
   const lower = Math.floor(minValue / step) * step;
   const upper = Math.ceil(maxValue / step) * step;
+
+  return {
+    domain: [lower, upper],
+    ticks: buildTickRange(lower, upper, step)
+  };
+};
+
+export const getLineChartYAxisScale = (
+  values: number[],
+  options: {
+    rangeMode?: LineChartYAxisRangeMode;
+    targetTickCount?: number;
+  } = {}
+): NiceYAxisScale => {
+  const finiteValues = getFiniteValues(values);
+  const targetTickCount = options.targetTickCount ?? 5;
+
+  if (finiteValues.length === 0) {
+    return getPositiveNiceYAxisScale([0], targetTickCount);
+  }
+
+  const rangeMode = options.rangeMode ?? 'baseline';
+  const rawMin = Math.min(...finiteValues);
+  const rawMax = Math.max(...finiteValues);
+  const maxAbs = Math.max(Math.abs(rawMin), Math.abs(rawMax));
+  const includesZero = rawMin <= 0 && rawMax >= 0;
+  const nearZeroRatio = 0.12;
+  const isPositiveNearZero = rawMin > 0 && rawMin <= maxAbs * nearZeroRatio;
+  const isNegativeNearZero = rawMax < 0 && Math.abs(rawMax) <= maxAbs * nearZeroRatio;
+  const includeZero =
+    rangeMode === 'baseline' ||
+    includesZero ||
+    isPositiveNearZero ||
+    isNegativeNearZero;
+  let minValue = includeZero ? Math.min(0, rawMin) : rawMin;
+  let maxValue = includeZero ? Math.max(0, rawMax) : rawMax;
+  const baseRange = maxValue - minValue;
+  const padding = Math.max(
+    getNiceTickStep(Math.max(Math.abs(maxValue), Math.abs(minValue), 1) * 0.01),
+    baseRange > 0 ? baseRange * 0.08 : Math.max(1, Math.abs(maxValue) * 0.08)
+  );
+
+  minValue = includeZero && minValue === 0 ? 0 : minValue - padding;
+  maxValue = includeZero && maxValue === 0 ? 0 : maxValue + padding;
+
+  if (minValue === maxValue) {
+    const flatPadding = Math.max(1, Math.abs(minValue) * 0.08);
+
+    minValue -= flatPadding;
+    maxValue += flatPadding;
+  }
+
+  const step = getNiceTickStep((maxValue - minValue) / Math.max(1, targetTickCount - 1));
+  let lower = Math.floor(minValue / step) * step;
+  let upper = Math.ceil(maxValue / step) * step;
+
+  if (includeZero) {
+    lower = Math.min(lower, 0);
+    upper = Math.max(upper, 0);
+  }
+
+  if (lower === upper) {
+    lower -= step;
+    upper += step;
+  }
 
   return {
     domain: [lower, upper],

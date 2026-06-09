@@ -154,10 +154,13 @@ import {
 } from './features/account/accountTypeLogic';
 import { useAccountTypeController } from './features/account/useAccountTypeController';
 import {
+  DUPLICATE_NAME_PLACEHOLDER,
+  hasDuplicateAccountName,
+  hasDuplicateAccountTypeName
+} from './features/account/accountNameUniqueness';
+import {
   createNewAccountInAppData,
-  findArchivedAccountByName,
   getNewAccountTypeInputMatch,
-  hasActiveDuplicateAccountName,
   hasAddAccountUnsavedChanges as getAddAccountUnsavedChanges,
   isNonNegativeAccountInput as isNonNegativeInput,
   parseNonNegativeAccountAmount as parseNonNegativeAmount,
@@ -195,7 +198,8 @@ import {
   getBackupMethodLabel,
   loadBackupRecords,
   loadLastBackupAt,
-  loadLastBackupHistoryCount
+  loadLastBackupHistoryCount,
+  markAutoBackupDueOnce
 } from './features/backup/snapshotBackupLogic';
 import { useSnapshotBackupController } from './features/backup/useSnapshotBackupController';
 import { useSecuritySettingsController } from './features/security/useSecuritySettingsController';
@@ -423,6 +427,8 @@ const SECRET_CONSOLE_LONG_PRESS_MS = 1500;
 const SECRET_CONSOLE_DEFAULT_PLACEHOLDER = '嘘...轻一点';
 
 const SECRET_CONSOLE_TEST_DATA_SUCCESS = '示例数据已写入真实数据';
+
+const SECRET_CONSOLE_AUTO_BACKUP_DUE_ONCE_SUCCESS = '已设置下次启动自动备份检测命中';
 
 const SECRET_CONSOLE_NYAA_SUCCESS = '已解锁nyaa主题';
 
@@ -1543,8 +1549,8 @@ const getBackupAccountData = (value: unknown) => {
   const groupsValue = getBackupFieldValue(value, ['groups', 'assetGroups']);
   const accountsValue = getBackupFieldValue(value, ['accounts']);
 
-  return Array.isArray(groupsValue) || isPlainObject(groupsValue)
-    ? normalizeStoredAccountData(groupsValue, accountsValue)
+  return Array.isArray(groupsValue) || isPlainObject(groupsValue) || accountsValue !== undefined
+    ? normalizeStoredAccountData(groupsValue ?? [], accountsValue)
     : { groups: [], accounts: [] };
 };
 
@@ -1561,83 +1567,6 @@ const getBackupHistory = (value: unknown, groups: AssetGroupWithAccounts[]) => {
     ? normalizeHistory(historyValue, groups)
 
     : [];
-
-};
-
-
-
-const mergeAccounts = (currentAccounts: Account[], importedAccounts: Account[]) => {
-  const nextAccounts = [...currentAccounts];
-
-  importedAccounts.forEach((importedAccount) => {
-    const existingIndex = nextAccounts.findIndex((account) => account.id === importedAccount.id);
-
-    if (existingIndex >= 0) {
-      nextAccounts[existingIndex] = {
-        ...nextAccounts[existingIndex],
-        ...importedAccount
-      };
-      return;
-    }
-
-    nextAccounts.push(importedAccount);
-  });
-
-  return nextAccounts;
-};
-
-
-
-const mergeGroups = (currentGroups: AssetGroup[], importedGroups: AssetGroup[]) => {
-  const nextGroups = [...currentGroups];
-
-  importedGroups.forEach((importedGroup) => {
-    const existingIndex = nextGroups.findIndex((group) => group.id === importedGroup.id);
-
-    if (existingIndex >= 0) {
-      nextGroups[existingIndex] = {
-        ...nextGroups[existingIndex],
-        ...importedGroup
-      };
-      return;
-    }
-
-    nextGroups.push({
-      ...importedGroup,
-      sortOrder: nextGroups.length
-    });
-  });
-
-  return nextGroups.map((group, index) => ({ ...group, sortOrder: index }));
-};
-
-
-
-const mergeHistoryRecords = (
-
-  currentHistory: HistoryRecord[],
-
-  importedHistory: HistoryRecord[]
-
-) => {
-
-  const recordsById = new Map<string, HistoryRecord>();
-
-
-
-  currentHistory.forEach((record) => recordsById.set(record.id, record));
-
-  importedHistory.forEach((record) => {
-
-    const existingRecord = recordsById.get(record.id);
-
-    recordsById.set(record.id, existingRecord ? { ...existingRecord, ...record } : record);
-
-  });
-
-
-
-  return Array.from(recordsById.values()).sort(compareHistoryByTimeDesc);
 
 };
 
@@ -2357,7 +2286,11 @@ function App() {
 
   const [newAccountTypeInput, setNewAccountTypeInput] = useState('');
 
+  const [newAccountTypeInputPlaceholder, setNewAccountTypeInputPlaceholder] = useState('');
+
   const [newAccountName, setNewAccountName] = useState('');
+
+  const [newAccountNamePlaceholder, setNewAccountNamePlaceholder] = useState('');
 
   const [newAccountAmount, setNewAccountAmount] = useState('');
 
@@ -3011,6 +2944,7 @@ function App() {
     }));
     setNewAccountGroupId(group.id);
     setNewAccountTypeInput(group.name);
+    setNewAccountTypeInputPlaceholder('');
   };
 
   const syncUpdatedAccountTypeSideEffects = ({
@@ -3063,6 +2997,7 @@ function App() {
   } = useAccountTypeController({
     appData: { groups: assetGroups, accounts, history },
     groups,
+    archivedAccounts,
     createGroupId: () => createStableGroupId(assetGroups.map((group) => group.id)),
     updateAppData,
     onCreateAccountType: syncCreatedAccountTypeSideEffects,
@@ -3073,6 +3008,7 @@ function App() {
     lastBackupAt,
     lastBackupHistoryCount,
     backupRecords,
+    snapshotImportRecords,
     autoBackupSettings,
     autoBackupDraft,
     autoBackupCycleValueInput,
@@ -3081,6 +3017,7 @@ function App() {
     hasAutoBackupDraftChanges,
     canSaveAutoBackupSettings,
     applyBackupState,
+    resetSnapshotImportRecords,
     resetAutoBackupSettings,
     resetAutoBackupDraft,
     updateAutoBackupEnabled,
@@ -3104,9 +3041,6 @@ function App() {
     getBackupFieldValue,
     getBackupAccountData,
     getBackupHistory,
-    mergeAccounts,
-    mergeGroups,
-    mergeHistoryRecords,
     requestConfirmationDialog,
     requestInputDialog,
     showNoticeDialog,
@@ -3714,6 +3648,7 @@ function App() {
     resetSecurityState,
     resetDataViews,
     applyBackupState,
+    resetSnapshotImportRecords,
     createExampleData,
     loadRealDataSnapshot: () => {
       const restoredData = loadAppData();
@@ -3744,6 +3679,16 @@ function App() {
     if (command === 'testdatain') {
 
       return writeExampleDataToRealData() ? SECRET_CONSOLE_TEST_DATA_SUCCESS : null;
+
+    }
+
+
+
+    if (command === 'doautobackup') {
+
+      markAutoBackupDueOnce();
+
+      return SECRET_CONSOLE_AUTO_BACKUP_DUE_ONCE_SUCCESS;
 
     }
 
@@ -4145,7 +4090,9 @@ function App() {
     setIsAddingAccount(true);
     setNewAccountGroupId(firstGroup?.id ?? '');
     setNewAccountTypeInput(firstGroup?.name ?? '');
+    setNewAccountTypeInputPlaceholder('');
     setNewAccountName(keyword.trim());
+    setNewAccountNamePlaceholder('');
     setNewAccountAmount('0');
     setNewAccountError('');
   };
@@ -4205,7 +4152,7 @@ function App() {
       setIsAccountActionMenuOpen(false);
     },
     onCompleteArchivedRestoreSource: (source: ArchivedRestoreSource) => {
-      if (source === 'account-restore-dialog' || source === 'same-name-account') {
+      if (source === 'account-restore-dialog') {
         closeAddAccount();
       }
     }
@@ -4985,6 +4932,7 @@ function App() {
 
     const result = updateAccountTypeInAppData({
       appData: { groups: assetGroups, accounts, history },
+      archivedAccounts,
       groupId: selectedGroupDetail.id,
       name: groupDetailNameDraft,
       nature: groupDetailNatureDraft,
@@ -4992,6 +4940,10 @@ function App() {
     });
 
     if (!result.ok) {
+      if (result.error === DUPLICATE_NAME_PLACEHOLDER) {
+        setGroupDetailNameDraft('');
+      }
+
       setGroupDetailError(result.error);
       return;
     }
@@ -5574,8 +5526,10 @@ function App() {
     setNewAccountGroupId(firstGroup?.id ?? '');
 
     setNewAccountTypeInput(firstGroup?.name ?? '');
+    setNewAccountTypeInputPlaceholder('');
 
     setNewAccountName('');
+    setNewAccountNamePlaceholder('');
 
     setNewAccountAmount('');
 
@@ -5596,8 +5550,10 @@ function App() {
     setNewAccountGroupId('');
 
     setNewAccountTypeInput('');
+    setNewAccountTypeInputPlaceholder('');
 
     setNewAccountName('');
+    setNewAccountNamePlaceholder('');
 
     setNewAccountAmount('');
 
@@ -5616,6 +5572,7 @@ function App() {
 
 
     setNewAccountTypeInput(value);
+    setNewAccountTypeInputPlaceholder('');
 
     setNewAccountGroupId(exactMatch?.id ?? '');
 
@@ -5636,6 +5593,7 @@ function App() {
       setNewAccountGroupId(newAccountTypeMatch.id);
 
       setNewAccountTypeInput(newAccountTypeMatch.name);
+      setNewAccountTypeInputPlaceholder('');
 
       setNewAccountError('');
 
@@ -5648,6 +5606,22 @@ function App() {
     if (!trimmedInput) {
 
       setNewAccountError('请输入账户类型');
+
+      return;
+
+    }
+
+    if (
+      hasDuplicateAccountTypeName({
+        groups,
+        archivedAccounts,
+        name: trimmedInput
+      })
+    ) {
+
+      setNewAccountTypeInput('');
+      setNewAccountTypeInputPlaceholder(DUPLICATE_NAME_PLACEHOLDER);
+      setNewAccountError(DUPLICATE_NAME_PLACEHOLDER);
 
       return;
 
@@ -5694,6 +5668,7 @@ function App() {
       setNewAccountGroupId(nextGroup.id);
 
       setNewAccountTypeInput(nextGroup.name);
+      setNewAccountTypeInputPlaceholder('');
 
       setNewAccountError('');
 
@@ -6097,41 +6072,11 @@ function App() {
 
 
 
-    if (hasActiveDuplicateAccountName(groups, nextName)) {
+    if (hasDuplicateAccountName(accounts, nextName)) {
 
-      setNewAccountError('账户名称已存在');
-
-      return;
-
-    }
-
-
-
-    const archivedMatch = findArchivedAccountByName(archivedAccounts, nextName);
-
-
-
-    if (archivedMatch) {
-
-      showConfirmationDialog({
-
-        title: '重新启用账户',
-
-        message: `已归档账户：${archivedMatch.name}`,
-
-        confirmLabel: '启用',
-
-        onConfirm: () => {
-
-          if (restoreAccount(archivedMatch.groupId, archivedMatch, 'same-name-account')) {
-
-            closeAddAccount();
-
-          }
-
-        }
-
-      });
+      setNewAccountName('');
+      setNewAccountNamePlaceholder(DUPLICATE_NAME_PLACEHOLDER);
+      setNewAccountError(DUPLICATE_NAME_PLACEHOLDER);
 
       return;
 
@@ -6162,6 +6107,11 @@ function App() {
     });
 
     if (!result.ok) {
+      if ('error' in result && result.error === DUPLICATE_NAME_PLACEHOLDER) {
+        setNewAccountName('');
+        setNewAccountNamePlaceholder(DUPLICATE_NAME_PLACEHOLDER);
+      }
+
       setNewAccountError('error' in result ? result.error : '');
       return;
     }
@@ -7614,6 +7564,8 @@ function App() {
       autoBackupDraft,
       autoBackupCycleValueInput,
       autoSnapshotCycleInputRef,
+      latestAutoBackupAt:
+        backupRecords.find((record) => record.method === 'auto')?.backedUpAt ?? '',
       isExampleMode,
       hasAutoBackupDraftChanges,
       canSaveAutoBackupSettings,
@@ -7639,6 +7591,10 @@ function App() {
     groupDetail: {
       selectedGroupDetail,
       nameDraft: groupDetailNameDraft,
+      namePlaceholder:
+        groupDetailError === DUPLICATE_NAME_PLACEHOLDER
+          ? DUPLICATE_NAME_PLACEHOLDER
+          : undefined,
       statsDraft: groupDetailStatsDraft,
       error: groupDetailError,
       chartSettings: selectedGroupDetailChartSettings,
@@ -7731,6 +7687,7 @@ function App() {
     emptyText: '暂无匹配记录',
     recordListProps: historyRecordListProps,
     backupRecords,
+    snapshotImportRecords,
     formatPreciseBackupTime,
     getBackupMethodLabel,
     onBack: () => currentLayerBack?.(),
@@ -7988,6 +7945,10 @@ function App() {
                   />
                 ),
                 error: accountInfoError,
+                accountNamePlaceholder:
+                  accountInfoError === DUPLICATE_NAME_PLACEHOLDER
+                    ? DUPLICATE_NAME_PLACEHOLDER
+                    : undefined,
                 onAccountNameChange: (value) => {
                   setAccountNameDraft(value);
                   setAccountInfoError('');
@@ -8031,9 +7992,11 @@ function App() {
             ? {
                 accountTypeInputRef: newAccountTypeInputRef,
                 accountTypeInput: newAccountTypeInput,
+                accountTypeInputPlaceholder: newAccountTypeInputPlaceholder,
                 accountTypeGhostText: newAccountTypeGhostText,
                 accountTypeCount: groups.length,
                 newAccountName,
+                newAccountNamePlaceholder,
                 newAccountAmount,
                 error: newAccountError,
                 onAccountTypeInputChange: updateNewAccountTypeInput,
@@ -8043,6 +8006,7 @@ function App() {
                 onOpenCreateAccountType: () => openCreateAccountType(),
                 onNameChange: (value) => {
                   setNewAccountName(value);
+                  setNewAccountNamePlaceholder('');
                   setNewAccountError('');
                 },
                 onAmountInputChange: (value) => {
@@ -8066,6 +8030,10 @@ function App() {
                 natureDraft: accountTypeNatureDraft,
                 statsDraft: accountTypeStatsDraft,
                 error: accountTypeError,
+                namePlaceholder:
+                  accountTypeError === DUPLICATE_NAME_PLACEHOLDER
+                    ? DUPLICATE_NAME_PLACEHOLDER
+                    : undefined,
                 natureOptions: accountTypeNatureOptions,
                 onNameChange: (value) => {
                   setAccountTypeNameDraft(value);

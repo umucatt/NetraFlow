@@ -6,7 +6,7 @@ import type { LockScreenLayerProps } from '../lockScreen';
 import type { QuickEntryPickerLayerProps } from '../quickEntryLayer';
 import type { ResetDangerDialogLayerProps } from '../resetDangerDialog';
 import type { SearchOverlayLayerProps } from '../searchOverlay';
-import type { ArchivedAccountEntry, HistoryRecord } from '../types';
+import type { ArchivedAccountEntry, HistoryRecord, SnapshotImportRecord } from '../types';
 import type { BackupRecord, BackupMethod } from '../types';
 import type { QuickEntryAccountGroup } from '../../features/quickEntry';
 
@@ -74,6 +74,7 @@ export type CreateHistoryBackupLayerPropsOptions = {
   emptyText: string;
   recordListProps: HistoryBackupLayerProps<HistoryRecord>['history']['recordListProps'];
   backupRecords: BackupRecord[];
+  snapshotImportRecords: SnapshotImportRecord[];
   formatPreciseBackupTime: (time: string) => string;
   getBackupMethodLabel: (method: BackupMethod) => string;
   onBack: () => void;
@@ -111,6 +112,7 @@ export const createHistoryBackupLayerProps = ({
   emptyText,
   recordListProps,
   backupRecords,
+  snapshotImportRecords,
   formatPreciseBackupTime,
   getBackupMethodLabel,
   onBack,
@@ -155,6 +157,7 @@ export const createHistoryBackupLayerProps = ({
   },
   backup: {
     records: backupRecords,
+    importRecords: snapshotImportRecords,
     formatPreciseBackupTime,
     getBackupMethodLabel
   },

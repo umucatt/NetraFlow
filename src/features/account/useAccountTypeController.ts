@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type {
   AccountTypeNature,
   AppData,
+  ArchivedAccountEntry,
   AssetGroup,
   AssetGroupWithAccounts
 } from '../../app/types';
@@ -14,10 +15,12 @@ import {
   isAccountTypeEditorVisible,
   updateAccountTypeInAppData
 } from './accountTypeLogic';
+import { DUPLICATE_NAME_PLACEHOLDER } from './accountNameUniqueness';
 
 type AccountTypeControllerOptions = {
   appData: AppData;
   groups: AssetGroupWithAccounts[];
+  archivedAccounts: ArchivedAccountEntry[];
   createGroupId: () => string;
   updateAppData: (nextData: AppData) => void;
   onCreateAccountType: (group: AssetGroup) => void;
@@ -31,6 +34,7 @@ type AccountTypeControllerOptions = {
 export function useAccountTypeController({
   appData,
   groups,
+  archivedAccounts,
   createGroupId,
   updateAppData,
   onCreateAccountType,
@@ -87,6 +91,7 @@ export function useAccountTypeController({
     if (accountTypeEditor.mode === 'create') {
       const result = createAccountTypeInAppData({
         appData,
+        archivedAccounts,
         groupId: createGroupId(),
         name: accountTypeNameDraft,
         nature: accountTypeNatureDraft,
@@ -94,6 +99,10 @@ export function useAccountTypeController({
       });
 
       if (!result.ok) {
+        if (result.error === DUPLICATE_NAME_PLACEHOLDER) {
+          setAccountTypeNameDraft('');
+        }
+
         setAccountTypeError(result.error);
         return;
       }
@@ -113,6 +122,7 @@ export function useAccountTypeController({
 
     const result = updateAccountTypeInAppData({
       appData,
+      archivedAccounts,
       groupId: currentGroupId,
       name: accountTypeNameDraft,
       nature: accountTypeNatureDraft,
@@ -121,6 +131,10 @@ export function useAccountTypeController({
 
     if (!result.ok) {
       if (result.error) {
+        if (result.error === DUPLICATE_NAME_PLACEHOLDER) {
+          setAccountTypeNameDraft('');
+        }
+
         setAccountTypeError(result.error);
         return;
       }

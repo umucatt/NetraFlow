@@ -14,6 +14,7 @@ import type {
 function AccountTypeEditorDialog({
   editor,
   nameDraft,
+  namePlaceholder,
   natureDraft,
   statsDraft,
   error,
@@ -27,11 +28,10 @@ function AccountTypeEditorDialog({
   return (
     <OverlayBackdrop
       onBack={onCancel}
-      className="layout-layer layout-layer--right"
+      className="modal-backdrop"
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 40,
         display: 'grid',
         placeItems: 'center',
         padding: 24,
@@ -63,6 +63,7 @@ function AccountTypeEditorDialog({
             autoFocus
             type="text"
             value={nameDraft}
+            placeholder={namePlaceholder}
             onChange={(event) => onNameChange(event.target.value)}
             style={{
               width: '100%',

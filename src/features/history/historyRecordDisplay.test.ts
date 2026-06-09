@@ -7,6 +7,19 @@ import test from 'node:test';
 const readProjectFile = (path: string) =>
   readFileSync(new URL(`../../../../${path}`, import.meta.url), 'utf8');
 
+const readProjectStyles = () => {
+  const stylesEntrySource = readProjectFile('src/styles.css');
+  const importSources = Array.from(
+    stylesEntrySource.matchAll(/^@import ['"]\.\/(.+)['"];$/gm),
+    (match) => readProjectFile(`src/${match[1]}`)
+  );
+  const stylesEntryBody = stylesEntrySource
+    .replace(/^@import ['"].+['"];\r?\n/gm, '')
+    .replace(/^\r?\n/, '');
+
+  return [...importSources, stylesEntryBody].join('\n');
+};
+
 test('account history displays use date-only labels while snapshots keep precise time', () => {
   const appSource = readProjectFile('src/App.tsx');
   const rightPanelRendererSource = readProjectFile('src/app/rightPanel/RightPanelRenderer.tsx');
@@ -20,9 +33,50 @@ test('account history displays use date-only labels while snapshots keep precise
     true
   );
   assert.equal(backupListSource.includes('{formatPreciseBackupTime(record.backedUpAt)}'), true);
+  assert.equal(backupListSource.includes("label: '历史记录'"), true);
+  assert.equal(backupListSource.includes('快照总条数'), false);
   assert.equal(
     searchEngineSource.includes('title: options.formatPreciseBackupTime(record.backedUpAt)'),
     true
+  );
+});
+
+test('snapshot import records render above snapshot records with local hidden scrolling', () => {
+  const historyBackupLayerSource = readProjectFile(
+    'src/app/historyBackupLayer/HistoryBackupLayer.tsx'
+  );
+  const importListSource = readProjectFile(
+    'src/features/history/SnapshotImportRecordList.tsx'
+  );
+  const stylesSource = readProjectStyles();
+
+  assert.equal(importListSource.includes('<strong>快照导入记录</strong>'), true);
+  assert.equal(importListSource.includes('暂无导入记录'), true);
+  assert.equal(importListSource.includes('formatPreciseBackupTime(record.importedAt)} 导入'), true);
+  assert.equal(importListSource.includes('快照生成于'), true);
+  assert.equal(importListSource.includes('生成时间未知'), true);
+  assert.equal(importListSource.includes('历史记录 {record.historyRecordCount} 条 · 实际变更'), true);
+  assert.equal(importListSource.includes('VISIBLE_IMPORT_RECORD_COUNT = 2'), true);
+  assert.equal(importListSource.includes('hasHiddenRecords'), true);
+  assert.equal(importListSource.includes('visibleRecordHeight'), true);
+  assert.equal(importListSource.includes('snapshot-import-record-frame--overflow'), true);
+  assert.equal(importListSource.includes('snapshot-import-record-scroll'), true);
+  assert.equal(
+    historyBackupLayerSource.indexOf('<SnapshotImportRecordList') <
+      historyBackupLayerSource.indexOf('<BackupRecordList'),
+    true
+  );
+  assert.match(
+    stylesSource,
+    /\.snapshot-import-record-frame--overflow::after\s*\{[^}]*linear-gradient\([^}]*pointer-events: none;[^}]*\}/s
+  );
+  assert.match(
+    stylesSource,
+    /\.snapshot-import-record-scroll\s*\{[^}]*overflow-y: auto;[^}]*overscroll-behavior: contain;[^}]*scrollbar-width: none;[^}]*\}/s
+  );
+  assert.match(
+    stylesSource,
+    /\.snapshot-import-record-scroll::-webkit-scrollbar\s*\{[^}]*display: none;[^}]*\}/s
   );
 });
 
@@ -33,7 +87,7 @@ test('flash write timestamps are scoped to new flash records without history mig
   );
   const normalizeHistorySource = appSource.slice(
     appSource.indexOf('const normalizeHistory'),
-    appSource.indexOf('const mergeHistoryRecords')
+    appSource.indexOf('const getBackupFieldValue')
   );
 
   assert.equal(
@@ -48,7 +102,7 @@ test('flash write timestamps are scoped to new flash records without history mig
 
 test('history record summary badges keep semantic placement and source markers', () => {
   const historyListSource = readProjectFile('src/features/history/HistoryRecordList.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
 
   assert.equal(historyListSource.includes('history-card-meta'), false);
   assert.equal(historyListSource.includes('history-meta-chip'), false);
@@ -89,7 +143,7 @@ test('history record summary badges keep semantic placement and source markers',
 
 test('history record notes render after dates without expanding group summaries', () => {
   const historyListSource = readProjectFile('src/features/history/HistoryRecordList.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
 
   assert.equal(historyListSource.includes('showNote?: boolean'), true);
   assert.equal(
@@ -165,7 +219,7 @@ test('global history result list drops the outer card frame while keeping record
 
 test('account history folded groups have a subtle group class without changing count text', () => {
   const historyListSource = readProjectFile('src/features/history/HistoryRecordList.tsx');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
 
   assert.equal(historyListSource.includes('history-record-card--group'), true);
   assert.equal(historyListSource.includes('history-record-card--nested'), true);
@@ -178,7 +232,7 @@ test('account history folded groups have a subtle group class without changing c
 test('history calendar uses density blocks instead of old record-count dots', () => {
   const calendarSource = readProjectFile('src/features/history/HistoryCalendarPanel.tsx');
   const calendarLogicSource = readProjectFile('src/features/history/historyCalendarLogic.ts');
-  const stylesSource = readProjectFile('src/styles.css');
+  const stylesSource = readProjectStyles();
 
   assert.equal(calendarSource.includes('history-calendar-day__density'), true);
   assert.equal(calendarSource.includes('history-calendar-day__dots'), false);

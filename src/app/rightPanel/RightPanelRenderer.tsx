@@ -9,6 +9,7 @@ import {
 } from '../../components/rightPanel';
 import SearchPreviewPanel from '../../components/search/SearchPreviewPanel';
 import NfTooltip from '../../components/tooltip/NfTooltip';
+import { getAutoSnapshotProgressState } from '../../features/backup/snapshotBackupLogic';
 import {
   AccountActionsPanel,
   AccountChartSettingsPanel,
@@ -27,6 +28,11 @@ import type {
 
 const getSegmentedControlStyle = (optionCount: number): CSSProperties =>
   ({ '--segmented-option-count': optionCount } as CSSProperties);
+
+const getAutoSnapshotProgressStyle = (progressPercent: number): CSSProperties =>
+  ({
+    '--auto-snapshot-progress': `${Math.min(100, Math.max(0, progressPercent))}%`
+  } as CSSProperties);
 
 const renderRightPanelSection = (
   title: string | null,
@@ -112,6 +118,33 @@ function SnapshotSummary({ items }: { items: SnapshotRightPanelProps['summaryIte
           <strong>{item.value}</strong>
         </div>
       ))}
+    </div>
+  );
+}
+
+function AutoSnapshotProgress({ snapshot }: { snapshot: SnapshotRightPanelProps }) {
+  const progressState = getAutoSnapshotProgressState(
+    snapshot.latestAutoBackupAt,
+    snapshot.autoBackupDraft.cycle
+  );
+  const isDisabled = !snapshot.autoBackupDraft.enabled;
+
+  return (
+    <div
+      className={`auto-snapshot-progress${isDisabled ? ' is-disabled' : ''}`}
+      aria-disabled={isDisabled ? 'true' : undefined}
+      aria-label={`自动快照进度：${progressState.previousLabel}，${progressState.nextLabel}`}
+    >
+      <div
+        className="auto-snapshot-progress__track"
+        style={getAutoSnapshotProgressStyle(progressState.progressPercent)}
+      >
+        <span className="auto-snapshot-progress__fill" aria-hidden="true" />
+      </div>
+      <div className="auto-snapshot-progress__labels">
+        <span>{progressState.previousLabel}</span>
+        <span>{progressState.nextLabel}</span>
+      </div>
     </div>
   );
 }
@@ -261,6 +294,8 @@ function AutoBackupControls({ snapshot }: { snapshot: SnapshotRightPanelProps })
           </div>
         </div>
 
+        <AutoSnapshotProgress snapshot={snapshot} />
+
         <div className="right-panel-form-grid">
           <span className="right-panel-label-text">导出目录</span>
           <div className="right-panel-path-row">
@@ -348,6 +383,7 @@ function GroupDetailActions({ groupDetail }: { groupDetail: GroupDetailRightPane
             <input
               type="text"
               value={groupDetail.nameDraft}
+              placeholder={groupDetail.namePlaceholder}
               onChange={(event) => groupDetail.onNameDraftChange(event.target.value)}
             />
           </label>
