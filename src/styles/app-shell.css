@@ -1,0 +1,107 @@
+.app-shell {
+  height: 100%;
+  width: min(calc(100vw - 96px), var(--workspace-max-width));
+  max-width: none;
+  min-height: 0;
+  margin: 0 auto;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(760px, 1fr) var(--right-slot-width);
+  grid-template-rows: minmax(0, 1fr);
+  align-items: start;
+  justify-items: stretch;
+  gap: var(--workspace-gap);
+  padding: var(--workspace-padding);
+  overflow: hidden;
+}
+
+@media (max-width: 1280px) {
+  .app-shell {
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) clamp(280px, 32vw, 340px);
+  }
+}
+
+.card {
+  width: min(560px, 100%);
+  padding: 40px 32px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-page);
+  background: var(--panel-bg);
+  box-shadow: var(--shadow-panel);
+  text-align: center;
+}
+
+.left-browse-panel,
+.right-action-panel {
+  min-width: 0;
+  min-height: 0;
+  grid-row: 1;
+}
+
+.left-browse-panel {
+  grid-column: 1;
+}
+
+.right-action-panel {
+  grid-column: 2;
+}
+
+.app-shell.app-shell--main-right {
+  grid-template-columns: var(--right-slot-width) minmax(760px, 1fr);
+}
+
+.app-shell.app-shell--main-right > .left-browse-panel {
+  grid-column: 2;
+}
+
+.app-shell.app-shell--main-right > .right-action-panel {
+  grid-column: 1;
+}
+
+.app-shell.app-shell--main-right > .layout-layer--left {
+  grid-column: 2 !important;
+}
+
+.app-shell.app-shell--main-right > .layout-layer--right {
+  grid-column: 1 !important;
+}
+
+@media (max-width: 1280px) {
+  .app-shell.app-shell--main-right {
+    grid-template-columns: clamp(280px, 32vw, 340px) minmax(0, 1fr);
+  }
+}
+
+.left-browse-panel {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.left-browse-panel.card {
+  padding: var(--two-column-panel-padding);
+}
+
+.left-browse-panel:has(.asset-chart-page) {
+  padding: var(--two-column-panel-padding);
+}
+
+.right-action-panel {
+  height: 100%;
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--right-panel-gap);
+  overflow-y: auto;
+  min-height: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-page);
+  padding: var(--right-panel-padding);
+  background: var(--panel-bg);
+  box-shadow: var(--shadow-panel);
+}

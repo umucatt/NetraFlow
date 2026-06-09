@@ -96,7 +96,7 @@ export default function BackupRecordList<TRecord extends BackupRecordListRecord>
                 }}
               >
                 {[
-                  { label: '快照总条数', value: `${record.historyCount} 条` },
+                  { label: '历史记录', value: `${record.historyCount} 条` },
                   { label: '增量记录', value: `${record.incrementCount} 条` }
                 ].map((item) => (
                   <div

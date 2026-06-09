@@ -13,6 +13,10 @@ import type {
 } from '../../app/types';
 import { normalizeTypeSearchText } from './accountTypeSearch';
 import { createAccountHistoryRecord } from './accountHistoryLogic';
+import {
+  DUPLICATE_NAME_PLACEHOLDER,
+  hasDuplicateAccountName
+} from './accountNameUniqueness';
 
 export type AccountAdjustDirection = 'increase' | 'decrease';
 
@@ -85,10 +89,6 @@ type CreateNewAccountResult =
   | {
       ok: false;
       error: string;
-    }
-  | {
-      ok: false;
-      archivedMatch: ArchivedAccountEntry;
     };
 
 export const createNewAccountInAppData = ({
@@ -126,14 +126,11 @@ export const createNewAccountInAppData = ({
     return { ok: false, error: '请输入账户名称' };
   }
 
-  if (hasActiveDuplicateAccountName(groups, nextName)) {
-    return { ok: false, error: '账户名称已存在' };
-  }
-
-  const archivedMatch = findArchivedAccountByName(archivedAccounts, nextName);
-
-  if (archivedMatch) {
-    return { ok: false, archivedMatch };
+  if (
+    hasDuplicateAccountName(appData.accounts, nextName) ||
+    findArchivedAccountByName(archivedAccounts, nextName)
+  ) {
+    return { ok: false, error: DUPLICATE_NAME_PLACEHOLDER };
   }
 
   if (editableAmount === null) {
@@ -303,8 +300,8 @@ export const updateAccountInfoInAppData = ({
     return { ok: false as const, error: '请输入账户名称' };
   }
 
-  if (hasActiveDuplicateAccountName(groups, nextName, account.id)) {
-    return { ok: false as const, error: '小类名称必须唯一' };
+  if (hasDuplicateAccountName(appData.accounts, nextName, account.id)) {
+    return { ok: false as const, error: DUPLICATE_NAME_PLACEHOLDER };
   }
 
   const nextAccounts = appData.accounts.map((currentAccount) =>

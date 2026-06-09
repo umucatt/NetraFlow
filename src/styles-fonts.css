@@ -1,0 +1,31 @@
+@font-face {
+  font-family: 'NF Noto Sans CJK SC';
+  src: url('./assets/fonts/noto/NotoSansCJKsc-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'NF Noto Sans CJK SC';
+  src: url('./assets/fonts/noto/NotoSansCJKsc-Medium.otf') format('opentype');
+  font-weight: 500 600;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'NF Noto Sans CJK SC';
+  src: url('./assets/fonts/noto/NotoSansCJKsc-Bold.otf') format('opentype');
+  font-weight: 700 900;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'NF Noto Symbols 2';
+  src: url('./assets/fonts/noto/NotoSansSymbols2-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}

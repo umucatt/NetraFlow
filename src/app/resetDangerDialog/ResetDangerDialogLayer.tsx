@@ -60,9 +60,6 @@ export function ResetDangerDialogLayer({
             onChange={(event) => onInputChange(event.target.value)}
           />
         </label>
-        {inputValue && inputValue !== confirmation.code ? (
-          <p className="global-settings-note">数字不匹配</p>
-        ) : null}
         <div className="modal-actions">
           <button
             type="button"

@@ -153,6 +153,31 @@ const normalizeArchivedAccountWithMissingGroup = (
   };
 };
 
+const normalizeAccountWithMissingGroup = (
+  account: Record<string, unknown>,
+  groupId: string,
+  existingAccountIds: Set<string>
+): Account | null => {
+  const accountName = getStringField(account, ['name', 'accountName', 'title']) ?? '';
+  const accountAmount = getNumberField(account, ['amount', 'balance', 'value']);
+
+  if (!accountName || typeof accountAmount !== 'number' || !Number.isFinite(accountAmount)) {
+    return null;
+  }
+
+  return {
+    ...account,
+    id: createUniqueImportedAccountId(account, existingAccountIds),
+    groupId,
+    name: accountName,
+    amount: accountAmount,
+    createdAt: getStringField(account, ['createdAt', 'createdTime', 'time']) ?? INITIAL_ACCOUNT_TIME,
+    alias: getStringField(account, ['alias', 'abbreviation']),
+    archived: getBooleanField(account, ['archived']) ?? false,
+    archivedAt: getStringField(account, ['archivedAt'])
+  };
+};
+
 export const normalizeGroupsAndAccounts = (
   groupsValue: unknown,
   accountsValue?: unknown
@@ -220,6 +245,20 @@ export const normalizeGroupsAndAccounts = (
 
       if (rawGroupId && !matchedGroupById && isArchived) {
         const normalizedAccount = normalizeArchivedAccountWithMissingGroup(
+          account,
+          rawGroupId,
+          accountIds
+        );
+
+        if (normalizedAccount) {
+          accounts.push(normalizedAccount);
+        }
+
+        return;
+      }
+
+      if (rawGroupId && !matchedGroupById && groups.length === 0) {
+        const normalizedAccount = normalizeAccountWithMissingGroup(
           account,
           rawGroupId,
           accountIds

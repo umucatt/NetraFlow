@@ -1,8 +1,16 @@
 /// <reference types="node" />
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import type { Account, AppData, AssetGroup, AssetGroupWithAccounts } from '../../app/types';
+import type {
+  Account,
+  AppData,
+  ArchivedAccountEntry,
+  AssetGroup,
+  AssetGroupWithAccounts
+} from '../../app/types';
+import { DUPLICATE_NAME_PLACEHOLDER } from './accountNameUniqueness';
 import {
   createNewAccountInAppData,
   deleteAccountInAppData,
@@ -27,6 +35,21 @@ const createGroup = (
 const withAccounts = (group: AssetGroup, accounts: Account[] = []): AssetGroupWithAccounts => ({
   ...group,
   accounts
+});
+
+const createAccount = (
+  id: string,
+  groupId: string,
+  name: string,
+  archived = false
+): Account => ({
+  id,
+  groupId,
+  name,
+  amount: 100,
+  createdAt: '2026-05-01T09:00:00.000Z',
+  archived,
+  archivedAt: archived ? '2026-05-02T09:00:00.000Z' : undefined
 });
 
 test('new account stores amount by account type nature', () => {
@@ -72,6 +95,88 @@ test('new account stores amount by account type nature', () => {
     assert.equal(assetResult.nextData.history[0]?.afterAmount, 120.5);
     assert.equal(debtResult.account.amount, -120.5);
     assert.equal(debtResult.nextData.history[0]?.afterAmount, -120.5);
+  }
+});
+
+test('new account rejects duplicate active account names in the same account type', () => {
+  const group = createGroup('g-cash', 'Cash');
+  const existingAccount = createAccount('a-existing', group.id, 'Wallet');
+  const result = createNewAccountInAppData({
+    appData: {
+      groups: [group],
+      accounts: [existingAccount],
+      history: []
+    },
+    groups: [withAccounts(group, [existingAccount])],
+    archivedAccounts: [],
+    groupId: group.id,
+    accountTypeInput: group.name,
+    accountNameInput: ' Wallet ',
+    amountInput: '10',
+    createdAt: '2026-05-01T09:00:00.000Z',
+    historyRecordId: 'h-new'
+  });
+
+  assert.equal(result.ok, false);
+
+  if (!result.ok && 'error' in result) {
+    assert.equal(result.error, DUPLICATE_NAME_PLACEHOLDER);
+  }
+});
+
+test('new account rejects duplicate names across different account types', () => {
+  const cashGroup = createGroup('g-cash', 'Cash');
+  const investmentGroup = createGroup('g-investment', 'Investment');
+  const existingAccount = createAccount('a-existing', cashGroup.id, 'Wallet');
+  const result = createNewAccountInAppData({
+    appData: {
+      groups: [cashGroup, investmentGroup],
+      accounts: [existingAccount],
+      history: []
+    },
+    groups: [withAccounts(cashGroup, [existingAccount]), withAccounts(investmentGroup)],
+    archivedAccounts: [],
+    groupId: investmentGroup.id,
+    accountTypeInput: investmentGroup.name,
+    accountNameInput: 'Wallet',
+    amountInput: '10',
+    createdAt: '2026-05-01T09:00:00.000Z',
+    historyRecordId: 'h-new'
+  });
+
+  assert.equal(result.ok, false);
+
+  if (!result.ok && 'error' in result) {
+    assert.equal(result.error, DUPLICATE_NAME_PLACEHOLDER);
+  }
+});
+
+test('new account rejects names occupied by archived accounts', () => {
+  const group = createGroup('g-cash', 'Cash');
+  const archivedAccount: ArchivedAccountEntry = {
+    ...createAccount('a-archived', group.id, 'Old wallet', true),
+    groupName: group.name
+  };
+  const result = createNewAccountInAppData({
+    appData: {
+      groups: [group],
+      accounts: [archivedAccount],
+      history: []
+    },
+    groups: [withAccounts(group, [archivedAccount])],
+    archivedAccounts: [archivedAccount],
+    groupId: group.id,
+    accountTypeInput: group.name,
+    accountNameInput: 'Old wallet',
+    amountInput: '10',
+    createdAt: '2026-05-01T09:00:00.000Z',
+    historyRecordId: 'h-new'
+  });
+
+  assert.equal(result.ok, false);
+
+  if (!result.ok && 'error' in result) {
+    assert.equal(result.error, DUPLICATE_NAME_PLACEHOLDER);
   }
 });
 
@@ -189,6 +294,86 @@ test('account info save stores only the effective custom abbreviation', () => {
   assert.equal(saveAlias('中国银行账户')?.alias, '中国银行');
   assert.equal(saveAlias('現金')?.alias, '現金');
   assert.equal(saveAlias('')?.alias, undefined);
+});
+
+test('account info save rejects duplicate account names including archived accounts', () => {
+  const group = createGroup('g-asset', 'Cash');
+  const currentAccount = createAccount('a-wallet', group.id, 'Wallet');
+  const activeDuplicate = createAccount('a-active-duplicate', group.id, 'Brokerage');
+  const archivedDuplicate = createAccount('a-archived-duplicate', group.id, 'Old card', true);
+  const appData: AppData = {
+    groups: [group],
+    accounts: [currentAccount, activeDuplicate, archivedDuplicate],
+    history: []
+  };
+
+  const activeResult = updateAccountInfoInAppData({
+    appData,
+    groups: [withAccounts(group, [currentAccount, activeDuplicate, archivedDuplicate])],
+    account: currentAccount,
+    accountNameInput: 'Brokerage',
+    aliasInput: ''
+  });
+  const archivedResult = updateAccountInfoInAppData({
+    appData,
+    groups: [withAccounts(group, [currentAccount, activeDuplicate, archivedDuplicate])],
+    account: currentAccount,
+    accountNameInput: 'Old card',
+    aliasInput: ''
+  });
+
+  assert.equal(activeResult.ok, false);
+  assert.equal(archivedResult.ok, false);
+
+  if (!activeResult.ok) {
+    assert.equal(activeResult.error, DUPLICATE_NAME_PLACEHOLDER);
+  }
+
+  if (!archivedResult.ok) {
+    assert.equal(archivedResult.error, DUPLICATE_NAME_PLACEHOLDER);
+  }
+});
+
+test('duplicate name UI paths clear inputs and pass duplicate placeholder props', () => {
+  const appSource = readFileSync('src/App.tsx', 'utf8');
+  const accountDialogSource = readFileSync(
+    'src/features/account/AccountEditorDialog.tsx',
+    'utf8'
+  );
+  const accountInfoDialogSource = readFileSync(
+    'src/features/account/AccountInfoEditorDialog.tsx',
+    'utf8'
+  );
+  const accountTypeControllerSource = readFileSync(
+    'src/features/account/useAccountTypeController.ts',
+    'utf8'
+  );
+  const accountOperationsControllerSource = readFileSync(
+    'src/features/account/useAccountOperationsController.ts',
+    'utf8'
+  );
+
+  assert.equal(appSource.includes("setNewAccountName('');"), true);
+  assert.equal(
+    appSource.includes('setNewAccountNamePlaceholder(DUPLICATE_NAME_PLACEHOLDER)'),
+    true
+  );
+  assert.equal(appSource.includes("setNewAccountTypeInput('');"), true);
+  assert.equal(
+    appSource.includes('setNewAccountTypeInputPlaceholder(DUPLICATE_NAME_PLACEHOLDER)'),
+    true
+  );
+  assert.equal(accountDialogSource.includes('placeholder={newAccountNamePlaceholder}'), true);
+  assert.equal(
+    accountDialogSource.includes('placeholder={accountTypeInputPlaceholder}'),
+    true
+  );
+  assert.equal(
+    accountInfoDialogSource.includes('placeholder={accountNamePlaceholder}'),
+    true
+  );
+  assert.equal(accountTypeControllerSource.includes("setAccountTypeNameDraft('');"), true);
+  assert.equal(accountOperationsControllerSource.includes("setAccountNameDraft('');"), true);
 });
 
 test('account editor unsaved checks stay narrow to active drafts', () => {

@@ -16,7 +16,6 @@ import { hasActiveDuplicateAccountName } from './accountEditorLogic';
 export type ArchivedRestoreSource =
   | 'account-detail'
   | 'account-restore-dialog'
-  | 'same-name-account'
   | 'archived-accounts-list';
 
 export type PendingArchivedRestore = {

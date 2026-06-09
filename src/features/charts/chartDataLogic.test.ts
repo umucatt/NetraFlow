@@ -135,6 +135,69 @@ test('locked chart control uses global account settings for selected accounts', 
   assert.equal(data.previewTrendSettings.assetDisplay, 'net');
 });
 
+test('selected account chart settings inherit dynamic or baseline y-axis from global trend settings', () => {
+  const dynamicData = deriveSelectedAccountChartData({
+    account: account('cash', 100),
+    history: [],
+    settings: {
+      ...SETTINGS,
+      trend: {
+        ...SETTINGS.trend,
+        adaptiveYAxis: true
+      }
+    }
+  });
+  const baselineData = deriveSelectedAccountChartData({
+    account: account('cash', 100),
+    history: [],
+    settings: {
+      ...SETTINGS,
+      trend: {
+        ...SETTINGS.trend,
+        adaptiveYAxis: false
+      }
+    }
+  });
+
+  assert.equal(dynamicData.settings.adaptiveYAxis, true);
+  assert.equal(dynamicData.previewTrendSettings.adaptiveYAxis, true);
+  assert.equal(baselineData.settings.adaptiveYAxis, false);
+  assert.equal(baselineData.previewTrendSettings.adaptiveYAxis, false);
+});
+
+test('selected account chart y-axis override is kept without resetting existing settings', () => {
+  const localSettings: AssetChartSettings = {
+    ...SETTINGS,
+    trend: {
+      ...SETTINGS.trend,
+      adaptiveYAxis: true
+    },
+    accountDetailById: {
+      cash: {
+        adaptiveYAxis: false,
+        xAxisRange: '1y',
+        pointValueMode: 'none'
+      }
+    }
+  };
+  const data = deriveSelectedAccountChartData({
+    account: account('cash', 100),
+    history: [],
+    settings: localSettings
+  });
+
+  assert.deepEqual(data.settings, {
+    adaptiveYAxis: false,
+    xAxisRange: '1y',
+    pointValueMode: 'none'
+  });
+  assert.deepEqual(localSettings.accountDetailById.cash, {
+    adaptiveYAxis: false,
+    xAxisRange: '1y',
+    pointValueMode: 'none'
+  });
+});
+
 test('maps structure segment source ids back to home overview legend colors', () => {
   const colorByName = deriveChartLegendColorByName({
     positiveSegments: [

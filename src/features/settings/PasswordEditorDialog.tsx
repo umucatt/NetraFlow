@@ -57,7 +57,7 @@ function PasswordEditorDialog({
       as="form"
       title={isEditingExistingPassword ? '修改登录密码' : '设置登录密码'}
       titleStyle={{ margin: '0 0 18px', fontSize: '1.35rem', lineHeight: 1.2 }}
-      backdropClassName="layout-layer layout-layer--right"
+      backdropClassName="modal-backdrop"
       backdropStyle={backdropStyle}
       cardStyle={cardStyle}
       onClose={onCancel}

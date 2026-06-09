@@ -54,6 +54,7 @@ import {
   updateAccountInfoInAppData,
   type AccountAdjustDirection
 } from './accountEditorLogic';
+import { DUPLICATE_NAME_PLACEHOLDER } from './accountNameUniqueness';
 import type {
   AccountActionsPanelProps,
   AccountDangerActionsPanelProps
@@ -461,6 +462,10 @@ export function useAccountOperationsController({
     });
 
     if (!result.ok) {
+      if (result.error === DUPLICATE_NAME_PLACEHOLDER) {
+        setAccountNameDraft('');
+      }
+
       setAccountInfoError(result.error);
       return;
     }

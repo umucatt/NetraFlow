@@ -33,6 +33,7 @@ export type AccountCreateDialogPropsGroup = ComponentProps<
 export type AccountTypeDialogPropsGroup = {
   editor: NonNullable<AccountTypeEditorState>;
   nameDraft: string;
+  namePlaceholder?: string;
   natureDraft: AccountTypeNature;
   statsDraft: boolean;
   error: string;

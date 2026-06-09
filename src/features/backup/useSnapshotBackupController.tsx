@@ -1,6 +1,6 @@
 import { type ChangeEvent, type ReactNode, useEffect, useState } from 'react';
 
-import { DAY_MS, getValidTimestamp } from '../../app/dateUtils';
+import { getValidTimestamp } from '../../app/dateUtils';
 import { deriveGroupsWithAccounts } from '../../app/accountData';
 import type {
   Account,
@@ -23,23 +23,29 @@ import type { GlobalSettings } from '../security/securitySettingsTypes';
 import {
   areAutoBackupSettingsEqual,
   clearLastBackupAt,
+  consumeAutoBackupDueOnce,
   createBackupFileContent,
   createBackupPayload,
+  createSnapshotRestoreData,
   DEFAULT_AUTO_BACKUP_SETTINGS,
-  getBackupCycleDays,
   getBackupFileName,
   hasBackupRecordMissingIncrementCount,
   loadAutoBackupSettings,
   loadBackupRecords,
+  loadSnapshotImportRecords,
   loadLastBackupAt,
   loadLastBackupHistoryCount,
   mergeBackupRecords,
+  mergeSnapshotImportRecords,
   normalizeAutoBackupSettings,
   normalizeBackupRecords,
+  SNAPSHOT_INCOMPLETE_ERROR_MESSAGE,
+  saveSnapshotImportRecords,
   saveAutoBackupSettings,
   saveBackupRecords,
   saveLastBackupAt,
-  saveLastBackupHistoryCount
+  saveLastBackupHistoryCount,
+  shouldRunStartupAutoBackupCycle
 } from './snapshotBackupLogic';
 
 type ConfirmationRequest = {
@@ -72,6 +78,12 @@ type BackupAccountData = {
   accounts: Account[];
 };
 
+type ImportBackupDataResult = {
+  snapshotCreatedAt: string | null;
+  historyRecordCount: number;
+  changedHistoryRecordCount: number;
+};
+
 type SnapshotBackupControllerOptions = {
   productName: string;
   assetGroups: AssetGroup[];
@@ -85,12 +97,6 @@ type SnapshotBackupControllerOptions = {
   getBackupFieldValue: (value: unknown, fieldNames: string[]) => unknown;
   getBackupAccountData: (value: unknown) => BackupAccountData;
   getBackupHistory: (value: unknown, groups: AssetGroupWithAccounts[]) => HistoryRecord[];
-  mergeAccounts: (currentAccounts: Account[], importedAccounts: Account[]) => Account[];
-  mergeGroups: (currentGroups: AssetGroup[], importedGroups: AssetGroup[]) => AssetGroup[];
-  mergeHistoryRecords: (
-    currentRecords: HistoryRecord[],
-    importedRecords: HistoryRecord[]
-  ) => HistoryRecord[];
   requestConfirmationDialog: (request: ConfirmationRequest) => Promise<boolean>;
   requestInputDialog: (request: InputRequest) => Promise<string | null>;
   showNoticeDialog: (request: NoticeRequest) => Promise<void>;
@@ -110,6 +116,9 @@ const createId = (prefix: string) => {
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+const getStandardSnapshotFieldValue = (value: unknown, fieldName: string) =>
+  isPlainObject(value) ? value[fieldName] : undefined;
+
 let hasCheckedStartupAutoBackup = false;
 
 export function useSnapshotBackupController({
@@ -125,9 +134,6 @@ export function useSnapshotBackupController({
   getBackupFieldValue,
   getBackupAccountData,
   getBackupHistory,
-  mergeAccounts,
-  mergeGroups,
-  mergeHistoryRecords,
   requestConfirmationDialog,
   requestInputDialog,
   showNoticeDialog,
@@ -140,6 +146,9 @@ export function useSnapshotBackupController({
     loadLastBackupHistoryCount(history.length)
   );
   const [backupRecords, setBackupRecords] = useState(loadBackupRecords);
+  const [snapshotImportRecords, setSnapshotImportRecords] = useState(
+    loadSnapshotImportRecords
+  );
   const [autoBackupSettings, setAutoBackupSettings] = useState(loadAutoBackupSettings);
   const [autoBackupDraft, setAutoBackupDraft] =
     useState<AutoBackupSettings>(() => autoBackupSettings);
@@ -209,6 +218,14 @@ export function useSnapshotBackupController({
     setAutoBackupDraft(normalizedSettings);
     setAutoBackupCycleValueInput(String(normalizedSettings.cycle.value));
     saveAutoBackupSettings(normalizedSettings);
+  };
+
+  const resetSnapshotImportRecords = (persist: boolean) => {
+    setSnapshotImportRecords([]);
+
+    if (persist) {
+      saveSnapshotImportRecords([]);
+    }
   };
 
   const resetAutoBackupDraft = () => {
@@ -431,6 +448,49 @@ export function useSnapshotBackupController({
     saveLastBackupHistoryCount(backupRecord.historyCount);
   };
 
+  const getSnapshotCreatedAt = (
+    value: unknown,
+    importedBackupRecords: BackupRecord[]
+  ) => {
+    const directSnapshotTime = getBackupFieldValue(value, [
+      'exportedAt',
+      'backupAt',
+      'lastBackupAt',
+      'backedUpAt',
+      'createdAt'
+    ]);
+
+    if (
+      typeof directSnapshotTime === 'string' &&
+      getValidTimestamp(directSnapshotTime) !== null
+    ) {
+      return directSnapshotTime;
+    }
+
+    return importedBackupRecords[0]?.backedUpAt ?? null;
+  };
+
+  const saveSnapshotImportSuccess = (result: ImportBackupDataResult) => {
+    if (isExampleMode) {
+      return;
+    }
+
+    const importRecord = {
+      id: createId('snapshot-import-record'),
+      importedAt: new Date().toISOString(),
+      snapshotCreatedAt: result.snapshotCreatedAt,
+      historyRecordCount: result.historyRecordCount,
+      changedHistoryRecordCount: result.changedHistoryRecordCount
+    };
+    const nextSnapshotImportRecords = mergeSnapshotImportRecords(
+      snapshotImportRecords,
+      importRecord
+    );
+
+    setSnapshotImportRecords(nextSnapshotImportRecords);
+    saveSnapshotImportRecords(nextSnapshotImportRecords);
+  };
+
   const exportBackup = async () => {
     const api = window.electronAPI ?? window.electronWindow;
     let snapshotPassword: string | null = null;
@@ -444,15 +504,11 @@ export function useSnapshotBackupController({
     }
 
     if (globalSettings.snapshotEncryptionEnabled) {
-      const shouldContinue = await requestConfirmationDialog({
-        title: '导出加密快照',
-        message: '已启用快照加密，导出的快照文件将使用快照密码加密，忘记快照密码将无法恢复',
-        confirmLabel: '继续导出',
-        cancelLabel: '取消',
-        eyebrow: '快照导出'
-      });
+      snapshotPassword = await requestVerifiedSnapshotPassword(
+        '已启用快照加密，导出的快照文件将使用快照密码加密。请输入快照密码，用于加密本次导出的快照'
+      );
 
-      if (!shouldContinue) {
+      if (!snapshotPassword) {
         return;
       }
     }
@@ -472,16 +528,6 @@ export function useSnapshotBackupController({
 
     if (!selectedDirectory) {
       return;
-    }
-
-    if (globalSettings.snapshotEncryptionEnabled) {
-      snapshotPassword = await requestVerifiedSnapshotPassword(
-        '请输入快照密码，用于加密本次导出的快照'
-      );
-
-      if (!snapshotPassword) {
-        return;
-      }
     }
 
     const backupAt = new Date().toISOString();
@@ -533,6 +579,7 @@ export function useSnapshotBackupController({
   const runStartupAutoBackup = async () => {
     const settings = loadAutoBackupSettings();
     const currentGlobalSettings = globalSettings;
+    const forceDueOnce = consumeAutoBackupDueOnce();
 
     if (!settings.enabled) {
       return;
@@ -546,10 +593,11 @@ export function useSnapshotBackupController({
       return;
     }
 
-    const lastBackupTimestamp = getValidTimestamp(loadLastBackupAt());
-    const cycleDays = getBackupCycleDays(settings.cycle);
-    const shouldRun =
-      lastBackupTimestamp === null || Date.now() - lastBackupTimestamp >= cycleDays * DAY_MS;
+    const shouldRun = shouldRunStartupAutoBackupCycle(
+      loadLastBackupAt(),
+      settings.cycle,
+      forceDueOnce
+    );
 
     if (!shouldRun) {
       return;
@@ -578,7 +626,7 @@ export function useSnapshotBackupController({
       }
     }
 
-    const progressToastId = showToast('自动快照进行中');
+    const progressToastId = showToast('自动备份进行中');
     await new Promise<void>((resolve) => {
       window.setTimeout(resolve, 120);
     });
@@ -611,7 +659,7 @@ export function useSnapshotBackupController({
       setAutoBackupSettings(settings);
       setAutoBackupDraft(settings);
       setAutoBackupCycleValueInput(String(settings.cycle.value));
-      showToast('自动快照已完成', 'success');
+      showToast('自动备份完成', 'success');
     } catch (error) {
       console.error('[NetraFlow snapshot] Auto snapshot failed.', error);
       dismissToast(progressToastId);
@@ -632,37 +680,39 @@ export function useSnapshotBackupController({
     return () => window.clearTimeout(timerId);
   }, []);
 
-  const importBackupData = (value: unknown) => {
+  const importBackupData = (value: unknown): ImportBackupDataResult => {
+    const groupsValue = getStandardSnapshotFieldValue(value, 'groups');
+    const accountsValue = getStandardSnapshotFieldValue(value, 'accounts');
+    const historyValue = getStandardSnapshotFieldValue(value, 'history');
     const importedAccountData = getBackupAccountData(value);
-    const hasImportedAccountData =
-      importedAccountData.groups.length > 0 || importedAccountData.accounts.length > 0;
-
-    const groupsAfterImport =
-      importedAccountData.groups.length > 0
-        ? mergeGroups(assetGroups, importedAccountData.groups)
-        : assetGroups;
-    const accountsAfterImport = hasImportedAccountData
-      ? mergeAccounts(accounts, importedAccountData.accounts)
-      : accounts;
     const groupsWithAccountsAfterImport = deriveGroupsWithAccounts(
-      groupsAfterImport,
-      accountsAfterImport
+      importedAccountData.groups,
+      importedAccountData.accounts
     );
     const importedHistory = getBackupHistory(value, groupsWithAccountsAfterImport);
-
-    if (!hasImportedAccountData && importedHistory.length === 0) {
-      throw new Error('No supported snapshot data found.');
-    }
+    const restoreResult = createSnapshotRestoreData({
+      currentData: { groups: assetGroups, accounts, history },
+      importedAccountData,
+      importedHistory,
+      snapshotFields: {
+        groups: groupsValue,
+        accounts: accountsValue,
+        history: historyValue
+      }
+    });
+    const backupRecordsValue = getBackupFieldValue(value, ['backupRecords']);
+    const hasImportedBackupRecords = backupRecordsValue !== undefined;
+    const importedBackupRecords = normalizeBackupRecords(
+      backupRecordsValue
+    );
+    const snapshotCreatedAt = getSnapshotCreatedAt(value, importedBackupRecords);
+    const importResult: ImportBackupDataResult = {
+      snapshotCreatedAt,
+      historyRecordCount: restoreResult.historyRecordCount,
+      changedHistoryRecordCount: restoreResult.changedHistoryRecordCount
+    };
 
     if (isExampleMode) {
-      const sandboxGroups = hasImportedAccountData ? importedAccountData.groups : assetGroups;
-      const sandboxAccounts = hasImportedAccountData
-        ? importedAccountData.accounts
-        : accounts;
-      const sandboxHistory = importedHistory.length > 0 ? importedHistory : history;
-      const importedBackupRecords = normalizeBackupRecords(
-        getBackupFieldValue(value, ['backupRecords'])
-      );
       const importedLastBackupAt = getBackupFieldValue(value, ['lastBackupAt']);
       const importedLastBackupHistoryCount = getBackupFieldValue(value, [
         'lastBackupHistoryCount'
@@ -675,32 +725,25 @@ export function useSnapshotBackupController({
             : NaN;
 
       updateAppData({
-        groups: sandboxGroups,
-        accounts: sandboxAccounts,
-        history: sandboxHistory
+        groups: restoreResult.nextData.groups,
+        accounts: restoreResult.nextData.accounts,
+        history: restoreResult.nextData.history
       });
       applyBackupState(
-        importedBackupRecords.length > 0 ? importedBackupRecords : backupRecords,
+        hasImportedBackupRecords ? importedBackupRecords : backupRecords,
         typeof importedLastBackupAt === 'string' &&
           getValidTimestamp(importedLastBackupAt) !== null
           ? importedLastBackupAt
           : lastBackupAt,
         Number.isFinite(importedHistoryCountNumber)
           ? Math.max(0, Math.floor(importedHistoryCountNumber))
-          : sandboxHistory.length,
+          : restoreResult.nextData.history.length,
         false
       );
-      return;
+      return importResult;
     }
 
-    updateAppData({
-      groups: groupsAfterImport,
-      accounts: accountsAfterImport,
-      history:
-        importedHistory.length > 0
-          ? mergeHistoryRecords(history, importedHistory)
-          : history
-    });
+    updateAppData(restoreResult.nextData);
 
     const importedLastBackupAt = getBackupFieldValue(value, ['lastBackupAt']);
 
@@ -722,22 +765,16 @@ export function useSnapshotBackupController({
           ? Number(importedLastBackupHistoryCount)
           : NaN;
 
-    if (Number.isFinite(importedHistoryCountNumber)) {
-      const nextHistoryCount = Math.max(0, Math.floor(importedHistoryCountNumber));
+    const nextHistoryCount = Number.isFinite(importedHistoryCountNumber)
+      ? Math.max(0, Math.floor(importedHistoryCountNumber))
+      : restoreResult.nextData.history.length;
 
-      setLastBackupHistoryCount(nextHistoryCount);
-      saveLastBackupHistoryCount(nextHistoryCount);
-    }
+    setLastBackupHistoryCount(nextHistoryCount);
+    saveLastBackupHistoryCount(nextHistoryCount);
 
-    const importedBackupRecords = normalizeBackupRecords(
-      getBackupFieldValue(value, ['backupRecords'])
-    );
-
-    if (importedBackupRecords.length > 0) {
-      const nextBackupRecords = mergeBackupRecords(backupRecords, importedBackupRecords);
-
-      setBackupRecords(nextBackupRecords);
-      saveBackupRecords(nextBackupRecords);
+    if (hasImportedBackupRecords) {
+      setBackupRecords(importedBackupRecords);
+      saveBackupRecords(importedBackupRecords);
     }
 
     const importedAutoBackupSettings = getBackupFieldValue(value, ['autoBackupSettings']);
@@ -750,6 +787,8 @@ export function useSnapshotBackupController({
       setAutoBackupCycleValueInput(String(nextAutoBackupSettings.cycle.value));
       saveAutoBackupSettings(nextAutoBackupSettings);
     }
+
+    return importResult;
   };
 
   const readImportSnapshotData = async (value: unknown) => {
@@ -817,10 +856,11 @@ export function useSnapshotBackupController({
             return;
           }
 
-          importBackupData(snapshotData);
+          const importResult = importBackupData(snapshotData);
+          saveSnapshotImportSuccess(importResult);
           void showNoticeDialog({
             title: '导入快照',
-            message: '快照已导入，现有数据已按字段合并'
+            message: '快照已导入，当前数据已按快照恢复'
           });
         } catch (error) {
           console.error('[NetraFlow snapshot] Failed to import snapshot.', error);
@@ -829,6 +869,8 @@ export function useSnapshotBackupController({
             message:
               error instanceof Error && error.message === SNAPSHOT_DECRYPTION_ERROR_MESSAGE
                 ? SNAPSHOT_DECRYPTION_ERROR_MESSAGE
+                : error instanceof Error && error.message === SNAPSHOT_INCOMPLETE_ERROR_MESSAGE
+                  ? SNAPSHOT_INCOMPLETE_ERROR_MESSAGE
                 : '快照文件无法导入，请确认文件内容'
           });
         }
@@ -848,6 +890,7 @@ export function useSnapshotBackupController({
     lastBackupAt,
     lastBackupHistoryCount,
     backupRecords,
+    snapshotImportRecords,
     autoBackupSettings,
     autoBackupDraft,
     autoBackupCycleValueInput,
@@ -856,6 +899,7 @@ export function useSnapshotBackupController({
     hasAutoBackupDraftChanges,
     canSaveAutoBackupSettings,
     applyBackupState,
+    resetSnapshotImportRecords,
     resetAutoBackupSettings,
     resetAutoBackupDraft,
     updateAutoBackupEnabled,

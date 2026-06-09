@@ -370,6 +370,23 @@ test('active top-level accounts with missing group ids still use compatibility f
   assert.equal(normalized.accounts[0]?.archived, false);
 });
 
+test('accounts-only snapshot data keeps account rows while leaving groups empty', () => {
+  const normalized = normalizeGroupsAndAccounts([], [
+    {
+      id: 'a-orphan-active',
+      groupId: 'g-missing',
+      name: 'Orphan active',
+      amount: 12,
+      createdAt: '2026-05-01T09:00:00.000Z'
+    }
+  ]);
+
+  assert.deepEqual(normalized.groups, []);
+  assert.equal(normalized.accounts.length, 1);
+  assert.equal(normalized.accounts[0]?.groupId, 'g-missing');
+  assert.equal(normalized.accounts[0]?.archived, false);
+});
+
 test('new-structure snapshot imports preserve archived missing group ids', () => {
   const currentGroup = createGroup('g-current', 'Current', 0);
   const snapshot = {

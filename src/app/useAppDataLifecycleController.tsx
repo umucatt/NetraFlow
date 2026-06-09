@@ -10,12 +10,12 @@ import type { AssetChartSettings } from '../features/charts';
 import type { GlobalSettings } from '../features/security/securitySettingsTypes';
 import type { ExampleTemplateId } from '../exampleData';
 import {
-  cloneBackupRecords,
   createEmptyAppData,
   createExampleDataApplyResult,
   createExampleModeSnapshot,
   createResetConfirmation,
   createRestoredRealDataState,
+  createTestDataInRealAppData,
   getResetActionLabel,
   isResetConfirmationInputValid,
   sanitizeResetConfirmationInput
@@ -53,6 +53,7 @@ type UseAppDataLifecycleControllerOptions = {
     lastBackupHistoryCount: number,
     persist: boolean
   ) => void;
+  resetSnapshotImportRecords: (persist: boolean) => void;
   createExampleData: (templateId: ExampleTemplateId) => ExampleGeneratedData;
   loadRealDataSnapshot: () => AppDataLifecycleSnapshot;
   persistAppData: (
@@ -87,6 +88,7 @@ export function useAppDataLifecycleController({
   resetSecurityState,
   resetDataViews,
   applyBackupState,
+  resetSnapshotImportRecords,
   createExampleData,
   loadRealDataSnapshot,
   persistAppData,
@@ -200,25 +202,11 @@ export function useAppDataLifecycleController({
   };
 
   const writeExampleDataToRealData = () => {
-    if (!isExampleMode) {
-      return false;
-    }
+    const nextAppData = createTestDataInRealAppData(createExampleData);
 
-    const currentExampleData = createExampleDataApplyResult({
-      appData,
-      backupRecords,
-      lastBackupAt,
-      lastBackupHistoryCount
-    });
-
-    persistAppData(currentExampleData.appData, { allowEmptyHistoryOverwrite: true });
-    applyLifecycleSnapshot(
-      {
-        ...currentExampleData,
-        backupRecords: cloneBackupRecords(backupRecords)
-      },
-      true
-    );
+    resetDataViews();
+    persistAppData(nextAppData, { allowEmptyHistoryOverwrite: true });
+    setAppData(nextAppData);
     setIsExampleMode(false);
     realDataBeforeExampleRef.current = null;
     cancelPendingFirstWelcomeForRealChange();
@@ -241,6 +229,7 @@ export function useAppDataLifecycleController({
     resetDataViews();
     setAppData(emptyData);
     applyBackupState([], '', 0, persist);
+    resetSnapshotImportRecords(persist);
 
     if (persist) {
       persistEmptyAssetData();

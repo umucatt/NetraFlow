@@ -1,6 +1,7 @@
 /// <reference types="node" />
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import type { AppData, BackupRecord } from './types';
@@ -11,6 +12,7 @@ import {
   createResetConfirmation,
   createResetConfirmationCode,
   createRestoredRealDataState,
+  createTestDataInRealAppData,
   getResetActionLabel,
   isResetConfirmationInputValid,
   sanitizeResetConfirmationInput
@@ -114,6 +116,81 @@ test('restores saved real data or falls back to storage snapshot after sample mo
 
   assert.equal(saved.appData.accounts[0]?.id, 'a-wallet');
   assert.deepEqual(fallback.appData, { groups: [], accounts: [], history: [] });
+});
+
+test('testdatain real-data helper uses advanced example app data only', () => {
+  const requestedTemplates: string[] = [];
+  const generatedAppData: AppData = {
+    groups: [
+      {
+        id: 'g-advanced',
+        name: 'Advanced',
+        nature: 'asset',
+        includeInStats: true,
+        sortOrder: 0
+      }
+    ],
+    accounts: [
+      {
+        id: 'a-advanced',
+        groupId: 'g-advanced',
+        name: 'Advanced Account',
+        amount: 200,
+        createdAt: '2026-06-09T09:00:00.000Z'
+      }
+    ],
+    history: [
+      {
+        id: 'h-advanced',
+        accountId: 'a-advanced',
+        type: '新增',
+        groupName: 'Advanced',
+        accountName: 'Advanced Account',
+        beforeAmount: null,
+        afterAmount: 200,
+        time: '2026-06-09T09:00:00.000Z'
+      }
+    ]
+  };
+
+  const result = createTestDataInRealAppData((templateId) => {
+    requestedTemplates.push(templateId);
+
+    return {
+      appData: generatedAppData,
+      backupRecords: [
+        {
+          id: 'generated-backup',
+          backedUpAt: '2026-06-09T10:00:00.000Z',
+          historyCount: 1,
+          incrementCount: 1,
+          method: 'auto'
+        }
+      ],
+      lastBackupAt: '2026-06-09T10:00:00.000Z',
+      lastBackupHistoryCount: 1
+    };
+  });
+
+  assert.deepEqual(requestedTemplates, ['advanced']);
+  assert.deepEqual(result, generatedAppData);
+});
+
+test('testdatain controller overwrites real asset data without touching sample mode data or backup state', () => {
+  const source = readFileSync('src/app/useAppDataLifecycleController.tsx', 'utf8');
+  const handlerSource = source.slice(
+    source.indexOf('const writeExampleDataToRealData = () => {'),
+    source.indexOf('const resetUserConfiguration = () => {')
+  );
+
+  assert.equal(handlerSource.includes('createTestDataInRealAppData(createExampleData)'), true);
+  assert.equal(handlerSource.includes('persistAppData(nextAppData, { allowEmptyHistoryOverwrite: true })'), true);
+  assert.equal(handlerSource.includes('setAppData(nextAppData)'), true);
+  assert.equal(handlerSource.includes('setIsExampleMode(false)'), true);
+  assert.equal(handlerSource.includes('applyLifecycleSnapshot'), false);
+  assert.equal(handlerSource.includes('applyBackupState'), false);
+  assert.equal(handlerSource.includes('backupRecords'), false);
+  assert.equal(handlerSource.includes('lastBackupAt'), false);
 });
 
 test('keeps reset confirmation code and input handling in lifecycle logic', () => {

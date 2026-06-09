@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ToastMessage, ToastTone } from './toastTypes';
 
-const TOAST_AUTO_DISMISS_MS = 2800;
+const TOAST_AUTO_DISMISS_MS = 2500;
 
 const createId = (prefix: string) => {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -24,12 +24,15 @@ export function useToastController() {
 
   const showToast = useCallback(
     (message: string, tone: ToastTone = 'info') => {
+      toastTimerRefs.current.forEach((currentTimerId) =>
+        window.clearTimeout(currentTimerId)
+      );
+
       const toastId = createId('toast');
       const timerId = window.setTimeout(() => dismissToast(toastId), TOAST_AUTO_DISMISS_MS);
 
-      toastTimerRefs.current.push(timerId);
-      setToastMessages((currentMessages) => [
-        ...currentMessages.filter((currentMessage) => currentMessage.message !== message),
+      toastTimerRefs.current = [timerId];
+      setToastMessages([
         {
           id: toastId,
           message,

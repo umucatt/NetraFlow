@@ -52,6 +52,7 @@ export type SnapshotRightPanelProps = {
   autoBackupDraft: AutoBackupSettings;
   autoBackupCycleValueInput: string;
   autoSnapshotCycleInputRef: RefObject<HTMLInputElement | null>;
+  latestAutoBackupAt: string;
   isExampleMode: boolean;
   hasAutoBackupDraftChanges: boolean;
   canSaveAutoBackupSettings: boolean;
@@ -96,6 +97,7 @@ export type HomeRightPanelProps = {
 
 export type GroupDetailRightPanelProps = {
   nameDraft: string;
+  namePlaceholder?: string;
   statsDraft: boolean;
   error: string;
   chartSettings: CategoryDetailChartSettings;

@@ -109,18 +109,18 @@ function ChartSettingsPanel({
           isLockedByGlobal
         )}
         {renderSegmentedControl(
-          '自适应纵轴',
+          '纵轴范围',
           [
-            { value: 'on', label: '开' },
-            { value: 'off', label: '关' }
+            { value: 'dynamic', label: '动态范围' },
+            { value: 'baseline', label: '基准范围' }
           ],
-          settings.trend.adaptiveYAxis ? 'on' : 'off',
+          settings.trend.adaptiveYAxis ? 'dynamic' : 'baseline',
           (value) =>
             onUpdateSettings((currentSettings) => ({
               ...currentSettings,
               trend: {
                 ...currentSettings.trend,
-                adaptiveYAxis: value === 'on'
+                adaptiveYAxis: value === 'dynamic'
               }
             })),
           isLockedByGlobal
