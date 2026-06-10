@@ -22,6 +22,8 @@ export type SettingsNavItem = {
 
 export type SettingsResetAction = 'settings' | 'history' | 'all';
 
+export type SettingsNavigationSide = 'left' | 'right';
+
 export type SettingsPageProps = {
   section: GlobalSettingsSection;
   globalSettings: GlobalSettings;
@@ -34,7 +36,6 @@ export type SettingsPageProps = {
   productIconPath: string;
   productNameZh: string;
   productNameEn: string;
-  isCatPetted: boolean;
   autoLockMinutesInput: string;
   onPositiveNegativeColorModeChange: (value: string) => void;
   onHomeAssetStatMetricChange: (value: string) => void;
@@ -73,13 +74,15 @@ export type SettingsPageProps = {
   onOpenResetConfirmation: (action: SettingsResetAction) => void;
   onOpenBilibili: () => void;
   onOpenGithubReleases: () => void;
-  onTriggerEasterEgg: () => void;
   onStartVersionLongPress: (event: PointerEvent<HTMLElement>) => void;
   onClearVersionLongPress: () => void;
 };
 
 export type SettingsNavigationPanelProps = {
   selectedSection: GlobalSettingsSection;
+  navigationSide: SettingsNavigationSide;
+  isCatPetted: boolean;
   onSelectSection: (section: GlobalSettingsSection) => void;
+  onTriggerEasterEgg: () => void;
   onClose: () => void;
 };

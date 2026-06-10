@@ -26,42 +26,6 @@ export const hasDuplicateAccountName = (
   );
 };
 
-export const hasActiveDuplicateAccountName = (
-  groups: AssetGroupWithAccounts[],
-  name: string,
-  exceptAccountId = ''
-) => {
-  const normalizedName = normalizeAccountName(name);
-
-  if (!normalizedName) {
-    return false;
-  }
-
-  return groups.some((group) =>
-    group.accounts.some(
-      (account) =>
-        !account.archived &&
-        account.id !== exceptAccountId &&
-        normalizeAccountName(account.name) === normalizedName
-    )
-  );
-};
-
-export const findArchivedAccountByName = (
-  archivedAccounts: ArchivedAccountEntry[],
-  name: string
-) => {
-  const normalizedName = normalizeAccountName(name);
-
-  if (!normalizedName) {
-    return undefined;
-  }
-
-  return archivedAccounts.find(
-    (account) => normalizeAccountName(account.name) === normalizedName
-  );
-};
-
 export const hasDuplicateAccountTypeName = ({
   groups,
   archivedAccounts,

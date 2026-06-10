@@ -1,3 +1,5 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import type {
   StructureAssetDisplay,
   TrendAssetDisplay,
@@ -9,16 +11,33 @@ import AppearanceSettingsPanel from './AppearanceSettingsPanel';
 import BackupSettingsPanel from './BackupSettingsPanel';
 import SearchSettingsPanel from './SearchSettingsPanel';
 import {
+  CatIdleIcon,
+  CatPettedNyaaIcon
+} from '../../assets/icons';
+import NfSvgIcon from '../../components/NfSvgIcon';
+import {
   SettingsActionRow,
   SettingsControlRow,
   SettingsFieldGroup,
   SettingsSegmentedControl
 } from './SettingsSectionFrame';
+import {
+  EASTER_CAT_FRAME_SIZE_PX,
+  EASTER_CAT_INITIAL_REVEAL_OFFSET,
+  resolveEasterCatRevealOffsetAfterResize,
+  resolveEasterCatRevealOffsetAfterWheel,
+  resetEasterCatRevealOffset
+} from './easterCatRevealLogic';
 import { GLOBAL_SETTINGS_NAV_ITEMS } from './settingsSectionLogic';
 import type {
   SettingsNavigationPanelProps,
   SettingsPageProps
 } from './settingsPageTypes';
+
+type SettingsEasterCatStyle = CSSProperties & {
+  '--settings-easter-cat-frame-size': string;
+  '--settings-easter-cat-reveal-offset': string;
+};
 
 function SettingsSecurityPanel({
   globalSettings,
@@ -434,10 +453,8 @@ function renderSettingsContent(props: SettingsPageProps) {
       productIconPath={props.productIconPath}
       productNameZh={props.productNameZh}
       productNameEn={props.productNameEn}
-      isCatPetted={props.isCatPetted}
       onOpenBilibili={props.onOpenBilibili}
       onOpenGithubReleases={props.onOpenGithubReleases}
-      onTriggerEasterEgg={props.onTriggerEasterEgg}
       onStartVersionLongPress={props.onStartVersionLongPress}
       onClearVersionLongPress={props.onClearVersionLongPress}
     />
@@ -461,14 +478,108 @@ function SettingsPage(props: SettingsPageProps) {
 
 export function SettingsNavigationPanel({
   selectedSection,
-  onSelectSection
+  navigationSide,
+  isCatPetted,
+  onSelectSection,
+  onTriggerEasterEgg
 }: SettingsNavigationPanelProps) {
+  const panelRef = useRef<HTMLElement | null>(null);
+  const [catRevealOffset, setCatRevealOffset] = useState(
+    EASTER_CAT_INITIAL_REVEAL_OFFSET
+  );
+  const isAboutSection = selectedSection === 'about';
+  const isCatRevealed = catRevealOffset > EASTER_CAT_INITIAL_REVEAL_OFFSET;
+  const catStyle: SettingsEasterCatStyle = {
+    '--settings-easter-cat-frame-size': `${EASTER_CAT_FRAME_SIZE_PX}px`,
+    '--settings-easter-cat-reveal-offset': `${catRevealOffset}px`
+  };
+  const panelClassName = [
+    'right-panel-page',
+    'settings-navigation-panel',
+    `settings-navigation-panel--nav-${navigationSide}`,
+    isAboutSection ? 'settings-navigation-panel--about' : ''
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const catClassName = [
+    'settings-easter-cat',
+    `settings-easter-cat--nav-${navigationSide}`,
+    isCatRevealed ? 'is-revealed' : ''
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const getCatRevealContainerHeight = useCallback(
+    () => panelRef.current?.getBoundingClientRect().height ?? 0,
+    []
+  );
+  const updateCatRevealFromWheel = useCallback((event: WheelEvent) => {
+    setCatRevealOffset((currentOffset) =>
+      resolveEasterCatRevealOffsetAfterWheel({
+        currentOffset,
+        deltaY: event.deltaY,
+        deltaMode: event.deltaMode,
+        frameHeight: EASTER_CAT_FRAME_SIZE_PX,
+        containerHeight: getCatRevealContainerHeight()
+      })
+    );
+  }, [getCatRevealContainerHeight]);
+
+  useEffect(() => {
+    if (isAboutSection) {
+      return;
+    }
+
+    setCatRevealOffset(resetEasterCatRevealOffset());
+  }, [isAboutSection]);
+
+  useEffect(() => {
+    if (!isAboutSection) {
+      return undefined;
+    }
+
+    const panelElement = panelRef.current;
+    const wheelTarget =
+      panelElement?.closest<HTMLElement>('.app-shell') ?? panelElement;
+
+    if (!wheelTarget) {
+      return undefined;
+    }
+
+    wheelTarget.addEventListener('wheel', updateCatRevealFromWheel, { passive: true });
+
+    return () => {
+      wheelTarget.removeEventListener('wheel', updateCatRevealFromWheel);
+    };
+  }, [isAboutSection, updateCatRevealFromWheel]);
+
+  useEffect(() => {
+    if (!isAboutSection || typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const handleResize = () => {
+      setCatRevealOffset((currentOffset) =>
+        resolveEasterCatRevealOffsetAfterResize({
+          currentOffset,
+          frameHeight: EASTER_CAT_FRAME_SIZE_PX,
+          containerHeight: getCatRevealContainerHeight()
+        })
+      );
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [getCatRevealContainerHeight, isAboutSection]);
+
   return (
-    <section className="right-panel-page">
+    <section ref={panelRef} className={panelClassName}>
       <div className="right-panel-title-row">
         <h2 className="right-panel-title">全局设置</h2>
       </div>
-      <div className="right-panel-stack">
+      <div className="right-panel-stack settings-navigation-panel__stack">
         <nav className="global-settings-nav" aria-label="全局设置功能导航">
           {GLOBAL_SETTINGS_NAV_ITEMS.map((item) => (
             <button
@@ -485,6 +596,29 @@ export function SettingsNavigationPanel({
           ))}
         </nav>
       </div>
+      {isAboutSection ? (
+        <button
+          type="button"
+          className={catClassName}
+          style={catStyle}
+          tabIndex={isCatRevealed ? 0 : -1}
+          aria-hidden={isCatRevealed ? undefined : true}
+          onClick={onTriggerEasterEgg}
+          onTouchEnd={(event) => {
+            event.preventDefault();
+            onTriggerEasterEgg();
+          }}
+          aria-label="净流小猫"
+        >
+          <span className="settings-easter-cat__frame" aria-hidden="true">
+            <NfSvgIcon
+              className="settings-easter-cat__image"
+              svg={isCatPetted ? CatPettedNyaaIcon : CatIdleIcon}
+              decorative
+            />
+          </span>
+        </button>
+      ) : null}
     </section>
   );
 }

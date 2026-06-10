@@ -1,10 +1,6 @@
 import type { PointerEvent } from 'react';
 import bilibiliIcon from '../../assets/Bilibili_tv_a.svg';
-import {
-  CatIdleIcon,
-  CatPettedNyaaIcon,
-  NfGithubIcon
-} from '../../assets/icons';
+import { NfGithubIcon } from '../../assets/icons';
 import NfSvgIcon from '../../components/NfSvgIcon';
 
 export type AboutNetraFlowPanelProps = {
@@ -12,10 +8,8 @@ export type AboutNetraFlowPanelProps = {
   productIconPath: string;
   productNameZh: string;
   productNameEn: string;
-  isCatPetted: boolean;
   onOpenBilibili: () => void;
   onOpenGithubReleases: () => void;
-  onTriggerEasterEgg: () => void;
   onStartVersionLongPress: (event: PointerEvent<HTMLElement>) => void;
   onClearVersionLongPress: () => void;
 };
@@ -25,10 +19,8 @@ function AboutNetraFlowPanel({
   productIconPath,
   productNameZh,
   productNameEn,
-  isCatPetted,
   onOpenBilibili,
   onOpenGithubReleases,
-  onTriggerEasterEgg,
   onStartVersionLongPress,
   onClearVersionLongPress
 }: AboutNetraFlowPanelProps) {
@@ -90,24 +82,6 @@ function AboutNetraFlowPanel({
         </div>
       </section>
 
-      <button
-        type="button"
-        className="about-netraflow__cat"
-        onClick={onTriggerEasterEgg}
-        onTouchEnd={(event) => {
-          event.preventDefault();
-          onTriggerEasterEgg();
-        }}
-        aria-label="净流小猫"
-      >
-        <span className="cat-easter-frame" aria-hidden="true">
-          <NfSvgIcon
-            className="cat-easter-image"
-            svg={isCatPetted ? CatPettedNyaaIcon : CatIdleIcon}
-            decorative
-          />
-        </span>
-      </button>
     </section>
   );
 }

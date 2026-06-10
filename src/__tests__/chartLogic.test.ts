@@ -18,6 +18,7 @@ import {
   resolveLinePointLabelLayout,
   getVisibleTrendMarkerIndexes,
   buildSteppedStackLayers,
+  buildSteppedLineSegments,
   buildDisplayChartItems,
   createSteppedAreaPath,
   createSteppedHorizontalLinePath,
@@ -42,6 +43,63 @@ const rectsOverlap = (
   left.right > right.left &&
   left.top < right.bottom &&
   left.bottom > right.top;
+
+const expandRect = (
+  rect: { left: number; top: number; right: number; bottom: number },
+  padding: number
+) => ({
+  left: rect.left - padding,
+  top: rect.top - padding,
+  right: rect.right + padding,
+  bottom: rect.bottom + padding
+});
+
+const rangesTouchOrOverlap = (
+  leftStart: number,
+  leftEnd: number,
+  rightStart: number,
+  rightEnd: number
+) =>
+  Math.max(Math.min(leftStart, leftEnd), Math.min(rightStart, rightEnd)) <=
+  Math.min(Math.max(leftStart, leftEnd), Math.max(rightStart, rightEnd));
+
+const axisAlignedSegmentIntersectsRect = (
+  segment: { x1: number; y1: number; x2: number; y2: number },
+  rect: { left: number; top: number; right: number; bottom: number }
+) => {
+  if (segment.y1 === segment.y2) {
+    return (
+      segment.y1 >= rect.top &&
+      segment.y1 <= rect.bottom &&
+      rangesTouchOrOverlap(segment.x1, segment.x2, rect.left, rect.right)
+    );
+  }
+
+  if (segment.x1 === segment.x2) {
+    return (
+      segment.x1 >= rect.left &&
+      segment.x1 <= rect.right &&
+      rangesTouchOrOverlap(segment.y1, segment.y2, rect.top, rect.bottom)
+    );
+  }
+
+  return false;
+};
+
+const assertLayoutClearOfSegmentsOrHidden = (
+  layout: ReturnType<typeof resolveLinePointLabelLayout>,
+  segments: Array<{ x1: number; y1: number; x2: number; y2: number }>,
+  padding = 8
+) => {
+  if (layout.hidden) {
+    return;
+  }
+
+  assert.equal(
+    segments.some((segment) => axisAlignedSegmentIntersectsRect(segment, expandRect(layout.bounds, padding))),
+    false
+  );
+};
 
 test('keeps the fixed NetraFlow chart palette order', () => {
   assert.deepEqual([...NETRAFLOW_CHART_PALETTE], [
@@ -146,6 +204,22 @@ test('creates stepped line and area paths without diagonal interpolation', () =>
 
   assert.equal(linePath, 'M 0 90 H 10 V 80 H 20 V 85');
   assert.equal(areaPath, 'M 0 90 H 10 V 80 L 10 95 V 100 H 0 Z');
+});
+
+test('builds stepped line segments from the same horizontal-then-vertical path geometry', () => {
+  const segments = buildSteppedLineSegments(
+    [10, 20, 20, 15],
+    (index) => index * 10,
+    (value) => 100 - value
+  );
+
+  assert.deepEqual(segments, [
+    { x1: 0, y1: 90, x2: 10, y2: 90 },
+    { x1: 10, y1: 90, x2: 10, y2: 80 },
+    { x1: 10, y1: 80, x2: 20, y2: 80 },
+    { x1: 20, y1: 80, x2: 30, y2: 80 },
+    { x1: 30, y1: 80, x2: 30, y2: 85 }
+  ]);
 });
 
 test('creates stepped helper paths with separate horizontal and vertical segments', () => {
@@ -410,7 +484,7 @@ test('line point value labels avoid nearby line segments when another side is cl
 
 test('line point value labels keep an expanded safety gap from line segments', () => {
   const lineY = 64;
-  const lineSafeGap = 8;
+  const lineSafeGap = 12;
   const layout = resolveLinePointLabelLayout({
     pointX: 100,
     pointY: 70,
@@ -433,6 +507,62 @@ test('line point value labels keep an expanded safety gap from line segments', (
   );
 });
 
+test('adaptive line point labels use real stepped segments for horizontal and vertical avoidance', () => {
+  const segments = buildSteppedLineSegments(
+    [931340, 1483860, 1483860, 2352580],
+    (index) => index * 70,
+    (value) => 120 - value / 30000
+  );
+  const horizontalLayout = resolveLinePointLabelLayout({
+    pointX: 105,
+    pointY: 64,
+    plotLeft: 0,
+    plotTop: 0,
+    plotWidth: 220,
+    plotHeight: 140,
+    labelWidth: 70,
+    labelHeight: 12,
+    lineSegments: segments,
+    allowHide: true
+  });
+  const verticalLayout = resolveLinePointLabelLayout({
+    pointX: 70,
+    pointY: 70,
+    plotLeft: 0,
+    plotTop: 0,
+    plotWidth: 220,
+    plotHeight: 140,
+    labelWidth: 70,
+    labelHeight: 12,
+    lineSegments: segments,
+    allowHide: true
+  });
+
+  assertLayoutClearOfSegmentsOrHidden(horizontalLayout, segments, 12);
+  assertLayoutClearOfSegmentsOrHidden(verticalLayout, segments, 12);
+});
+
+test('adaptive middle line point labels move or hide instead of pressing onto a nearby step', () => {
+  const lineSegments = [
+    { x1: 30, y1: 58, x2: 190, y2: 58 },
+    { x1: 110, y1: 58, x2: 110, y2: 108 }
+  ];
+  const layout = resolveLinePointLabelLayout({
+    pointX: 110,
+    pointY: 82,
+    plotLeft: 0,
+    plotTop: 0,
+    plotWidth: 220,
+    plotHeight: 140,
+    labelWidth: 70,
+    labelHeight: 12,
+    lineSegments,
+    allowHide: true
+  });
+
+  assertLayoutClearOfSegmentsOrHidden(layout, lineSegments, 12);
+});
+
 test('line point value labels recheck collisions after edge clamping', () => {
   const lineY = 54;
   const layout = resolveLinePointLabelLayout({
@@ -451,7 +581,7 @@ test('line point value labels recheck collisions after edge clamping', () => {
   });
 
   assert.ok(layout.bounds.right <= 220);
-  assert.ok(layout.bounds.bottom + 8 <= lineY || layout.bounds.top - 8 >= lineY);
+  assertLayoutClearOfSegmentsOrHidden(layout, [{ x1: 128, y1: lineY, x2: 216, y2: lineY }], 12);
 });
 
 test('line point value labels avoid already placed labels', () => {
@@ -469,6 +599,62 @@ test('line point value labels avoid already placed labels', () => {
   });
 
   assert.equal(rectsOverlap(layout.bounds, placedRect), false);
+});
+
+test('adaptive line point labels avoid other rendered points', () => {
+  const pointObstacle = { left: 88, top: 40, right: 112, bottom: 64 };
+  const layout = resolveLinePointLabelLayout({
+    pointX: 100,
+    pointY: 82,
+    plotLeft: 0,
+    plotTop: 0,
+    plotWidth: 220,
+    plotHeight: 140,
+    labelWidth: 64,
+    labelHeight: 12,
+    pointObstacles: [{ x: 100, y: 52 }],
+    pointRadius: 3,
+    pointPadding: 9,
+    allowHide: true
+  });
+
+  if (!layout.hidden) {
+    assert.equal(rectsOverlap(layout.bounds, pointObstacle), false);
+  }
+});
+
+test('adaptive line point labels hide when only already occupied label space remains', () => {
+  const placedLabelRects = [
+    { left: 0, top: 14, right: 220, bottom: 70 },
+    { left: 0, top: 70, right: 220, bottom: 126 }
+  ];
+  const adaptiveLayout = resolveLinePointLabelLayout({
+    pointX: 110,
+    pointY: 70,
+    plotLeft: 0,
+    plotTop: 0,
+    plotWidth: 220,
+    plotHeight: 140,
+    labelWidth: 64,
+    labelHeight: 12,
+    placedLabelRects,
+    allowHide: true
+  });
+  const minMaxLayout = resolveLinePointLabelLayout({
+    pointX: 110,
+    pointY: 70,
+    plotLeft: 0,
+    plotTop: 0,
+    plotWidth: 220,
+    plotHeight: 140,
+    labelWidth: 64,
+    labelHeight: 12,
+    placedLabelRects,
+    allowHide: false
+  });
+
+  assert.equal(adaptiveLayout.hidden, true);
+  assert.equal(minMaxLayout.hidden, undefined);
 });
 
 test('adaptive line point labels can hide when every candidate would press onto a line', () => {
@@ -501,6 +687,44 @@ test('adaptive line point labels can hide when every candidate would press onto 
     labelHeight: 12,
     lineSegments: blockingLines,
     allowHide: false
+  });
+
+  assert.equal(adaptiveLayout.hidden, true);
+  assert.equal(minMaxLayout.hidden, undefined);
+});
+
+test('adaptive right-edge terminal labels hide when no stepped-line-safe candidate exists', () => {
+  const blockingLines = Array.from({ length: 16 }, (_, index) => 8 + index * 8).map((y) => ({
+    x1: 0,
+    y1: y,
+    x2: 220,
+    y2: y
+  }));
+  const adaptiveLayout = resolveLinePointLabelLayout({
+    pointX: 216,
+    pointY: 70,
+    plotLeft: 0,
+    plotTop: 0,
+    plotWidth: 220,
+    plotHeight: 140,
+    labelWidth: 64,
+    labelHeight: 12,
+    lineSegments: blockingLines,
+    allowHide: true,
+    isEndPoint: true
+  });
+  const minMaxLayout = resolveLinePointLabelLayout({
+    pointX: 216,
+    pointY: 70,
+    plotLeft: 0,
+    plotTop: 0,
+    plotWidth: 220,
+    plotHeight: 140,
+    labelWidth: 64,
+    labelHeight: 12,
+    lineSegments: blockingLines,
+    allowHide: false,
+    isEndPoint: true
   });
 
   assert.equal(adaptiveLayout.hidden, true);
