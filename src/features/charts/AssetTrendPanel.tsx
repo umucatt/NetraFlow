@@ -6,6 +6,7 @@ import {
   useState
 } from 'react';
 import {
+  buildSteppedLineSegments,
   createSteppedLinePath,
   getChartAxisLabelIndexes,
   getChartValueLabelIndexes,
@@ -13,7 +14,6 @@ import {
   getNearestChangeDatePointIndex,
   resolveLinePointLabelLayout,
   getVisibleTrendMarkerIndexes,
-  type ChartLineSegment,
   type ChartPointKind,
   type ChartPointValueMode,
   type ChartXAxisRange
@@ -279,50 +279,15 @@ export function AssetTrendChart({
       ? 2.25
       : 2.5;
   const trendPointRadius = 3.25;
-  const getPointLineSegments = (series: TrendChartSeries, index: number): ChartLineSegment[] => {
-    const value = series.values[index];
-    const segments: ChartLineSegment[] = [];
-
-    if (index > 0) {
-      const previousValue = series.values[index - 1];
-
-      segments.push(
-        {
-          x1: getX(index - 1),
-          y1: getY(previousValue),
-          x2: getX(index),
-          y2: getY(previousValue)
-        },
-        {
-          x1: getX(index),
-          y1: getY(previousValue),
-          x2: getX(index),
-          y2: getY(value)
-        }
-      );
-    }
-
-    if (index < series.values.length - 1) {
-      const nextValue = series.values[index + 1];
-
-      segments.push(
-        {
-          x1: getX(index),
-          y1: getY(value),
-          x2: getX(index + 1),
-          y2: getY(value)
-        },
-        {
-          x1: getX(index + 1),
-          y1: getY(value),
-          x2: getX(index + 1),
-          y2: getY(nextValue)
-        }
-      );
-    }
-
-    return segments;
-  };
+  const visibleLineSegments = visibleSeries.flatMap((series) =>
+    buildSteppedLineSegments(series.values, getX, getY)
+  );
+  const visiblePointObstacles = visibleSeries.flatMap((series) =>
+    series.values.map((value, index) => ({
+      x: getX(index),
+      y: getY(value)
+    }))
+  );
   const valueLabelIndexesBySeries = new Map<TrendChartSeries['key'], number[]>();
   const markerIndexesBySeries = new Map<TrendChartSeries['key'], number[]>();
   const valueLabelLayouts = new Map<
@@ -355,7 +320,8 @@ export function AssetTrendChart({
         preferBelow: series.key === 'negative' || value < 0,
         labelWidth: estimatePointValueLabelWidth(labelText),
         pointRadius: trendPointRadius,
-        lineSegments: getPointLineSegments(series, index),
+        lineSegments: visibleLineSegments,
+        pointObstacles: visiblePointObstacles,
         placedLabelRects,
         allowHide: settings.pointValueMode === 'adaptive',
         isEndPoint: index === series.values.length - 1
@@ -625,7 +591,8 @@ export function AssetTrendChart({
                     preferBelow: series.key === 'negative' || value < 0,
                     labelWidth: estimatePointValueLabelWidth(labelText),
                     pointRadius: trendPointRadius,
-                    lineSegments: getPointLineSegments(series, index),
+                    lineSegments: visibleLineSegments,
+                    pointObstacles: visiblePointObstacles,
                     allowHide: settings.pointValueMode === 'adaptive',
                     isEndPoint: index === series.values.length - 1
                   });

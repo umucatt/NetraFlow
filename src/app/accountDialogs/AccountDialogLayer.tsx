@@ -11,6 +11,8 @@ import type {
   AccountTypeDialogPropsGroup
 } from './accountDialogTypes';
 
+type AccountTypeEditorDialogPresentation = 'modal' | 'side';
+
 function AccountTypeEditorDialog({
   editor,
   nameDraft,
@@ -23,12 +25,15 @@ function AccountTypeEditorDialog({
   onNatureChange,
   onStatsChange,
   onSubmit,
-  onCancel
-}: AccountTypeDialogPropsGroup) {
+  onCancel,
+  presentation = 'modal'
+}: AccountTypeDialogPropsGroup & { presentation?: AccountTypeEditorDialogPresentation }) {
+  const isSidePresentation = presentation === 'side';
+
   return (
     <OverlayBackdrop
       onBack={onCancel}
-      className="modal-backdrop"
+      className={isSidePresentation ? 'layout-layer layout-layer--right' : 'modal-backdrop'}
       style={{
         position: 'fixed',
         inset: 0,
@@ -231,7 +236,12 @@ export function AccountDialogLayer({
 
       {create ? <AccountCreateDialog {...create} /> : null}
 
-      {accountType ? <AccountTypeEditorDialog {...accountType} /> : null}
+      {accountType ? (
+        <AccountTypeEditorDialog
+          {...accountType}
+          presentation={create && accountType.editor.mode === 'create' ? 'side' : 'modal'}
+        />
+      ) : null}
     </>
   );
 }

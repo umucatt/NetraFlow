@@ -7387,7 +7387,6 @@ function App() {
     productIconPath: PRODUCT_ICON_PATH,
     productNameZh: PRODUCT_NAME_ZH,
     productNameEn: PRODUCT_NAME_EN,
-    isCatPetted,
     autoLockMinutesInput,
     onPositiveNegativeColorModeChange: updatePositiveNegativeColorMode,
     onHomeAssetStatMetricChange: updateHomeAssetStatMetric,
@@ -7418,7 +7417,6 @@ function App() {
     onOpenResetConfirmation: openResetConfirmation,
     onOpenBilibili: openBilibiliProfile,
     onOpenGithubReleases: openGithubReleases,
-    onTriggerEasterEgg: petNyaaCat,
     onStartVersionLongPress: startAboutVersionLongPress,
     onClearVersionLongPress: clearSecretConsoleLongPress
   };
@@ -7614,7 +7612,10 @@ function App() {
     },
     settings: {
       selectedSection: globalSettingsSection,
+      navigationSide: globalSettings.mainContentPosition === 'right' ? 'left' : 'right',
+      isCatPetted,
       onSelectSection: setGlobalSettingsSection,
+      onTriggerEasterEgg: petNyaaCat,
       onClose: closeGlobalSettings
     },
     rollupImport: {

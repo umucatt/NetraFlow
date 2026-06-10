@@ -121,6 +121,9 @@ test('total and account line charts share point value label avoidance layout', (
 
   assert.equal(chartDisplayPanelSource.includes('<AssetTrendPanel'), true);
   assert.equal(mainContentRendererSource.includes('<AssetTrendChart'), true);
+  assert.equal(assetTrendPanelSource.includes('buildSteppedLineSegments'), true);
+  assert.equal(assetTrendPanelSource.includes('lineSegments: visibleLineSegments'), true);
+  assert.equal(assetTrendPanelSource.includes('pointObstacles: visiblePointObstacles'), true);
   assert.equal(assetTrendPanelSource.includes('resolveLinePointLabelLayout'), true);
   assert.equal(assetTrendPanelSource.includes('placedLabelRects'), true);
   assert.equal(assetTrendPanelSource.includes("allowHide: settings.pointValueMode === 'adaptive'"), true);
@@ -128,6 +131,7 @@ test('total and account line charts share point value label avoidance layout', (
   assert.equal(assetTrendPanelSource.includes('if (labelLayout.hidden)'), true);
   assert.equal(assetTrendPanelSource.includes('dominantBaseline={labelLayout.dominantBaseline}'), true);
   assert.equal(chartDisplayPanelSource.includes('getChartValueLabelLayout'), true);
+  assert.equal(chartDisplayPanelSource.includes('buildSteppedLineSegments'), false);
   assert.equal(chartDisplayPanelSource.includes('resolveLinePointLabelLayout'), false);
 });
 
@@ -304,7 +308,8 @@ test('page surfaces and right panel page frames stay scoped', () => {
     '\u63d0\u9192\u5468\u671f',
     '\u66f4\u6539\u63d0\u9192\u5468\u671f'
   ].forEach((removedText) => assert.equal(appSource.includes(removedText), false));
-  assert.equal(globalSettingsNavSource.includes('className="right-panel-page"'), true);
+  assert.equal(globalSettingsNavSource.includes("'right-panel-page'"), true);
+  assert.equal(globalSettingsNavSource.includes('className={panelClassName}'), true);
   assert.equal(appSource.includes('actionsClassName: rollupImport.actionsClassName'), true);
   assert.equal(rollupActionsSource.includes('rollupImport.actionsClassName'), true);
   assert.equal(rollupControllerSource.includes('right-panel-page--rollup-import-actions'), true);
@@ -1961,6 +1966,7 @@ test('history panel opacity and two-column title alignment use shared structure 
 test('local Noto fonts, emoji fallback, and about-page license copy stay wired', () => {
   const appSource = readProjectFile('src/App.tsx');
   const aboutPanelSource = readProjectFile('src/features/settings/AboutNetraFlowPanel.tsx');
+  const settingsPageSource = readProjectFile('src/features/settings/SettingsPage.tsx');
   const stylesSource = readProjectStyles();
 
   assert.match(stylesSource, /^@font-face\s*\{[\s\S]*font-family: 'NF Noto Sans CJK SC';/);
@@ -1984,14 +1990,15 @@ test('local Noto fonts, emoji fallback, and about-page license copy stay wired',
     aboutPanelSource.indexOf('about-netraflow__license') <
       aboutPanelSource.indexOf('about-netraflow__contact')
   );
-  const aboutPageSource = aboutPanelSource;
-  const contactToCatSource = aboutPageSource.slice(
-    aboutPageSource.indexOf('about-netraflow__contact'),
-    aboutPageSource.indexOf('className="about-netraflow__cat"')
+  const contactSource = aboutPanelSource.slice(
+    aboutPanelSource.indexOf('about-netraflow__contact')
   );
   assert.equal(appSource.includes('NETRAFLOW_MEMO_PARAGRAPHS'), false);
   assert.equal(`${appSource}\n${aboutPanelSource}`.includes('about-netraflow__memo'), false);
   assert.equal(stylesSource.includes('about-netraflow__memo'), false);
+  assert.equal(aboutPanelSource.includes('about-netraflow__cat'), false);
+  assert.equal(stylesSource.includes('.about-netraflow__cat'), false);
+  assert.equal(settingsPageSource.includes('settings-easter-cat'), true);
   assert.equal(`${appSource}\n${aboutPanelSource}`.includes('<strong>净流 NetraFlow</strong>'), false);
   assert.equal(`${appSource}\n${aboutPanelSource}`.includes('借助 ChatGPT 和 Codex、Windsurf'), false);
   assert.equal(aboutPanelSource.includes('<h3 id="netraflow-contact-title">获取信息</h3>'), true);
@@ -2000,10 +2007,10 @@ test('local Noto fonts, emoji fallback, and about-page license copy stay wired',
   assert.equal(aboutPanelSource.includes('NfGithubIcon'), true);
   assert.equal(appSource.includes(GITHUB_RELEASES_URL), true);
   assert.equal(existsSync(new URL('../../../src/assets/icons/common/nf-github.svg', import.meta.url)), true);
-  assert.equal(contactToCatSource.includes('</section>'), true);
+  assert.equal(contactSource.includes('</section>'), true);
   assert.match(
     stylesSource,
-    /\.about-netraflow__cat,\s*\.about-netraflow__cat \*\s*\{[^}]*user-select: auto;[^}]*-webkit-user-select: auto;[^}]*cursor: pointer;[^}]*\}/s
+    /\.settings-easter-cat,\s*\.settings-easter-cat \*\s*\{[^}]*user-select: auto;[^}]*-webkit-user-select: auto;[^}]*cursor: pointer;[^}]*\}/s
   );
   assert.equal(
     existsSync(new URL('../../../src/assets/fonts/noto/OFL.txt', import.meta.url)),
@@ -2042,6 +2049,64 @@ test('account add and restore page copy uses archived metadata without extra tit
   );
   assert.equal(stylesSource.includes('--account-add-panel-bg: var(--panel-bg);'), true);
   assert.equal(stylesSource.includes('.account-restore-card__restore-button'), true);
+});
+
+test('account add and restore opens as a two-column layer focused on restore', () => {
+  const accountDialogLayerSource = readProjectFile('src/app/accountDialogs/AccountDialogLayer.tsx');
+  const accountEditorSource = readProjectFile('src/features/account/AccountEditorDialog.tsx');
+  const appShellSource = readProjectFile('src/styles/app-shell.css');
+  const restoreDialogSource = accountEditorSource.slice(
+    accountEditorSource.indexOf('function AccountRestoreDialog'),
+    accountEditorSource.indexOf('function AccountRestoreTargetDialog')
+  );
+  const createDialogSource = accountEditorSource.slice(
+    accountEditorSource.indexOf('function AccountCreateDialog'),
+    accountEditorSource.indexOf('export {')
+  );
+  const accountTypeEditorSource = accountDialogLayerSource.slice(
+    accountDialogLayerSource.indexOf('function AccountTypeEditorDialog'),
+    accountDialogLayerSource.indexOf('export function AccountDialogLayer')
+  );
+  const accountLayerRenderSource = accountDialogLayerSource.slice(
+    accountDialogLayerSource.indexOf('export function AccountDialogLayer')
+  );
+
+  assert.equal(
+    restoreDialogSource.includes('backdropClassName="layout-layer layout-layer--left"'),
+    true
+  );
+  assert.equal(
+    createDialogSource.includes('backdropClassName="layout-layer layout-layer--right"'),
+    true
+  );
+  assert.equal(restoreDialogSource.includes('backdropClassName="modal-backdrop"'), false);
+  assert.equal(createDialogSource.includes('backdropClassName="modal-backdrop"'), false);
+  assert.equal(appShellSource.includes('.app-shell.app-shell--main-right > .layout-layer--left'), true);
+  assert.equal(appShellSource.includes('.app-shell.app-shell--main-right > .layout-layer--right'), true);
+  assert.equal(
+    accountLayerRenderSource.indexOf('<AccountRestoreDialog') <
+      accountLayerRenderSource.indexOf('<AccountCreateDialog'),
+    true
+  );
+
+  assert.equal(restoreDialogSource.includes('archivedAccounts.length === 0'), true);
+  assert.equal(restoreDialogSource.includes('filteredAccounts.map((account)'), true);
+  assert.equal(restoreDialogSource.includes('onRestore(account)'), true);
+  assert.equal(createDialogSource.includes('accountTypeInputRef'), true);
+  assert.equal(createDialogSource.includes('accountTypeInputPlaceholder'), true);
+  assert.equal(createDialogSource.includes('onSwitchAccountType'), true);
+  assert.equal(createDialogSource.includes('newAccountNamePlaceholder'), true);
+  assert.equal(createDialogSource.includes('newAccountAmount'), true);
+  assert.equal(createDialogSource.includes('onOpenCreateAccountType'), true);
+
+  assert.equal(accountTypeEditorSource.includes("presentation === 'side'"), true);
+  assert.equal(accountTypeEditorSource.includes("'layout-layer layout-layer--right'"), true);
+  assert.equal(
+    accountLayerRenderSource.includes(
+      "presentation={create && accountType.editor.mode === 'create' ? 'side' : 'modal'}"
+    ),
+    true
+  );
 });
 
 test('deleted original account category restore uses an explicit unselected category chooser', () => {

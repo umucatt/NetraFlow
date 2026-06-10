@@ -80,6 +80,11 @@ export type ChartLineSegment = {
   y2: number;
 };
 
+export type ChartPointPosition = {
+  x: number;
+  y: number;
+};
+
 export type LinePointValueLabelPlacement =
   | 'above'
   | 'right-above'
@@ -110,6 +115,7 @@ export type ChartValueLabelLayoutOptions = {
 
 export type ResolveLinePointLabelLayoutOptions = ChartValueLabelLayoutOptions & {
   lineSegments?: ChartLineSegment[];
+  pointObstacles?: ChartPointPosition[];
   placedLabelRects?: ChartValueLabelRect[];
   pointRadius?: number;
   linePadding?: number;
@@ -611,9 +617,10 @@ export const resolveLinePointLabelLayout = ({
   gap = 10,
   padding = 2,
   lineSegments = [],
+  pointObstacles = [],
   placedLabelRects = [],
   pointRadius = 3,
-  linePadding = 8,
+  linePadding = 12,
   pointPadding = 6,
   allowHide = false,
   isEndPoint = false
@@ -706,12 +713,17 @@ export const resolveLinePointLabelLayout = ({
       preferenceIndex: gapIndex * basePlacementOrder.length + placementIndex
     }))
   );
-  const pointBounds = {
-    left: pointX - pointRadius - pointPadding,
-    top: pointY - pointRadius - pointPadding,
-    right: pointX + pointRadius + pointPadding,
-    bottom: pointY + pointRadius + pointPadding
-  };
+  const extraPointObstacles = pointObstacles.filter(
+    (point) =>
+      Math.abs(point.x - pointX) > 0.000001 || Math.abs(point.y - pointY) > 0.000001
+  );
+  const pointObstacleBounds = [{ x: pointX, y: pointY }, ...extraPointObstacles]
+    .map((point) => ({
+      left: point.x - pointRadius - pointPadding,
+      top: point.y - pointRadius - pointPadding,
+      right: point.x + pointRadius + pointPadding,
+      bottom: point.y + pointRadius + pointPadding
+    }));
   const getCollisionMetrics = (rect: ChartValueLabelRect) => {
     const hardLineCollisionCount = lineSegments.filter((segment) =>
       lineSegmentIntersectsRect(segment, rect)
@@ -722,16 +734,20 @@ export const resolveLinePointLabelLayout = ({
     const placedCollisionCount = placedLabelRects.filter((placedRect) =>
       rectsOverlap(expandRect(rect, 2), expandRect(placedRect, 2))
     ).length;
-    const pointCollision = rectsOverlap(rect, pointBounds) ? 1 : 0;
+    const pointCollisionCount = pointObstacleBounds.filter((bounds) =>
+      rectsOverlap(rect, bounds)
+    ).length;
     const hardConflictCount =
-      hardLineCollisionCount + safeLineCollisionCount + pointCollision;
+      hardLineCollisionCount +
+      safeLineCollisionCount +
+      pointCollisionCount;
     const edgeOverflow = isRectInside(rect, plotBounds) ? 0 : 1;
 
     return {
       hardLineCollisionCount,
       safeLineCollisionCount,
       placedCollisionCount,
-      pointCollision,
+      pointCollision: pointCollisionCount,
       hardConflictCount,
       edgeOverflow
     };
@@ -808,16 +824,31 @@ export const resolveLinePointLabelLayout = ({
       ...candidate,
       rect,
       score,
-      hardConflictCount
+      hardConflictCount,
+      placedCollisionCount,
+      edgeOverflow
     };
   });
   const clearCandidates = scoredCandidates.filter(
-    (candidate) => candidate.hardConflictCount === 0
+    (candidate) => candidate.hardConflictCount === 0 && candidate.edgeOverflow === 0
   );
-  const selected = (clearCandidates.length > 0 ? clearCandidates : scoredCandidates).reduce(
+  const safeCandidates = clearCandidates.filter(
+    (candidate) => candidate.placedCollisionCount === 0
+  );
+  const selectableCandidates = safeCandidates.length > 0
+    ? safeCandidates
+    : clearCandidates.length > 0
+      ? clearCandidates
+      : scoredCandidates;
+  const selected = selectableCandidates.reduce(
     (best, candidate) => (candidate.score < best.score ? candidate : best)
   );
   const labelPoint = getLabelPoint(selected.rect, selected.textAnchor);
+  const shouldHide =
+    allowHide &&
+    (selected.hardConflictCount > 0 ||
+      selected.placedCollisionCount > 0 ||
+      selected.edgeOverflow > 0);
 
   return {
     x: labelPoint.x,
@@ -826,7 +857,7 @@ export const resolveLinePointLabelLayout = ({
     dominantBaseline: 'central',
     bounds: selected.rect,
     placement: selected.placement,
-    hidden: allowHide && selected.hardConflictCount > 0 ? true : undefined
+    hidden: shouldHide ? true : undefined
   };
 };
 
@@ -1196,6 +1227,41 @@ export const buildDisplayChartItems = (
   }
 
   return displayItems;
+};
+
+export const buildSteppedLineSegments = (
+  values: number[],
+  getX: (index: number) => number,
+  getY: (value: number) => number
+): ChartLineSegment[] => {
+  const segments: ChartLineSegment[] = [];
+
+  for (let index = 1; index < values.length; index += 1) {
+    const previousX = getX(index - 1);
+    const currentX = getX(index);
+    const previousY = getY(values[index - 1]);
+    const currentY = getY(values[index]);
+
+    if (previousX !== currentX) {
+      segments.push({
+        x1: previousX,
+        y1: previousY,
+        x2: currentX,
+        y2: previousY
+      });
+    }
+
+    if (previousY !== currentY) {
+      segments.push({
+        x1: currentX,
+        y1: previousY,
+        x2: currentX,
+        y2: currentY
+      });
+    }
+  }
+
+  return segments;
 };
 
 export const createSteppedLinePath = (

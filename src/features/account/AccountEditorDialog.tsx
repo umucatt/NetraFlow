@@ -206,7 +206,7 @@ function AccountRestoreDialog({
       titleClassName="account-add-restore-panel__title"
       titleStyle={{ margin: 0 }}
       className="account-add-restore-panel"
-      backdropClassName="modal-backdrop"
+      backdropClassName="layout-layer layout-layer--left"
       backdropStyle={centeredBackdropStyle}
       cardStyle={addRestoreCardStyle}
       onClose={onCancel}
@@ -376,7 +376,7 @@ function AccountCreateDialog({
       titleClassName="account-add-restore-panel__title"
       titleStyle={{ margin: 0 }}
       className="account-add-restore-panel account-add-restore-panel--form"
-      backdropClassName="modal-backdrop"
+      backdropClassName="layout-layer layout-layer--right"
       backdropStyle={centeredBackdropStyle}
       cardStyle={addAccountCardStyle}
       onClose={onCancel}
