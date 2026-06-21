@@ -229,7 +229,6 @@ export const getReleaseTagFromEnv = (env = {}) => {
 
 export const getExpectedReleaseArtifacts = ({ productName, version }) => ({
   installer: `${productName}_${version}_Setup.exe`,
-  installerBlockmap: `${productName}_${version}_Setup.exe.blockmap`,
   portable: `${productName}_${version}_Portable.zip`
 });
 
@@ -366,12 +365,10 @@ const checkArtifactNaming = (input, report) => {
     pass(report, `installer artifact name: ${artifacts.installer}`);
   }
 
-  const installerSource = input.scriptSources.installer ?? '';
-
-  if (installerSource.includes('`${productName}_${version}_Setup.exe.blockmap`')) {
-    pass(report, `installer blockmap rule known: ${artifacts.installerBlockmap}`);
+  if (input.packageJson?.build?.nsis?.differentialPackage === false) {
+    pass(report, 'NSIS differential package disabled');
   } else {
-    warn(report, 'installer blockmap rule was not found');
+    fail(report, 'NSIS differential package must be disabled');
   }
 
   const portableSource = input.scriptSources.portable ?? '';

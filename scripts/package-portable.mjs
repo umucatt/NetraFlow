@@ -64,8 +64,7 @@ const installerOnlyEntryNames = new Set([
   'installerIcon.ico'
 ]);
 const forbiddenFileNamePatterns = [
-  /\.blockmap$/i,
-  /^NetraFlow_.*_Setup\.exe$/i,
+  /^NetraFlow_.*_Setup\.exe(?:\..+)?$/i,
   /(^|[-_.])nsis([-_.]|$)/i
 ];
 

@@ -177,12 +177,10 @@ test('release workflow creates draft releases with conditional prerelease flag a
 
   assert.equal(releaseBlock.includes('$checksumPath'), false);
   assert.equal(releaseBlock.includes('SHA256SUMS.txt'), false);
-  assert.equal(releaseBlock.includes('.blockmap'), false);
   assert.equal(releaseBlock.includes('--generate-notes'), false);
   assert.match(releaseBlock, /if \(\$env:IS_PRERELEASE -eq "true"\) \{\n\s+\$arguments \+= "--prerelease"/);
   assert.equal(/Invoke-Expression|eval\b/.test(releaseBlock), false);
   assert.equal(source.includes('MANUAL_PRERELEASE'), false);
-  assert.equal(source.includes('.blockmap'), false);
   assert.equal(source.includes('release/installer/**'), false);
   assert.equal(source.includes('release/portable/**'), false);
   assert.equal(/\bgit\s+tag\b/.test(source), false);

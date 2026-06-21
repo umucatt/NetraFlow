@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Arch, Platform, build } from 'electron-builder';
@@ -40,15 +40,21 @@ for (const generatedMetadataFile of ['builder-debug.yml', 'latest.yml']) {
   rmSync(path.join(outputDir, generatedMetadataFile), { force: true });
 }
 
-for (const expectedArtifact of [
-  `${productName}_${version}_Setup.exe`,
-  `${productName}_${version}_Setup.exe.blockmap`
-]) {
-  const artifactPath = path.join(outputDir, expectedArtifact);
+const expectedArtifact = `${productName}_${version}_Setup.exe`;
+const artifactPath = path.join(outputDir, expectedArtifact);
 
-  if (!existsSync(artifactPath)) {
-    throw new Error(`Installer artifact was not created: ${artifactPath}`);
-  }
+if (!existsSync(artifactPath)) {
+  throw new Error(`Installer artifact was not created: ${artifactPath}`);
+}
+
+const unexpectedInstallerArtifacts = readdirSync(outputDir, { withFileTypes: true })
+  .filter((entry) => entry.name !== expectedArtifact)
+  .map((entry) => entry.name);
+
+if (unexpectedInstallerArtifacts.length > 0) {
+  throw new Error(
+    `Installer output contains unexpected entries:\n${unexpectedInstallerArtifacts.join('\n')}`
+  );
 }
 
 console.log(`Installer release folder ${folderName}`);

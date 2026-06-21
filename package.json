@@ -81,7 +81,8 @@
       "uninstallDisplayName": "NetraFlow",
       "installerIcon": "public/icons/netraflow.ico",
       "uninstallerIcon": "public/icons/netraflow.ico",
-      "include": "build/installer/installer.nsh"
+      "include": "build/installer/installer.nsh",
+      "differentialPackage": false
     }
   },
   "scripts": {

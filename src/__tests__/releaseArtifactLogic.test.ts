@@ -160,10 +160,6 @@ test('artifact verifier finds single installer and portable artifacts in version
   mkdirSync(path.join(rootDir, 'release', 'portable', '0.9.6', 'NetraFlow_0.9.6'), {
     recursive: true
   });
-  writeFixtureFile(
-    path.join(rootDir, 'release', 'installer', '0.9.6', 'NetraFlow_0.9.6_Setup.exe.blockmap'),
-    8
-  );
 
   const summary = verifyReleaseArtifacts({ rootDir, version: '0.9.6', minSizeBytes: 1 });
 
@@ -173,7 +169,6 @@ test('artifact verifier finds single installer and portable artifacts in version
     summary.assets.map((asset) => asset.name),
     ['NetraFlow_0.9.6_Setup.exe', 'NetraFlow_0.9.6_Portable.zip']
   );
-  assert.equal(summary.assets.some((asset) => asset.name.endsWith('.blockmap')), false);
 
   const checksumSummary = writeSha256Sums({ rootDir, artifactSummary: summary });
   const checksumText = readFileSync(checksumSummary.checksumPath, 'utf8');
@@ -191,6 +186,22 @@ test('artifact verifier finds single installer and portable artifacts in version
   assert.equal(outputs.installer_path.includes('\\'), false);
   assert.equal(outputs.portable_path.includes('\\'), false);
   assert.equal(outputs.checksum_path, 'release/SHA256SUMS.txt');
+});
+
+test('artifact verifier rejects installer sidecar artifacts', async (t) => {
+  const { verifyReleaseArtifacts } = await loadReleaseArtifactLogic();
+  const rootDir = createFixtureRoot(t);
+
+  createValidArtifacts(rootDir);
+  writeFixtureFile(
+    path.join(rootDir, 'release', 'installer', '0.9.6', 'NetraFlow_0.9.6_Setup.exe.extra'),
+    8
+  );
+
+  assertRejectsWith(
+    () => verifyReleaseArtifacts({ rootDir, version: '0.9.6', minSizeBytes: 1 }),
+    'Unexpected installer version artifacts'
+  );
 });
 
 test('artifact verifier supports suffixed version directories created by repeat packaging', async (t) => {

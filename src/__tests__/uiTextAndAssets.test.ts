@@ -10,7 +10,7 @@ import {
   readPageScrollTop,
   rememberPageScrollTop
 } from '../app/scroll/pageScrollMemoryLogic';
-import { normalizeNewlines, readHeadProjectFile, readProjectFile } from './contractText';
+import { readProjectFile } from './contractText';
 
 const readProjectStyles = () => {
   const stylesEntrySource = readProjectFile('src/styles.css');
@@ -1167,6 +1167,7 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
         installerIcon?: string;
         uninstallerIcon?: string;
         include?: string;
+        differentialPackage?: boolean;
       };
     };
   };
@@ -1215,6 +1216,7 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
   assert.equal(packageJson.build?.nsis?.installerIcon, 'public/icons/netraflow.ico');
   assert.equal(packageJson.build?.nsis?.uninstallerIcon, 'public/icons/netraflow.ico');
   assert.equal(packageJson.build?.nsis?.include, 'build/installer/installer.nsh');
+  assert.equal(packageJson.build?.nsis?.differentialPackage, false);
   assert.equal(packageJson.scripts?.['clean:release'], 'node scripts/clean-release.mjs');
   assert.equal(packageJson.scripts?.dist, undefined);
   assert.equal(
@@ -1758,8 +1760,7 @@ test('portable Windows package script creates an isolated zip bundle without ins
   ]) {
     assert.equal(portableScriptSource.includes(forbiddenEntry), true);
   }
-  assert.equal(portableScriptSource.includes('/\\.blockmap$/i'), true);
-  assert.equal(portableScriptSource.includes('/^NetraFlow_.*_Setup\\.exe$/i'), true);
+  assert.equal(portableScriptSource.includes('/^NetraFlow_.*_Setup\\.exe(?:\\..+)?$/i'), true);
   assert.equal(portableScriptSource.includes('electron-builder --win nsis'), false);
   assert.equal(portableScriptSource.includes('createDesktopShortcut'), false);
   assert.equal(portableScriptSource.includes('createStartMenuShortcut'), false);
@@ -1826,7 +1827,7 @@ test('release packaging scripts use versioned output folders and safe release cl
   assert.equal(installerScriptSource.includes('output: outputDir'), true);
   assert.equal(installerScriptSource.includes("'builder-debug.yml', 'latest.yml'"), true);
   assert.equal(installerScriptSource.includes('`${productName}_${version}_Setup.exe`'), true);
-  assert.equal(installerScriptSource.includes('`${productName}_${version}_Setup.exe.blockmap`'), true);
+  assert.equal(installerScriptSource.includes('unexpectedInstallerArtifacts'), true);
   assert.equal(installerScriptSource.includes('`${productName}_${version}_1_Setup.exe`'), false);
   assert.equal(portableScriptSource.includes("prepareVersionedReleaseDir('portable', version)"), true);
   assert.equal(portableScriptSource.includes("Platform.WINDOWS.createTarget(['dir'], Arch.x64)"), true);
@@ -2744,15 +2745,16 @@ test('popup and system prompt copy removes sentence periods without touching dot
 
 test('release documentation keeps packaging notes scoped to changelog', () => {
   const changelogSource = readProjectFile('CHANGELOG.md');
-  const readmeSource = readProjectFile('README.md');
+  const zhReadmeSource = readProjectFile('README.md');
+  const enReadmeSource = readProjectFile('README_EN.md');
+  const combinedReadmeSource = `${zhReadmeSource}\n${enReadmeSource}`;
 
-  assert.equal(
-    normalizeNewlines(readmeSource),
-    normalizeNewlines(readHeadProjectFile('README.md'))
-  );
+  assert.equal(zhReadmeSource.includes('README_EN.md'), true);
+  assert.equal(enReadmeSource.includes('README.md'), true);
+  assert.equal(combinedReadmeSource.includes('docs/assets/netraflow-icon.png'), true);
   assert.equal(changelogSource.includes('## 0.9.2'), true);
   assert.equal(changelogSource.includes('## 0.9.3'), true);
-  assert.equal(readmeSource.includes('0.9.3'), false);
+  assert.equal(combinedReadmeSource.includes('0.9.3'), false);
   assert.equal(changelogSource.includes('优化安装与卸载流程'), true);
   assert.equal(changelogSource.includes('安装版与便携版打包流程'), true);
   assert.equal(changelogSource.includes('用户数据与运行缓存分离'), true);

@@ -33,6 +33,7 @@ type PackageJsonFixture = {
     };
     nsis?: {
       include?: string;
+      differentialPackage?: boolean;
     };
   };
 };
@@ -138,7 +139,8 @@ const createPackageJson = (overrides: PackageJsonFixture = {}): PackageJsonFixtu
         signAndEditExecutable: false
       },
       nsis: {
-        include: 'build/installer/installer.nsh'
+        include: 'build/installer/installer.nsh',
+        differentialPackage: false
       }
     }
   };
@@ -178,8 +180,7 @@ const defaultExistingPaths = () =>
   ]);
 
 const defaultScriptSources = () => ({
-  installer:
-    'for (const expectedArtifact of [`${productName}_${version}_Setup.exe`, `${productName}_${version}_Setup.exe.blockmap`]) {}',
+  installer: 'const expectedArtifact = `${productName}_${version}_Setup.exe`;',
   portable:
     'const bundleName = `${productName}_${version}`;\nzipPath = path.join(outputRoot, `${bundleName}_Portable.zip`);'
 });
@@ -540,6 +541,20 @@ test('release check validates installer and portable naming rules', async () => 
   );
 
   assertHasError(report, 'installer artifact naming');
+
+  const differentialReport = evaluateReleaseCheck(
+    createInput({
+      packageJson: createPackageJson({
+        build: {
+          nsis: {
+            differentialPackage: true
+          }
+        }
+      })
+    })
+  );
+
+  assertHasError(differentialReport, 'NSIS differential package must be disabled');
 });
 
 test('release check validates Git ignores and tracked user data', async () => {

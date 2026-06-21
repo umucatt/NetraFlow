@@ -266,7 +266,7 @@ export const verifyReleaseArtifacts = ({
   const installerRoot = path.join(releaseRoot, 'installer');
   const portableRoot = path.join(releaseRoot, 'portable');
   const { installerName, portableName } = getExpectedReleaseArtifactNames({ productName, version });
-  const installerPattern = new RegExp(`^${escapeRegExp(productName)}_.+_Setup\\.exe$`);
+  const installerPattern = new RegExp(`^${escapeRegExp(productName)}_.+_Setup\\.exe(?:\\..+)?$`);
   const portablePattern = new RegExp(`^${escapeRegExp(productName)}_.+_Portable\\.zip$`);
   const unexpectedInstallerArtifacts = findUnexpectedVersionArtifacts({
     searchRoot: installerRoot,
