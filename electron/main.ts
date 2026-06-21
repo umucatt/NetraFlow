@@ -4,22 +4,35 @@ import {
   appendFileSync,
   cpSync,
   existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync
+  mkdirSync
 } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  readNfStorageFile,
+  writeNfStorageFile,
+  type NfStorageItems,
+  type StorageReadResult,
+  type StorageWriteResult
+} from './storageFile.js';
+import {
+  setNfStorageBatchItems,
+  type NfStorageBatchErrorCode
+} from './nfStorageBatch.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const APP_NAME = 'NetraFlow';
+const APP_USER_MODEL_ID = 'com.netraflow.app';
+const DEV_APP_USER_MODEL_ID = 'com.netraflow.app.dev';
 const LEGACY_PORTABLE_USER_DATA_DIR_NAME = 'userData';
 const LEGACY_LOCAL_STORAGE_DIR_NAME = 'Local Storage';
 const USERDATA_DIR_NAME = 'userdata';
 const RUNTIME_DIR_NAME = 'runtime';
+const SESSION_DATA_DIR_NAME = 'sessionData';
+const CACHE_DIR_NAME = 'cache';
 const LOGS_DIR_NAME = 'logs';
+const CRASH_DUMPS_DIR_NAME = 'crashDumps';
 const NF_STORAGE_FILE_NAME = 'storage.json';
 const GLOBAL_SETTINGS_STORAGE_KEY = 'netraflowGlobalSettings';
 const NF_STORAGE_WHITELIST_KEYS = [
@@ -82,7 +95,7 @@ let pendingRendererLock = process.argv.includes('--lock');
 app.setName(APP_NAME);
 
 if (process.platform === 'win32') {
-  app.setAppUserModelId('com.netraflow.app');
+  app.setAppUserModelId(app.isPackaged ? APP_USER_MODEL_ID : DEV_APP_USER_MODEL_ID);
 }
 
 const isPortableBuild = () =>
@@ -104,9 +117,11 @@ const getPackagedInstallRootPath = () => path.dirname(process.execPath);
 
 const getPortableRootPath = () => path.dirname(process.execPath);
 
+const getDevProjectRootPath = () => app.getAppPath();
+
 const getAppInstallRootPath = () => {
   if (!app.isPackaged) {
-    return path.join(app.getPath('appData'), APP_NAME);
+    return getDevProjectRootPath();
   }
 
   return isPortableBuild() ? getPortableRootPath() : getPackagedInstallRootPath();
@@ -139,7 +154,13 @@ const getNfStorageFilePath = () =>
 
 const getNfRuntimeUserDataPath = () => getNfRuntimeRootPath();
 
+const getNfSessionDataPath = () => path.join(getNfRuntimeRootPath(), SESSION_DATA_DIR_NAME);
+
+const getNfCachePath = () => path.join(getNfRuntimeRootPath(), CACHE_DIR_NAME);
+
 const getNfLogsPath = () => path.join(getNfRuntimeUserDataPath(), LOGS_DIR_NAME);
+
+const getNfCrashDumpsPath = () => path.join(getNfRuntimeRootPath(), CRASH_DUMPS_DIR_NAME);
 
 const valueContainsExampleData = (value: unknown): boolean => {
   if (typeof value === 'string') {
@@ -169,53 +190,72 @@ const isExampleStorageEntry = (key: string, value: string) => {
   }
 };
 
-const sanitizeNfStorageItems = (value: unknown) => {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return {};
-  }
-
-  return Object.entries(value).reduce<Record<string, string>>((items, [key, itemValue]) => {
-    if (isNfStorageKey(key) && typeof itemValue === 'string') {
-      items[key] = itemValue;
-    }
-
-    return items;
-  }, {});
-};
-
 const readNfStorageItems = () => {
-  const storageFilePath = getNfStorageFilePath();
-
-  if (!existsSync(storageFilePath)) {
-    return {};
-  }
-
-  try {
-    return sanitizeNfStorageItems(JSON.parse(readFileSync(storageFilePath, 'utf8')));
-  } catch (error) {
-    console.warn('[NetraFlow storage] Failed to read storage file.', error);
-    return {};
-  }
+  return readNfStorageFile({
+    storageFilePath: getNfStorageFilePath(),
+    whitelistKeys: NF_STORAGE_WHITELIST_KEYS,
+    logger: console
+  });
 };
 
-const writeNfStorageItems = (items: Record<string, string>) => {
-  const storageFilePath = getNfStorageFilePath();
-  const storageDirectoryPath = path.dirname(storageFilePath);
-  const tempStorageFilePath = `${storageFilePath}.tmp`;
-
-  mkdirSync(storageDirectoryPath, { recursive: true });
-  writeFileSync(
-    tempStorageFilePath,
-    `${JSON.stringify(sanitizeNfStorageItems(items), null, 2)}\n`,
-    'utf8'
-  );
-  renameSync(tempStorageFilePath, storageFilePath);
+const writeNfStorageItems = (items: Record<string, unknown>) => {
+  return writeNfStorageFile({
+    storageFilePath: getNfStorageFilePath(),
+    whitelistKeys: NF_STORAGE_WHITELIST_KEYS,
+    items,
+    logger: console
+  });
 };
 
-const getSortedNfStorageKeys = () => {
-  const items = readNfStorageItems();
+type NfStorageBridgeErrorResult = {
+  ok: false;
+  code: NfStorageBatchErrorCode;
+  message: string;
+};
 
-  return NF_STORAGE_WHITELIST_KEYS.filter((key) => Object.hasOwn(items, key));
+const createBridgeErrorResult = (
+  code: NfStorageBatchErrorCode,
+  message: string
+): NfStorageBridgeErrorResult => ({ ok: false, code, message });
+
+const getReadErrorResult = (
+  result: Extract<StorageReadResult, { ok: false }>
+): NfStorageBridgeErrorResult => createBridgeErrorResult(result.code, result.message);
+
+const getWriteErrorResult = (
+  result: Extract<StorageWriteResult, { ok: false }>
+): NfStorageBridgeErrorResult => createBridgeErrorResult(result.code, result.message);
+
+const isNfStorageBridgeErrorResult = (
+  value: unknown
+): value is NfStorageBridgeErrorResult =>
+  typeof value === 'object' &&
+  value !== null &&
+  'ok' in value &&
+  (value as { ok?: unknown }).ok === false;
+
+const getReadItemsOrBridgeError = (): NfStorageItems | NfStorageBridgeErrorResult => {
+  const result = readNfStorageItems();
+
+  if (!result.ok) {
+    return getReadErrorResult(result);
+  }
+
+  return result.items as NfStorageItems;
+};
+
+const getSortedNfStorageKeys = (items: NfStorageItems | {}) =>
+  NF_STORAGE_WHITELIST_KEYS.filter((key) => Object.hasOwn(items, key));
+
+const logStorageReadError = (context: string, result: StorageReadResult) => {
+  if (result.ok) {
+    return;
+  }
+
+  console.warn(`[NetraFlow storage] ${context}`, {
+    code: result.code,
+    message: result.message
+  });
 };
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
@@ -249,7 +289,15 @@ const normalizeThemeBootstrapSettings = (value: unknown): ThemeBootstrapSettings
 };
 
 const readThemeBootstrapSettings = () => {
-  const storedSettings = readNfStorageItems()[GLOBAL_SETTINGS_STORAGE_KEY];
+  const itemsResult = readNfStorageItems();
+
+  if (!itemsResult.ok) {
+    logStorageReadError('Failed to read storage for theme bootstrap.', itemsResult);
+
+    return normalizeThemeBootstrapSettings(null);
+  }
+
+  const storedSettings = (itemsResult.items as NfStorageItems)[GLOBAL_SETTINGS_STORAGE_KEY];
 
   if (!storedSettings) {
     return normalizeThemeBootstrapSettings(null);
@@ -288,16 +336,21 @@ const getBrowserWindowBackgroundColor = () => {
 };
 
 const migrateLegacyItemsToNfStorage = (legacyItems: unknown) => {
-  const currentItems = readNfStorageItems();
+  const currentItemsResult = readNfStorageItems();
   const migratedKeys: string[] = [];
   const skippedExistingKeys: string[] = [];
   const skippedNonWhitelistKeys: string[] = [];
   const skippedExampleKeys: string[] = [];
 
+  if (!currentItemsResult.ok) {
+    return getReadErrorResult(currentItemsResult);
+  }
+
   if (typeof legacyItems !== 'object' || legacyItems === null || Array.isArray(legacyItems)) {
     return { migratedKeys, skippedExistingKeys, skippedNonWhitelistKeys, skippedExampleKeys };
   }
 
+  const currentItems = currentItemsResult.items as NfStorageItems;
   const nextItems = { ...currentItems };
 
   Object.entries(legacyItems).forEach(([key, value]) => {
@@ -325,7 +378,11 @@ const migrateLegacyItemsToNfStorage = (legacyItems: unknown) => {
   });
 
   if (migratedKeys.length > 0) {
-    writeNfStorageItems(nextItems);
+    const writeResult = writeNfStorageItems(nextItems);
+
+    if (!writeResult.ok) {
+      return getWriteErrorResult(writeResult);
+    }
   }
 
   return { migratedKeys, skippedExistingKeys, skippedNonWhitelistKeys, skippedExampleKeys };
@@ -333,47 +390,92 @@ const migrateLegacyItemsToNfStorage = (legacyItems: unknown) => {
 
 const registerNfStorageHandlers = () => {
   ipcMain.on('nf-storage:get-item', (event, key: unknown) => {
-    event.returnValue = typeof key === 'string' && isNfStorageKey(key)
-      ? readNfStorageItems()[key] ?? null
-      : null;
+    if (typeof key !== 'string' || !isNfStorageKey(key)) {
+      event.returnValue = null;
+      return;
+    }
+
+    const items = getReadItemsOrBridgeError();
+
+    event.returnValue = isNfStorageBridgeErrorResult(items) ? items : items[key] ?? null;
   });
 
   ipcMain.on('nf-storage:set-item', (event, key: unknown, value: unknown) => {
     if (typeof key === 'string' && isNfStorageKey(key) && typeof value === 'string') {
-      const items = readNfStorageItems();
+      const items = getReadItemsOrBridgeError();
+
+      if (isNfStorageBridgeErrorResult(items)) {
+        event.returnValue = items;
+        return;
+      }
+
       items[key] = value;
-      writeNfStorageItems(items);
+      const writeResult = writeNfStorageItems(items);
+
+      if (!writeResult.ok) {
+        event.returnValue = getWriteErrorResult(writeResult);
+        return;
+      }
     }
 
-    event.returnValue = null;
+    event.returnValue = { ok: true };
+  });
+
+  ipcMain.on('nf-storage:set-items', (event, items: unknown) => {
+    event.returnValue = setNfStorageBatchItems(items, {
+      whitelistKeys: NF_STORAGE_WHITELIST_KEYS,
+      readItems: readNfStorageItems,
+      writeItems: writeNfStorageItems
+    });
   });
 
   ipcMain.on('nf-storage:remove-item', (event, key: unknown) => {
     if (typeof key === 'string' && isNfStorageKey(key)) {
-      const items = readNfStorageItems();
+      const items = getReadItemsOrBridgeError();
+
+      if (isNfStorageBridgeErrorResult(items)) {
+        event.returnValue = items;
+        return;
+      }
 
       if (Object.hasOwn(items, key)) {
         delete items[key];
-        writeNfStorageItems(items);
+        const writeResult = writeNfStorageItems(items);
+
+        if (!writeResult.ok) {
+          event.returnValue = getWriteErrorResult(writeResult);
+          return;
+        }
       }
     }
 
-    event.returnValue = null;
+    event.returnValue = { ok: true };
   });
 
   ipcMain.on('nf-storage:key', (event, index: unknown) => {
+    const items = getReadItemsOrBridgeError();
+
+    if (isNfStorageBridgeErrorResult(items)) {
+      event.returnValue = items;
+      return;
+    }
+
     event.returnValue =
       typeof index === 'number' && Number.isInteger(index) && index >= 0
-        ? getSortedNfStorageKeys()[index] ?? null
+        ? getSortedNfStorageKeys(items)[index] ?? null
         : null;
   });
 
   ipcMain.on('nf-storage:length', (event) => {
-    event.returnValue = getSortedNfStorageKeys().length;
+    const items = getReadItemsOrBridgeError();
+
+    event.returnValue = isNfStorageBridgeErrorResult(items)
+      ? items
+      : getSortedNfStorageKeys(items).length;
   });
 
   ipcMain.on('nf-storage:get-all-items', (event) => {
-    event.returnValue = readNfStorageItems();
+    event.returnValue = getReadItemsOrBridgeError();
   });
 
   ipcMain.on('nf-storage:migrate-legacy-items', (event, legacyItems: unknown) => {
@@ -435,13 +537,27 @@ const stageLegacyLocalStorageIfNeeded = (runtimeUserDataPath: string) => {
 };
 
 const configureRuntimeUserDataPath = () => {
+  const userDataRootPath = getNfUserDataRootPath();
   const runtimeUserDataPath = getNfRuntimeUserDataPath();
+  const sessionDataPath = getNfSessionDataPath();
+  const cachePath = getNfCachePath();
   const logsPath = getNfLogsPath();
+  const crashDumpsPath = getNfCrashDumpsPath();
 
-  stageLegacyLocalStorageIfNeeded(runtimeUserDataPath);
+  if (app.isPackaged) {
+    stageLegacyLocalStorageIfNeeded(runtimeUserDataPath);
+  }
+
+  mkdirSync(userDataRootPath, { recursive: true });
   mkdirSync(runtimeUserDataPath, { recursive: true });
+  mkdirSync(sessionDataPath, { recursive: true });
+  mkdirSync(cachePath, { recursive: true });
   mkdirSync(logsPath, { recursive: true });
+  mkdirSync(crashDumpsPath, { recursive: true });
   app.setPath('userData', runtimeUserDataPath);
+  app.setPath('sessionData', sessionDataPath);
+  app.setPath('cache', cachePath);
+  app.setPath('crashDumps', crashDumpsPath);
   app.setAppLogsPath(logsPath);
 };
 
@@ -468,10 +584,10 @@ const writePackagedMainLog = (message: string, details: Record<string, unknown> 
   }
 };
 
-const getAppIconPath = () =>
-  app.isPackaged
-    ? path.join(process.resourcesPath, 'app/public/icons/netraflow.ico')
-    : path.join(process.cwd(), 'public/icons/netraflow.ico');
+const getAppResourceRootPath = () =>
+  app.isPackaged ? path.join(process.resourcesPath, 'app') : app.getAppPath();
+
+const getAppIconPath = () => path.join(getAppResourceRootPath(), 'public/icons/netraflow.ico');
 
 const isAllowedExternalUrl = (url: string) => {
   if (url === BILIBILI_PROFILE_URL) {
@@ -501,11 +617,13 @@ const registerWindowsUserTasks = () => {
     return;
   }
 
+  const lockArguments = app.isPackaged ? '--lock' : `"${app.getAppPath()}" --lock`;
+
   app.setUserTasks([
     {
       program: process.execPath,
-      arguments: '--lock',
-      iconPath: process.execPath,
+      arguments: lockArguments,
+      iconPath: app.isPackaged ? process.execPath : getAppIconPath(),
       iconIndex: 0,
       title: '锁定',
       description: '锁定 NetraFlow'

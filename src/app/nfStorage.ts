@@ -10,6 +10,8 @@ import {
 
 export type NfStorageItems = Partial<Record<NfStorageKey, string>>;
 
+export type NfStorageBatchUpdate = Readonly<Partial<Record<NfStorageKey, string>>>;
+
 export type NfStorageMigrationResult = {
   migratedKeys: string[];
   skippedExistingKeys: string[];
@@ -29,6 +31,94 @@ const getBridge = () =>
 
 const getLocalStorageFallback = () =>
   typeof window === 'undefined' ? undefined : window.localStorage;
+
+const unsafeBatchKeys = new Set(['__proto__', 'prototype', 'constructor']);
+
+const isPlainBatchObject = (value: unknown): value is Record<string, unknown> => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+
+  return prototype === Object.prototype || prototype === null;
+};
+
+const getValidatedBatchEntries = (
+  items: unknown
+): Array<[NfStorageKey, string]> => {
+  if (!isPlainBatchObject(items)) {
+    throw new Error('NF storage batch must be a plain object.');
+  }
+
+  let keys: string[];
+
+  try {
+    keys = Object.keys(items);
+  } catch {
+    throw new Error('NF storage batch keys could not be read.');
+  }
+
+  return keys.map((key) => {
+    if (unsafeBatchKeys.has(key)) {
+      throw new Error(`NF storage batch key is unsafe: ${key}`);
+    }
+
+    if (!isNfStorageKey(key)) {
+      throw new Error(`NF storage key is not whitelisted: ${key}`);
+    }
+
+    let value: unknown;
+
+    try {
+      value = items[key];
+    } catch {
+      throw new Error(`NF storage batch value could not be read for key: ${key}`);
+    }
+
+    if (typeof value !== 'string') {
+      throw new Error(`NF storage batch value must be a string: ${key}`);
+    }
+
+    return [key, value];
+  });
+};
+
+const setLocalStorageItemsWithRollback = (
+  storage: Storage,
+  entries: Array<[NfStorageKey, string]>
+) => {
+  const previousValues = entries.map(([key]) => [key, storage.getItem(key)] as const);
+  const appliedKeys: NfStorageKey[] = [];
+
+  try {
+    entries.forEach(([key, value]) => {
+      storage.setItem(key, value);
+      appliedKeys.push(key);
+    });
+  } catch (error) {
+    try {
+      appliedKeys.forEach((key) => {
+        const previousValue = previousValues.find(([previousKey]) => previousKey === key)?.[1];
+
+        if (previousValue === null || previousValue === undefined) {
+          storage.removeItem(key);
+          return;
+        }
+
+        storage.setItem(key, previousValue);
+      });
+    } catch (rollbackError) {
+      const rollbackFailure = new Error('NF storage batch update failed and rollback failed.') as
+        Error & { cause?: unknown };
+
+      rollbackFailure.cause = rollbackError;
+      throw rollbackFailure;
+    }
+
+    throw error;
+  }
+};
 
 const valueContainsExampleData = (value: unknown): boolean => {
   if (typeof value === 'string') {
@@ -220,6 +310,27 @@ export const nfStorage = {
     }
 
     getLocalStorageFallback()?.setItem(key, value);
+  },
+
+  setItems(items: NfStorageBatchUpdate) {
+    const entries = getValidatedBatchEntries(items);
+
+    if (entries.length === 0) {
+      return;
+    }
+
+    const bridge = getBridge();
+
+    if (bridge) {
+      bridge.setItems(Object.fromEntries(entries));
+      return;
+    }
+
+    const fallbackStorage = getLocalStorageFallback();
+
+    if (fallbackStorage) {
+      setLocalStorageItemsWithRollback(fallbackStorage, entries);
+    }
   },
 
   removeItem(key: string) {

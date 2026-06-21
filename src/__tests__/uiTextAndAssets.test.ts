@@ -1,10 +1,8 @@
 /// <reference types="node" />
 
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
 
 import { getPageCoverage } from '../app/navigation/pageCoverageLogic';
 import {
@@ -12,11 +10,7 @@ import {
   readPageScrollTop,
   rememberPageScrollTop
 } from '../app/scroll/pageScrollMemoryLogic';
-
-const readProjectFile = (path: string) =>
-  readFileSync(new URL(`../../../${path}`, import.meta.url), 'utf8');
-
-const projectRootPath = fileURLToPath(new URL('../../../', import.meta.url));
+import { normalizeNewlines, readHeadProjectFile, readProjectFile } from './contractText';
 
 const readProjectStyles = () => {
   const stylesEntrySource = readProjectFile('src/styles.css');
@@ -30,14 +24,6 @@ const readProjectStyles = () => {
 
   return [...importSources, stylesEntryBody].join('\n');
 };
-
-const readHeadProjectFile = (path: string) =>
-  execFileSync('git', ['show', `HEAD:${path}`], {
-    cwd: projectRootPath,
-    encoding: 'utf8'
-  });
-
-const normalizeLineEndings = (source: string) => source.replace(/\r\n/g, '\n');
 
 const extractNsisDefineText = (source: string, defineName: string) => {
   const match = source.match(new RegExp(`!define ${defineName} "([^"]*)"`));
@@ -146,9 +132,9 @@ test('global settings security and about copy match the current release text', (
   };
 
   assert.equal(settingsPageSource.includes('是否开启登陆密码保护'), true);
-  assert.equal(packageJson.version, '0.9.5');
-  assert.equal(packageLockJson.version, '0.9.5');
-  assert.equal(packageLockJson.packages?.['']?.version, '0.9.5');
+  assert.equal(packageJson.version, '0.9.7');
+  assert.equal(packageLockJson.version, '0.9.7');
+  assert.equal(packageLockJson.packages?.['']?.version, '0.9.7');
   assert.equal(appSource.includes('APP_VERSION'), true);
   assert.equal(appSource.includes('0.9.1'), false);
   assert.equal(aboutPanelSource.includes('获取信息'), true);
@@ -818,7 +804,11 @@ test('theme bootstrap resolves first frame before React mounts', () => {
   assert.equal(bootstrapSource.includes('getPrebootBackgroundColor(resolvedTheme, themeStyle)'), true);
   assert.equal(mainSource.includes("nativeTheme.shouldUseDarkColors ? 'dark' : 'light'"), true);
   assert.equal(mainSource.includes("const GLOBAL_SETTINGS_STORAGE_KEY = 'netraflowGlobalSettings';"), true);
-  assert.equal(mainSource.includes('readNfStorageItems()[GLOBAL_SETTINGS_STORAGE_KEY]'), true);
+  assert.equal(mainSource.includes('const itemsResult = readNfStorageItems();'), true);
+  assert.equal(
+    mainSource.includes('(itemsResult.items as NfStorageItems)[GLOBAL_SETTINGS_STORAGE_KEY]'),
+    true
+  );
   assert.equal(mainSource.includes('normalizeThemeBootstrapSettings(JSON.parse(storedSettings))'), true);
   assert.equal(mainSource.includes('value === \'light\' || value === \'dark\' || value === \'system\''), true);
   assert.equal(mainSource.includes('value === \'default\' || value === \'nyaa\''), true);
@@ -856,7 +846,12 @@ test('NF storage adapter owns persisted renderer data and legacy localStorage mi
   );
   const mainSource = readProjectFile('electron/main.ts');
   const preloadSource = readProjectFile('electron/preload.ts');
+  const storageFileSource = readProjectFile('electron/storageFile.ts');
   const indexSource = readProjectFile('index.html');
+  const saveAppDataSource = appSource.slice(
+    appSource.indexOf('const saveAppData'),
+    appSource.indexOf('const createHistoryRecord')
+  );
   const persistedStorageSource = [
     appSource,
     lifecycleLogicSource,
@@ -871,6 +866,10 @@ test('NF storage adapter owns persisted renderer data and legacy localStorage mi
   assert.equal(indexSource.includes('window.localStorage'), false);
   assert.equal(nfStorageSource.includes('window.localStorage'), true);
   assert.equal(appSource.includes('migrateLegacyLocalStorageToNfStorage();'), true);
+  assert.equal(saveAppDataSource.includes('persistAppDataStorageItems('), true);
+  assert.equal(saveAppDataSource.includes('nfStorage.setItem'), false);
+  assert.equal(saveAppDataSource.includes('nfStorage.setItems'), false);
+  assert.equal(lifecycleLogicSource.includes('.setItems(result.items)'), true);
   assertNfStorageSetItem('GROUPS_STORAGE_KEY');
   assertNfStorageSetItem('ACCOUNTS_STORAGE_KEY');
   assertNfStorageSetItem('HISTORY_STORAGE_KEY');
@@ -899,6 +898,7 @@ test('NF storage adapter owns persisted renderer data and legacy localStorage mi
   assert.equal(nfStorageSource.includes('NF_STORAGE_WHITELIST_KEYS.forEach((key) => {'), true);
   assert.equal(nfStorageSource.includes('getLocalStorageFallback()?.removeItem(key);'), true);
   assert.equal(preloadSource.includes("contextBridge.exposeInMainWorld('netraflowStorage'"), true);
+  assert.equal(preloadSource.includes("'nf-storage:set-items'"), true);
   assert.equal(preloadSource.includes("'nf-storage:migrate-legacy-items'"), true);
   assert.equal(mainSource.includes("const NF_STORAGE_FILE_NAME = 'storage.json';"), true);
   assert.equal(mainSource.includes("path.join(getNfStorageDirectoryPath(), NF_STORAGE_FILE_NAME)"), true);
@@ -915,18 +915,24 @@ test('NF storage adapter owns persisted renderer data and legacy localStorage mi
   assert.equal(mainSource.includes('WINDOWS_ACCOUNT_MARKER_FILE_NAME'), false);
   assert.equal(mainSource.includes('node:crypto'), false);
   assert.equal(mainSource.includes('node:os'), false);
+  assert.equal(mainSource.includes('const getDevProjectRootPath = () => app.getAppPath();'), true);
+  assert.equal(mainSource.includes('return getDevProjectRootPath();'), true);
   assert.equal(mainSource.includes("path.join(app.getPath('appData'), APP_NAME)"), true);
   assert.equal(mainSource.includes("path.join(app.getPath('appData'), APP_NAME.toLowerCase())"), true);
   assert.equal(mainSource.includes('getLegacyPortableUserDataPath()'), true);
   assert.equal(mainSource.includes('copyLegacyLocalStorageEntry(legacyUserDataPath, runtimeUserDataPath)'), true);
+  assert.equal(mainSource.includes('if (app.isPackaged) {\n    stageLegacyLocalStorageIfNeeded(runtimeUserDataPath);\n  }'), true);
   assert.equal(mainSource.includes("cpSync(sourceEntryPath, targetEntryPath"), true);
   assert.equal(mainSource.includes('force: false'), true);
   assert.equal(mainSource.includes("return `win-${digest}`;"), false);
   assert.equal(mainSource.includes("ipcMain.on('nf-storage:set-item'"), true);
+  assert.equal(mainSource.includes("ipcMain.on('nf-storage:set-items'"), true);
   assert.equal(mainSource.includes("ipcMain.on('nf-storage:migrate-legacy-items'"), true);
-  assert.equal(mainSource.includes('sanitizeNfStorageItems'), true);
+  assert.equal(storageFileSource.includes('sanitizeNfStorageItems'), true);
+  assert.equal(storageFileSource.includes('writeNfStorageFile'), true);
+  assert.equal(preloadSource.includes('throwNfStorageError'), true);
   assert.equal(mainSource.includes('isExampleStorageEntry'), true);
-  assert.equal(mainSource.includes('Cache'), false);
+  assert.equal(mainSource.includes("'Cache'"), false);
   assert.equal(mainSource.includes('Code Cache'), false);
   assert.equal(mainSource.includes('GPUCache'), false);
 });
@@ -1218,23 +1224,39 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
   assert.equal(packageJson.scripts?.['dist:portable'], 'node scripts/package-portable.mjs');
   assert.equal(mainSource.includes("app.setName(APP_NAME);"), true);
   assert.equal(mainSource.includes("process.platform === 'win32'"), true);
-  assert.equal(mainSource.includes("app.setAppUserModelId('com.netraflow.app')"), true);
+  assert.equal(mainSource.includes("const APP_USER_MODEL_ID = 'com.netraflow.app';"), true);
+  assert.equal(mainSource.includes("const DEV_APP_USER_MODEL_ID = 'com.netraflow.app.dev';"), true);
+  assert.equal(
+    mainSource.includes('app.setAppUserModelId(app.isPackaged ? APP_USER_MODEL_ID : DEV_APP_USER_MODEL_ID)'),
+    true
+  );
   assert.equal(mainSource.includes('const isPortableBuild = () =>'), true);
   assert.equal(mainSource.includes("process.env.NETRAFLOW_PORTABLE === '1'"), true);
   assert.equal(mainSource.includes("path.join(process.resourcesPath, 'app', 'portable.flag')"), true);
   assert.equal(mainSource.includes("path.join(process.resourcesPath, 'portable.flag')"), true);
   assert.equal(mainSource.includes("const USERDATA_DIR_NAME = 'userdata';"), true);
   assert.equal(mainSource.includes("const RUNTIME_DIR_NAME = 'runtime';"), true);
+  assert.equal(mainSource.includes("const SESSION_DATA_DIR_NAME = 'sessionData';"), true);
+  assert.equal(mainSource.includes("const CACHE_DIR_NAME = 'cache';"), true);
   assert.equal(mainSource.includes("const LOGS_DIR_NAME = 'logs';"), true);
+  assert.equal(mainSource.includes("const CRASH_DUMPS_DIR_NAME = 'crashDumps';"), true);
   assert.equal(mainSource.includes('const getAppInstallRootPath = () =>'), true);
   assert.equal(mainSource.includes('const getPortableRootPath = () =>'), true);
+  assert.equal(mainSource.includes('const getDevProjectRootPath = () => app.getAppPath();'), true);
   assert.equal(mainSource.includes('return isPortableBuild() ? getPortableRootPath() : getPackagedInstallRootPath();'), true);
   assert.equal(mainSource.includes('path.join(getAppInstallRootPath(), USERDATA_DIR_NAME)'), true);
   assert.equal(mainSource.includes('path.join(getAppInstallRootPath(), RUNTIME_DIR_NAME)'), true);
+  assert.equal(mainSource.includes('path.join(getNfRuntimeRootPath(), SESSION_DATA_DIR_NAME)'), true);
+  assert.equal(mainSource.includes('path.join(getNfRuntimeRootPath(), CACHE_DIR_NAME)'), true);
+  assert.equal(mainSource.includes('path.join(getNfRuntimeRootPath(), CRASH_DUMPS_DIR_NAME)'), true);
   assert.equal(mainSource.includes('const getLegacyPortableUserDataPath = () =>'), true);
   assert.equal(mainSource.includes("path.join(path.dirname(process.execPath), LEGACY_PORTABLE_USER_DATA_DIR_NAME)"), true);
-  assert.equal(mainSource.includes('stageLegacyLocalStorageIfNeeded(runtimeUserDataPath);'), true);
+  assert.equal(mainSource.includes('if (app.isPackaged) {\n    stageLegacyLocalStorageIfNeeded(runtimeUserDataPath);\n  }'), true);
+  assert.equal(mainSource.includes('mkdirSync(userDataRootPath, { recursive: true });'), true);
   assert.equal(mainSource.includes("app.setPath('userData', runtimeUserDataPath);"), true);
+  assert.equal(mainSource.includes("app.setPath('sessionData', sessionDataPath);"), true);
+  assert.equal(mainSource.includes("app.setPath('cache', cachePath);"), true);
+  assert.equal(mainSource.includes("app.setPath('crashDumps', crashDumpsPath);"), true);
   assert.equal(mainSource.includes('app.setAppLogsPath(logsPath);'), true);
   assert.equal(mainSource.includes("app.setPath('userData', path.join(path.dirname(process.execPath), 'userData'))"), false);
   assert.equal(mainSource.includes("path.join(app.getPath('userData'), 'logs', 'main.log')"), false);
@@ -1563,6 +1585,7 @@ test('Windows installer install directory and uninstall cleanup rules are wired'
 
 test('packaged first launch starts with empty real data and excludes runtime storage', () => {
   const appSource = readProjectFile('src/App.tsx');
+  const gitignoreSource = readProjectFile('.gitignore');
   const firstWelcomeStateSource = readProjectFile(
     'src/app/firstWelcome/firstWelcomeStateLogic.ts'
   );
@@ -1645,6 +1668,8 @@ test('packaged first launch starts with empty real data and excludes runtime sto
     assert.equal(packageJson.build?.files?.includes(excludedPath), true);
   }
 
+  assert.equal(gitignoreSource.includes('/runtime/'), true);
+  assert.equal(gitignoreSource.includes('/userdata/'), true);
   assert.equal(portableScriptSource.includes('const runtimeDataEntryNames = new Set(['), true);
   assert.equal(/powershell/i.test(portableScriptSource), false);
   assert.equal(/cmd(?:\.exe)?/i.test(portableScriptSource), false);
@@ -1744,10 +1769,17 @@ test('portable Windows package script creates an isolated zip bundle without ins
 test('release packaging scripts use versioned output folders and safe release cleanup', () => {
   const packageJson = JSON.parse(readProjectFile('package.json')) as {
     version?: string;
-    scripts?: { 'clean:release'?: string; 'dist:installer'?: string; 'dist:portable'?: string };
+    scripts?: {
+      'clean:release'?: string;
+      'dist:installer'?: string;
+      'dist:portable'?: string;
+      'release:check'?: string;
+    };
   };
   const releaseUtilsSource = readProjectFile('scripts/release-utils.mjs');
   const cleanReleaseSource = readProjectFile('scripts/clean-release.mjs');
+  const releaseCheckSource = readProjectFile('scripts/check-release.mjs');
+  const releaseCheckLogicSource = readProjectFile('scripts/release-check-logic.mjs');
   const installerScriptSource = readProjectFile('scripts/package-installer.mjs');
   const portableScriptSource = readProjectFile('scripts/package-portable.mjs');
   const afterPackSource = readProjectFile('scripts/after-pack-installer.mjs');
@@ -1761,10 +1793,20 @@ test('release packaging scripts use versioned output folders and safe release cl
     resourcePatchSource
   ].join('\n');
 
-  assert.equal(packageJson.version, '0.9.5');
+  assert.equal(packageJson.version, '0.9.7');
   assert.equal(packageJson.scripts?.['clean:release'], 'node scripts/clean-release.mjs');
   assert.equal(packageJson.scripts?.['dist:installer'], 'node scripts/package-installer.mjs');
   assert.equal(packageJson.scripts?.['dist:portable'], 'node scripts/package-portable.mjs');
+  assert.equal(packageJson.scripts?.['release:check'], 'node scripts/check-release.mjs');
+  assert.equal(releaseCheckSource.includes('writeFile'), false);
+  assert.equal(releaseCheckSource.includes('mkdir'), false);
+  assert.equal(releaseCheckSource.includes('rmSync'), false);
+  assert.equal(releaseCheckLogicSource.includes('evaluateReleaseCheck'), true);
+  assert.equal(releaseCheckLogicSource.includes('formatReleaseCheckReport'), true);
+  assert.equal(releaseCheckLogicSource.includes('execFileSync'), true);
+  assert.equal(releaseCheckLogicSource.includes('writeFile'), false);
+  assert.equal(releaseCheckLogicSource.includes('mkdir'), false);
+  assert.equal(releaseCheckLogicSource.includes('rmSync'), false);
   assert.equal(releaseUtilsSource.includes("releaseRootPath = path.join(rootDir, 'release')"), true);
   assert.equal(releaseUtilsSource.includes('assertInsideProjectRelease'), true);
   assert.equal(releaseUtilsSource.includes('readdirSync(releaseRootPath, { withFileTypes: true })'), true);
@@ -1894,7 +1936,10 @@ test('Windows taskbar lock uses Jump List IPC without tray or background hiding'
   assert.equal(mainSource.includes('app.setUserTasks(['), true);
   assert.equal(mainSource.includes("title: '锁定'"), true);
   assert.equal(mainSource.includes("description: '锁定 NetraFlow'"), true);
-  assert.equal(mainSource.includes("arguments: '--lock'"), true);
+  assert.equal(mainSource.includes("const lockArguments = app.isPackaged ? '--lock'"), true);
+  assert.equal(mainSource.includes('`"${app.getAppPath()}" --lock`'), true);
+  assert.equal(mainSource.includes('arguments: lockArguments'), true);
+  assert.equal(mainSource.includes('iconPath: app.isPackaged ? process.execPath : getAppIconPath()'), true);
   assert.equal(mainSource.includes('app.requestSingleInstanceLock()'), true);
   assert.equal(mainSource.includes("app.on('second-instance'"), true);
   assert.equal(mainSource.includes("argv.includes('--lock')"), true);
@@ -2687,7 +2732,7 @@ test('popup and system prompt copy removes sentence periods without touching dot
     ),
     false
   );
-  assert.equal(packageJson.version, '0.9.5');
+  assert.equal(packageJson.version, '0.9.7');
   assert.equal(
     userSettingsLogicSource.includes(
       'netraflow-settings-${year}${month}${day}-${hour}${minute}${second}.netraflow-settings.json'
@@ -2702,8 +2747,8 @@ test('release documentation keeps packaging notes scoped to changelog', () => {
   const readmeSource = readProjectFile('README.md');
 
   assert.equal(
-    normalizeLineEndings(readmeSource),
-    normalizeLineEndings(readHeadProjectFile('README.md'))
+    normalizeNewlines(readmeSource),
+    normalizeNewlines(readHeadProjectFile('README.md'))
   );
   assert.equal(changelogSource.includes('## 0.9.2'), true);
   assert.equal(changelogSource.includes('## 0.9.3'), true);

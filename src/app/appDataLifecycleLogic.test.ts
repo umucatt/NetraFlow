@@ -6,6 +6,12 @@ import test from 'node:test';
 
 import type { AppData, BackupRecord } from './types';
 import {
+  ACCOUNTS_STORAGE_KEY,
+  GROUPS_STORAGE_KEY,
+  HISTORY_STORAGE_KEY
+} from './storageKeys';
+import {
+  createAppDataStorageItems,
   createEmptyAppData,
   createExampleDataApplyResult,
   createExampleModeSnapshot,
@@ -15,6 +21,7 @@ import {
   createTestDataInRealAppData,
   getResetActionLabel,
   isResetConfirmationInputValid,
+  persistAppDataStorageItems,
   sanitizeResetConfirmationInput
 } from './appDataLifecycleLogic';
 
@@ -74,6 +81,135 @@ test('creates empty app data for reset without shared arrays', () => {
   });
 
   assert.deepEqual(second, { groups: [], accounts: [], history: [] });
+});
+
+test('AppData persistence writes one core batch and no single-key items', () => {
+  const writes: unknown[] = [];
+  let singleKeyWriteCount = 0;
+  const storage = {
+    setItems(items: unknown) {
+      writes.push(items);
+    },
+    setItem() {
+      singleKeyWriteCount += 1;
+    }
+  };
+
+  assert.equal(
+    persistAppDataStorageItems(appData, {
+      storage
+    }),
+    true
+  );
+  assert.equal(writes.length, 1);
+  assert.equal(singleKeyWriteCount, 0);
+  assert.deepEqual(Object.keys(writes[0] as Record<string, string>).sort(), [
+    ACCOUNTS_STORAGE_KEY,
+    GROUPS_STORAGE_KEY,
+    HISTORY_STORAGE_KEY
+  ].sort());
+});
+
+test('AppData persistence checks empty-history guard before serialization and writes nothing', () => {
+  const writes: unknown[] = [];
+  const unsafeData = {
+    groups: [
+      {
+        id: 'g-bad',
+        name: BigInt(1),
+        nature: 'asset',
+        includeInStats: true,
+        sortOrder: 0
+      }
+    ],
+    accounts: [],
+    history: []
+  } as unknown as AppData;
+
+  assert.equal(
+    persistAppDataStorageItems(unsafeData, {
+      hasStoredHistoryRecords: () => true,
+      storage: {
+        setItems(items: unknown) {
+          writes.push(items);
+        }
+      }
+    }),
+    false
+  );
+  assert.deepEqual(writes, []);
+});
+
+test('AppData persistence serializes every core value before calling setItems', () => {
+  const createStorage = () => {
+    const writes: unknown[] = [];
+
+    return {
+      writes,
+      storage: {
+        setItems(items: unknown) {
+          writes.push(items);
+        }
+      }
+    };
+  };
+  const validHistory = appData.history;
+
+  [
+    {
+      ...appData,
+      groups: [
+        {
+          id: 'g-bad',
+          name: BigInt(1),
+          nature: 'asset',
+          includeInStats: true,
+          sortOrder: 0
+        }
+      ]
+    },
+    {
+      ...appData,
+      accounts: [{ ...appData.accounts[0]!, amount: BigInt(1) }]
+    },
+    {
+      ...appData,
+      history: [{ ...validHistory[0]!, note: BigInt(1) }]
+    }
+  ].forEach((data) => {
+    const { writes, storage } = createStorage();
+
+    assert.throws(() =>
+      persistAppDataStorageItems(data as unknown as AppData, {
+        storage
+      })
+    );
+    assert.deepEqual(writes, []);
+  });
+});
+
+test('AppData storage item serialization keeps existing core payload semantics', () => {
+  const result = createAppDataStorageItems({
+    groups: [
+      {
+        ...appData.groups[0],
+        accounts: appData.accounts
+      }
+    ] as unknown as AppData['groups'],
+    accounts: appData.accounts,
+    history: []
+  }, {
+    allowEmptyHistoryOverwrite: true,
+    hasStoredHistoryRecords: () => true
+  });
+
+  assert.equal(result.shouldWrite, true);
+
+  if (result.shouldWrite) {
+    assert.deepEqual(JSON.parse(result.items[GROUPS_STORAGE_KEY] ?? ''), appData.groups);
+    assert.deepEqual(JSON.parse(result.items[ACCOUNTS_STORAGE_KEY] ?? ''), appData.accounts);
+    assert.deepEqual(JSON.parse(result.items[HISTORY_STORAGE_KEY] ?? ''), []);
+  }
 });
 
 test('clones example snapshots so sample mode does not share real data references', () => {

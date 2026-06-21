@@ -24,7 +24,10 @@ import {
 import {
   getExampleModeBadgeSettingsNavigation
 } from './app/exampleModeNavigation';
-import { clearPersistedAssetData } from './app/appDataLifecycleLogic';
+import {
+  clearPersistedAssetData,
+  persistAppDataStorageItems
+} from './app/appDataLifecycleLogic';
 import { useAppDataLifecycleController } from './app/useAppDataLifecycleController';
 import { useAppDialogController } from './app/useAppDialogController';
 import {
@@ -2014,39 +2017,18 @@ const saveAppData = (
   options: { allowEmptyHistoryOverwrite?: boolean } = {}
 
 ) => {
-
-  nfStorage.setItem(
-    GROUPS_STORAGE_KEY,
-    JSON.stringify(stripRuntimeAccountsFromGroups(groups))
+  persistAppDataStorageItems(
+    { groups, accounts, history },
+    {
+      ...options,
+      hasStoredHistoryRecords: hasPossiblyStoredHistoryRecords,
+      onSkipEmptyHistory: () => {
+        console.warn(
+          '[NetraFlow storage] Skipped writing empty historyRecords because stored history exists.'
+        );
+      }
+    }
   );
-
-  nfStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
-
-
-
-  if (
-
-    history.length === 0 &&
-
-    !options.allowEmptyHistoryOverwrite &&
-
-    hasPossiblyStoredHistoryRecords()
-
-  ) {
-
-    console.warn(
-
-      '[NetraFlow storage] Skipped writing empty historyRecords because stored history exists.'
-
-    );
-
-    return;
-
-  }
-
-
-
-  nfStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
 
 };
 

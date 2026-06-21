@@ -1,6 +1,6 @@
 {
   "name": "netraflow",
-  "version": "0.9.6",
+  "version": "0.9.7",
   "private": true,
   "license": "GPL-3.0-only",
   "productName": "NetraFlow",
@@ -85,12 +85,15 @@
     }
   },
   "scripts": {
-    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev": "node scripts/dev.mjs",
     "dev:renderer": "vite",
     "dev:electron": "npm run clean:electron && tsc -p tsconfig.node.json && wait-on tcp:5174 && cross-env VITE_DEV_SERVER_URL=http://localhost:5174 electron .",
     "clean:electron": "node -e \"require('node:fs').rmSync('dist-electron', { recursive: true, force: true })\"",
     "build": "tsc --noEmit -p tsconfig.json && vite build && npm run clean:electron && tsc -p tsconfig.node.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "test": "node scripts/run-tests.mjs",
+    "release:check": "node scripts/check-release.mjs",
+    "release:verify-artifacts": "node scripts/verify-release-artifacts.mjs",
     "start": "npm run build && electron .",
     "clean:release": "node scripts/clean-release.mjs",
     "dist:installer": "node scripts/package-installer.mjs",
