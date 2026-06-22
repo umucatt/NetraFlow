@@ -11,7 +11,8 @@ import type {
   BackupCycleUnit,
   BackupMethod,
   BackupRecord,
-  HistoryRecord
+  HistoryRecord,
+  SnapshotImportRecord
 } from '../../app/types';
 import { verifyPassword } from '../../security/passwordHash';
 import {
@@ -22,29 +23,17 @@ import {
 import type { GlobalSettings } from '../security/securitySettingsTypes';
 import {
   areAutoBackupSettingsEqual,
-  clearLastBackupAt,
-  consumeAutoBackupDueOnce,
   createBackupFileContent,
   createBackupPayload,
   createSnapshotRestoreData,
   DEFAULT_AUTO_BACKUP_SETTINGS,
   getBackupFileName,
-  hasBackupRecordMissingIncrementCount,
-  loadAutoBackupSettings,
-  loadBackupRecords,
-  loadSnapshotImportRecords,
-  loadLastBackupAt,
-  loadLastBackupHistoryCount,
   mergeBackupRecords,
   mergeSnapshotImportRecords,
   normalizeAutoBackupSettings,
   normalizeBackupRecords,
+  normalizeSnapshotImportRecords,
   SNAPSHOT_INCOMPLETE_ERROR_MESSAGE,
-  saveSnapshotImportRecords,
-  saveAutoBackupSettings,
-  saveBackupRecords,
-  saveLastBackupAt,
-  saveLastBackupHistoryCount,
   shouldRunStartupAutoBackupCycle
 } from './snapshotBackupLogic';
 
@@ -84,6 +73,19 @@ type ImportBackupDataResult = {
   changedHistoryRecordCount: number;
 };
 
+type InitialBackupState = {
+  lastBackupAt: string;
+  lastBackupHistoryCount: number;
+  backupRecords: BackupRecord[];
+  snapshotImportRecords: SnapshotImportRecord[];
+};
+
+type PersistBackupStateInput = {
+  records: BackupRecord[];
+  lastBackupAt: string;
+  lastBackupHistoryCount: number;
+};
+
 type SnapshotBackupControllerOptions = {
   productName: string;
   assetGroups: AssetGroup[];
@@ -91,8 +93,14 @@ type SnapshotBackupControllerOptions = {
   history: HistoryRecord[];
   isExampleMode: boolean;
   globalSettings: GlobalSettings;
+  initialAutoBackupSettings: AutoBackupSettings;
+  initialBackupState: InitialBackupState;
   updateAppData: (nextData: AppData) => void;
-  cancelPendingFirstWelcomeForRealChange: () => void;
+  persistAutoBackupSettings: (settings: AutoBackupSettings) => void;
+  persistBackupState: (state: PersistBackupStateInput) => void;
+  persistSnapshotImportRecords: (records: SnapshotImportRecord[]) => void;
+  consumeAutoBackupDueOnce: () => boolean;
+  isPersistenceCurrent: () => boolean;
   clearSearchNavigation: () => void;
   getBackupFieldValue: (value: unknown, fieldNames: string[]) => unknown;
   getBackupAccountData: (value: unknown) => BackupAccountData;
@@ -128,8 +136,14 @@ export function useSnapshotBackupController({
   history,
   isExampleMode,
   globalSettings,
+  initialAutoBackupSettings,
+  initialBackupState,
   updateAppData,
-  cancelPendingFirstWelcomeForRealChange,
+  persistAutoBackupSettings,
+  persistBackupState,
+  persistSnapshotImportRecords,
+  consumeAutoBackupDueOnce,
+  isPersistenceCurrent,
   clearSearchNavigation,
   getBackupFieldValue,
   getBackupAccountData,
@@ -141,15 +155,19 @@ export function useSnapshotBackupController({
   showToast,
   dismissToast
 }: SnapshotBackupControllerOptions) {
-  const [lastBackupAt, setLastBackupAt] = useState(loadLastBackupAt);
-  const [lastBackupHistoryCount, setLastBackupHistoryCount] = useState(() =>
-    loadLastBackupHistoryCount(history.length)
+  const [lastBackupAt, setLastBackupAt] = useState(initialBackupState.lastBackupAt);
+  const [lastBackupHistoryCount, setLastBackupHistoryCount] = useState(
+    initialBackupState.lastBackupHistoryCount
   );
-  const [backupRecords, setBackupRecords] = useState(loadBackupRecords);
+  const [backupRecords, setBackupRecords] = useState(() =>
+    normalizeBackupRecords(initialBackupState.backupRecords)
+  );
   const [snapshotImportRecords, setSnapshotImportRecords] = useState(
-    loadSnapshotImportRecords
+    () => normalizeSnapshotImportRecords(initialBackupState.snapshotImportRecords)
   );
-  const [autoBackupSettings, setAutoBackupSettings] = useState(loadAutoBackupSettings);
+  const [autoBackupSettings, setAutoBackupSettings] = useState(() =>
+    normalizeAutoBackupSettings(initialAutoBackupSettings)
+  );
   const [autoBackupDraft, setAutoBackupDraft] =
     useState<AutoBackupSettings>(() => autoBackupSettings);
   const [autoBackupCycleValueInput, setAutoBackupCycleValueInput] = useState(() =>
@@ -175,12 +193,6 @@ export function useSnapshotBackupController({
     setAutoBackupCycleValueInput(String(autoBackupDraft.cycle.value));
   }, [autoBackupDraft.cycle.value]);
 
-  useEffect(() => {
-    if (hasBackupRecordMissingIncrementCount()) {
-      saveBackupRecords(backupRecords);
-    }
-  }, []);
-
   const applyBackupState = (
     nextBackupRecords: BackupRecord[],
     nextLastBackupAt: string,
@@ -198,15 +210,11 @@ export function useSnapshotBackupController({
       return;
     }
 
-    saveBackupRecords(normalizedRecords);
-
-    if (nextLastBackupAt) {
-      saveLastBackupAt(nextLastBackupAt);
-    } else {
-      clearLastBackupAt();
-    }
-
-    saveLastBackupHistoryCount(normalizedHistoryCount);
+    persistBackupState({
+      records: normalizedRecords,
+      lastBackupAt: nextLastBackupAt,
+      lastBackupHistoryCount: normalizedHistoryCount
+    });
   };
 
   const resetAutoBackupSettings = (
@@ -217,14 +225,14 @@ export function useSnapshotBackupController({
     setAutoBackupSettings(normalizedSettings);
     setAutoBackupDraft(normalizedSettings);
     setAutoBackupCycleValueInput(String(normalizedSettings.cycle.value));
-    saveAutoBackupSettings(normalizedSettings);
+    persistAutoBackupSettings(normalizedSettings);
   };
 
   const resetSnapshotImportRecords = (persist: boolean) => {
     setSnapshotImportRecords([]);
 
     if (persist) {
-      saveSnapshotImportRecords([]);
+      persistSnapshotImportRecords([]);
     }
   };
 
@@ -249,7 +257,7 @@ export function useSnapshotBackupController({
         ),
         confirmLabel: '继续开启'
       }).then((shouldContinue) => {
-        if (!shouldContinue) {
+        if (!shouldContinue || !isPersistenceCurrent()) {
           return;
         }
 
@@ -295,6 +303,10 @@ export function useSnapshotBackupController({
   };
 
   const adjustAutoBackupCycleValue = (direction: 1 | -1) => {
+    if (isExampleMode) {
+      return;
+    }
+
     setAutoBackupDraft((currentSettings) =>
       normalizeAutoBackupSettings({
         ...currentSettings,
@@ -340,7 +352,7 @@ export function useSnapshotBackupController({
     try {
       const selectedDirectory = await api.selectDirectory();
 
-      if (!selectedDirectory) {
+      if (!selectedDirectory || !isPersistenceCurrent()) {
         return;
       }
 
@@ -370,8 +382,7 @@ export function useSnapshotBackupController({
     setAutoBackupSettings(nextSettings);
     setAutoBackupDraft(nextSettings);
     setAutoBackupCycleValueInput(String(nextSettings.cycle.value));
-    saveAutoBackupSettings(nextSettings);
-    cancelPendingFirstWelcomeForRealChange();
+    persistAutoBackupSettings(nextSettings);
   };
 
   const createBackupRecord = (backedUpAt: string, method: BackupMethod): BackupRecord => ({
@@ -443,9 +454,11 @@ export function useSnapshotBackupController({
       return;
     }
 
-    saveBackupRecords(nextBackupRecords);
-    saveLastBackupAt(backupRecord.backedUpAt);
-    saveLastBackupHistoryCount(backupRecord.historyCount);
+    persistBackupState({
+      records: nextBackupRecords,
+      lastBackupAt: backupRecord.backedUpAt,
+      lastBackupHistoryCount: backupRecord.historyCount
+    });
   };
 
   const getSnapshotCreatedAt = (
@@ -488,10 +501,18 @@ export function useSnapshotBackupController({
     );
 
     setSnapshotImportRecords(nextSnapshotImportRecords);
-    saveSnapshotImportRecords(nextSnapshotImportRecords);
+    persistSnapshotImportRecords(nextSnapshotImportRecords);
   };
 
   const exportBackup = async () => {
+    if (isExampleMode) {
+      void showNoticeDialog({
+        title: '示例模式下不可导出快照',
+        message: '示例模式不会读写真实外部快照文件'
+      });
+      return;
+    }
+
     const api = window.electronAPI ?? window.electronWindow;
     let snapshotPassword: string | null = null;
 
@@ -511,6 +532,10 @@ export function useSnapshotBackupController({
       if (!snapshotPassword) {
         return;
       }
+
+      if (!isPersistenceCurrent()) {
+        return;
+      }
     }
 
     let selectedDirectory = '';
@@ -526,7 +551,7 @@ export function useSnapshotBackupController({
       return;
     }
 
-    if (!selectedDirectory) {
+    if (!selectedDirectory || !isPersistenceCurrent()) {
       return;
     }
 
@@ -536,9 +561,6 @@ export function useSnapshotBackupController({
     const backupPayload = createBackupPayload({
       productName,
       backupAt,
-      backupRecord,
-      nextBackupRecords,
-      autoBackupSettings,
       groups: assetGroups,
       accounts,
       history
@@ -547,6 +569,10 @@ export function useSnapshotBackupController({
 
     try {
       fileContent = await createBackupFileContent(backupPayload, snapshotPassword);
+
+      if (!isPersistenceCurrent()) {
+        return;
+      }
     } catch (error) {
       console.error('[NetraFlow snapshot] Failed to encrypt manual snapshot.', error);
       void showNoticeDialog({
@@ -562,6 +588,11 @@ export function useSnapshotBackupController({
         fileName: getBackupFileName(backupAt, snapshotPassword !== null),
         content: fileContent
       });
+
+      if (!isPersistenceCurrent()) {
+        return;
+      }
+
       saveBackupSuccess(backupRecord, nextBackupRecords);
       void showNoticeDialog({
         title: '导出快照',
@@ -577,7 +608,11 @@ export function useSnapshotBackupController({
   };
 
   const runStartupAutoBackup = async () => {
-    const settings = loadAutoBackupSettings();
+    if (isExampleMode) {
+      return;
+    }
+
+    const settings = autoBackupSettings;
     const currentGlobalSettings = globalSettings;
     const forceDueOnce = consumeAutoBackupDueOnce();
 
@@ -594,7 +629,7 @@ export function useSnapshotBackupController({
     }
 
     const shouldRun = shouldRunStartupAutoBackupCycle(
-      loadLastBackupAt(),
+      lastBackupAt,
       settings.cycle,
       forceDueOnce
     );
@@ -626,21 +661,27 @@ export function useSnapshotBackupController({
       }
     }
 
+    if (!isPersistenceCurrent()) {
+      return;
+    }
+
     const progressToastId = showToast('自动备份进行中');
     await new Promise<void>((resolve) => {
       window.setTimeout(resolve, 120);
     });
 
+    if (!isPersistenceCurrent()) {
+      dismissToast(progressToastId);
+      return;
+    }
+
     const backupAt = new Date().toISOString();
     const backupRecord = createBackupRecord(backupAt, 'auto');
-    const latestBackupRecords = loadBackupRecords();
+    const latestBackupRecords = backupRecords;
     const nextBackupRecords = mergeBackupRecords(latestBackupRecords, [backupRecord]);
     const backupPayload = createBackupPayload({
       productName,
       backupAt,
-      backupRecord,
-      nextBackupRecords,
-      autoBackupSettings: settings,
       groups: assetGroups,
       accounts,
       history
@@ -649,11 +690,23 @@ export function useSnapshotBackupController({
 
     try {
       fileContent = await createBackupFileContent(backupPayload, snapshotPassword);
+
+      if (!isPersistenceCurrent()) {
+        dismissToast(progressToastId);
+        return;
+      }
+
       await api.writeSnapshotFile({
         directory,
         fileName: getBackupFileName(backupAt, snapshotPassword !== null),
         content: fileContent
       });
+
+      if (!isPersistenceCurrent()) {
+        dismissToast(progressToastId);
+        return;
+      }
+
       dismissToast(progressToastId);
       saveBackupSuccess(backupRecord, nextBackupRecords);
       setAutoBackupSettings(settings);
@@ -700,12 +753,7 @@ export function useSnapshotBackupController({
         history: historyValue
       }
     });
-    const backupRecordsValue = getBackupFieldValue(value, ['backupRecords']);
-    const hasImportedBackupRecords = backupRecordsValue !== undefined;
-    const importedBackupRecords = normalizeBackupRecords(
-      backupRecordsValue
-    );
-    const snapshotCreatedAt = getSnapshotCreatedAt(value, importedBackupRecords);
+    const snapshotCreatedAt = getSnapshotCreatedAt(value, []);
     const importResult: ImportBackupDataResult = {
       snapshotCreatedAt,
       historyRecordCount: restoreResult.historyRecordCount,
@@ -713,80 +761,15 @@ export function useSnapshotBackupController({
     };
 
     if (isExampleMode) {
-      const importedLastBackupAt = getBackupFieldValue(value, ['lastBackupAt']);
-      const importedLastBackupHistoryCount = getBackupFieldValue(value, [
-        'lastBackupHistoryCount'
-      ]);
-      const importedHistoryCountNumber =
-        typeof importedLastBackupHistoryCount === 'number'
-          ? importedLastBackupHistoryCount
-          : typeof importedLastBackupHistoryCount === 'string'
-            ? Number(importedLastBackupHistoryCount)
-            : NaN;
-
       updateAppData({
         groups: restoreResult.nextData.groups,
         accounts: restoreResult.nextData.accounts,
         history: restoreResult.nextData.history
       });
-      applyBackupState(
-        hasImportedBackupRecords ? importedBackupRecords : backupRecords,
-        typeof importedLastBackupAt === 'string' &&
-          getValidTimestamp(importedLastBackupAt) !== null
-          ? importedLastBackupAt
-          : lastBackupAt,
-        Number.isFinite(importedHistoryCountNumber)
-          ? Math.max(0, Math.floor(importedHistoryCountNumber))
-          : restoreResult.nextData.history.length,
-        false
-      );
       return importResult;
     }
 
     updateAppData(restoreResult.nextData);
-
-    const importedLastBackupAt = getBackupFieldValue(value, ['lastBackupAt']);
-
-    if (
-      typeof importedLastBackupAt === 'string' &&
-      getValidTimestamp(importedLastBackupAt) !== null
-    ) {
-      setLastBackupAt(importedLastBackupAt);
-      saveLastBackupAt(importedLastBackupAt);
-    }
-
-    const importedLastBackupHistoryCount = getBackupFieldValue(value, [
-      'lastBackupHistoryCount'
-    ]);
-    const importedHistoryCountNumber =
-      typeof importedLastBackupHistoryCount === 'number'
-        ? importedLastBackupHistoryCount
-        : typeof importedLastBackupHistoryCount === 'string'
-          ? Number(importedLastBackupHistoryCount)
-          : NaN;
-
-    const nextHistoryCount = Number.isFinite(importedHistoryCountNumber)
-      ? Math.max(0, Math.floor(importedHistoryCountNumber))
-      : restoreResult.nextData.history.length;
-
-    setLastBackupHistoryCount(nextHistoryCount);
-    saveLastBackupHistoryCount(nextHistoryCount);
-
-    if (hasImportedBackupRecords) {
-      setBackupRecords(importedBackupRecords);
-      saveBackupRecords(importedBackupRecords);
-    }
-
-    const importedAutoBackupSettings = getBackupFieldValue(value, ['autoBackupSettings']);
-
-    if (importedAutoBackupSettings !== undefined) {
-      const nextAutoBackupSettings = normalizeAutoBackupSettings(importedAutoBackupSettings);
-
-      setAutoBackupSettings(nextAutoBackupSettings);
-      setAutoBackupDraft(nextAutoBackupSettings);
-      setAutoBackupCycleValueInput(String(nextAutoBackupSettings.cycle.value));
-      saveAutoBackupSettings(nextAutoBackupSettings);
-    }
 
     return importResult;
   };
@@ -833,6 +816,14 @@ export function useSnapshotBackupController({
     const file = event.target.files?.[0];
     event.target.value = '';
 
+    if (isExampleMode) {
+      void showNoticeDialog({
+        title: '示例模式下不可导入快照',
+        message: '示例模式不会读写真实外部快照文件'
+      });
+      return;
+    }
+
     if (!file) {
       return;
     }
@@ -850,9 +841,13 @@ export function useSnapshotBackupController({
             return;
           }
 
+          if (!isPersistenceCurrent()) {
+            return;
+          }
+
           const snapshotData = await readImportSnapshotData(importContent);
 
-          if (snapshotData === null) {
+          if (snapshotData === null || !isPersistenceCurrent()) {
             return;
           }
 

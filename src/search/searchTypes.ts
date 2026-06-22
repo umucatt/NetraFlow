@@ -23,7 +23,7 @@ export type AssetGroupWithAccounts = AssetGroup & {
   accounts: Account[];
 };
 
-export type HistoryType = '新增' | '删除' | '修改' | '归档' | '重新启用';
+export type HistoryType = '创建' | '删除' | '修改' | '归档' | '重新启用';
 
 export type HistoryRecord = {
   id: string;

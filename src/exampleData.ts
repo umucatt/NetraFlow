@@ -789,7 +789,7 @@ const getExampleHistoryNote = (
   definition: ExampleAccountDefinition,
   type: HistoryType
 ) => {
-  if (type === '新增') {
+  if (type === '创建') {
     return Math.random() < 0.18 ? '账户创建' : undefined;
   }
 
@@ -903,7 +903,7 @@ const createLifecycleHistoryDrafts = (entries: ExampleEntry[]) => {
   const drafts: ExampleHistoryDraft[] = [];
 
   entries.forEach((entry) => {
-    drafts.push({ entry, type: '新增', time: entry.account.createdAt });
+    drafts.push({ entry, type: '创建', time: entry.account.createdAt });
 
     if (entry.lifecycle === 'archived') {
       drafts.push({
@@ -985,7 +985,7 @@ const materializeExampleHistory = (
         const beforeAmount = currentAmount;
         let afterAmount: number | null = currentAmount;
 
-        if (draft.type === '新增') {
+        if (draft.type === '创建') {
           afterAmount = getExampleIntermediateAmount(account, definition);
         } else if (draft.type === '修改') {
           afterAmount = draft.forceFinal
@@ -1003,7 +1003,7 @@ const materializeExampleHistory = (
             definition,
             account,
             draft.type,
-            draft.type === '新增' || draft.type === '重新启用' ? null : beforeAmount,
+            draft.type === '创建' || draft.type === '重新启用' ? null : beforeAmount,
             afterAmount,
             draft.time,
             getExampleHistoryNote(definition, draft.type)
@@ -1112,7 +1112,7 @@ export const isExampleHistoryNoteAllowed = (record: HistoryRecord) => {
   }
 
   if (record.note === '账户创建') {
-    return record.type === '新增';
+    return record.type === '创建';
   }
 
   if (record.note === '账户归档') {
@@ -1135,7 +1135,7 @@ export const isExampleHistoryNoteAllowed = (record: HistoryRecord) => {
 };
 
 const getExampleRecordStage = (record: HistoryRecord) => {
-  if (record.type === '新增') {
+  if (record.type === '创建') {
     return 'created';
   }
 
@@ -1180,17 +1180,12 @@ export const validateExampleHistoryConsistency = (appData: {
     const records = appData.history
       .filter((record) => record.accountId === account.id)
       .sort((left, right) => Date.parse(left.time) - Date.parse(right.time));
-    const addRecords = records.filter((record) => record.type === '新增');
+    const createRecords = records.filter((record) => record.type === '创建');
 
-    if (addRecords.length !== 1) {
-      errors.push(`${account.name}: 新增记录数量不是 1`);
+    if (createRecords.length !== 1) {
+      errors.push(`${account.name}: 创建记录数量不是 1`);
     }
 
-    if (records[0]?.type !== '新增') {
-      errors.push(`${account.name}: 新增记录不是最早记录`);
-    }
-
-    let created = false;
     let archived = false;
 
     records.forEach((record) => {
@@ -1204,14 +1199,8 @@ export const validateExampleHistoryConsistency = (appData: {
         errors.push(`${account.name}: 备注与账户类型不匹配`);
       }
 
-      if (record.type === '新增') {
-        created = true;
+      if (record.type === '创建') {
         archived = false;
-        return;
-      }
-
-      if (!created) {
-        errors.push(`${account.name}: 新增前存在其他记录`);
         return;
       }
 

@@ -437,7 +437,7 @@ function renderSettingsContent(props: SettingsPageProps) {
         isExampleMode={props.isExampleMode}
         onImportUserSettings={props.onImportUserSettings}
         onExportUserSettings={props.onExportUserSettings}
-        onOpenUserSettingsFile={() => props.userSettingsFileInputRef.current?.click()}
+        onOpenUserSettingsFile={props.onOpenUserSettingsFile}
         onOpenBackupPanel={props.onOpenBackupPanel}
         onSelectExampleTemplate={props.onSelectExampleTemplate}
         onEnterOrSwitchExampleMode={props.onEnterOrSwitchExampleMode}

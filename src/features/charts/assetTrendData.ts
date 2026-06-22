@@ -90,9 +90,14 @@ const setChartStateAmount = (
 const rollbackHistoryRecordForTrend = (
   state: Map<string, ChartAccountState>,
   groups: AssetGroupWithAccounts[],
-  record: HistoryRecord
+  record: HistoryRecord,
+  hasEarlierAccountRecord: boolean
 ) => {
-  if (record.type === '新增') {
+  if (record.type === '创建') {
+    if (hasEarlierAccountRecord) {
+      return;
+    }
+
     setChartStateAmount(state, groups, record, record.beforeAmount);
     return;
   }
@@ -194,7 +199,16 @@ export const deriveAssetTrendPoints = (
 
     recordsByTimeDesc.forEach((entry) => {
       if (entry.timestamp > cutoff) {
-        rollbackHistoryRecordForTrend(state, groups, entry.record);
+        rollbackHistoryRecordForTrend(
+          state,
+          groups,
+          entry.record,
+          recordsByTimeDesc.some(
+            (candidate) =>
+              candidate.record.accountId === entry.record.accountId &&
+              candidate.timestamp <= cutoff
+          )
+        );
       }
     });
 

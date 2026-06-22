@@ -579,7 +579,7 @@ export function RightPanelRenderer({
             onClick: home.onOpenSearch
           })}
           {renderRightPanelActionButton({
-            label: '账户新增 / 恢复',
+            label: '账户创建 / 恢复',
             onClick: home.onOpenAddAccount
           })}
           {renderRightPanelActionButton({

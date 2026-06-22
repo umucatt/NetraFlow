@@ -31,6 +31,7 @@ type SecuritySettingsControllerOptions = {
   updateGlobalSettings: (
     createNextSettings: (currentSettings: GlobalSettings) => GlobalSettings
   ) => void;
+  isPersistenceCurrent: () => boolean;
   showConfirmationDialog: (request: ConfirmationRequest) => void;
   showToast: (message: string, tone?: 'info' | 'success' | 'error') => string;
 };
@@ -39,6 +40,7 @@ export function useSecuritySettingsController({
   globalSettings,
   autoBackupEnabled,
   updateGlobalSettings,
+  isPersistenceCurrent,
   showConfirmationDialog,
   showToast
 }: SecuritySettingsControllerOptions) {
@@ -306,6 +308,11 @@ export function useSecuritySettingsController({
       globalSettings.passwordHash
     );
 
+    if (!isPersistenceCurrent()) {
+      setIsDisablingPasswordProtection(false);
+      return;
+    }
+
     if (!isPasswordValid) {
       setPasswordDisableError('密码错误');
       setIsDisablingPasswordProtection(false);
@@ -347,6 +354,11 @@ export function useSecuritySettingsController({
 
       const isOldPasswordValid = await verifyPassword(oldPasswordInput, savedPasswordHash);
 
+      if (!isPersistenceCurrent()) {
+        setIsSavingPassword(false);
+        return;
+      }
+
       if (!isOldPasswordValid) {
         setPasswordEditorError('旧密码不正确');
         setIsSavingPassword(false);
@@ -356,6 +368,11 @@ export function useSecuritySettingsController({
 
     try {
       const nextPasswordHash = await createPasswordHash(newPasswordInput);
+
+      if (!isPersistenceCurrent()) {
+        setIsSavingPassword(false);
+        return;
+      }
 
       updateGlobalSettings((currentSettings) => ({
         ...currentSettings,
@@ -487,7 +504,11 @@ export function useSecuritySettingsController({
           title: '启用快照加密',
           message: getSnapshotEncryptionEnableMessage(),
           confirmLabel: '继续',
-          onConfirm: () => requestFirstSnapshotPasswordSetup(true)
+          onConfirm: () => {
+            if (isPersistenceCurrent()) {
+              requestFirstSnapshotPasswordSetup(true);
+            }
+          }
         });
         return;
       }
@@ -496,11 +517,16 @@ export function useSecuritySettingsController({
         title: '启用快照加密',
         message: getSnapshotEncryptionEnableMessage(),
         confirmLabel: '确认启用',
-        onConfirm: () =>
+        onConfirm: () => {
+          if (!isPersistenceCurrent()) {
+            return;
+          }
+
           updateGlobalSettings((currentSettings) => ({
             ...currentSettings,
             snapshotEncryptionEnabled: true
-          }))
+          }));
+        }
       });
       return;
     }
@@ -529,6 +555,11 @@ export function useSecuritySettingsController({
       snapshotEncryptionDisableInput,
       globalSettings.snapshotPasswordHash
     );
+
+    if (!isPersistenceCurrent()) {
+      setIsDisablingSnapshotEncryption(false);
+      return;
+    }
 
     if (!isPasswordValid) {
       setSnapshotEncryptionDisableError('快照密码不正确');
@@ -591,6 +622,11 @@ export function useSecuritySettingsController({
         savedSnapshotPasswordHash
       );
 
+      if (!isPersistenceCurrent()) {
+        setIsSavingSnapshotPassword(false);
+        return;
+      }
+
       if (!isOldSnapshotPasswordValid) {
         setSnapshotPasswordEditorError('旧快照密码不正确');
         setIsSavingSnapshotPassword(false);
@@ -600,6 +636,11 @@ export function useSecuritySettingsController({
 
     try {
       const nextSnapshotPasswordHash = await createPasswordHash(newSnapshotPasswordInput);
+
+      if (!isPersistenceCurrent()) {
+        setIsSavingSnapshotPassword(false);
+        return;
+      }
 
       updateGlobalSettings((currentSettings) => ({
         ...currentSettings,

@@ -3,9 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   Account,
   AccountPointer,
-  AppData,
   AssetGroup,
   AssetGroupWithAccounts,
+  CommitAppDataUpdate,
   HistoryRecord
 } from '../../app/types';
 import {
@@ -51,6 +51,7 @@ import {
 } from './flashNoteFlowLogic';
 import {
   createFlashNoteWritePlan,
+  createFlashNoteWritePlanForAppData,
   createFlashWriteRows,
   type FlashHistoryRecordInput
 } from './flashNoteWriteLogic';
@@ -70,7 +71,7 @@ type UseFlashNoteControllerOptions = {
   sortedHistory: HistoryRecord[];
   createHistoryRecord: (input: FlashHistoryRecordInput) => HistoryRecord;
   onWriteComplete: (targetAccount: NonNullable<AccountPointer>) => void;
-  updateAppData: (nextData: AppData) => void;
+  commitAppDataUpdate: CommitAppDataUpdate;
 };
 
 const createSelectedDateSet = (selectedDates: string[]) => new Set(selectedDates);
@@ -84,7 +85,7 @@ export const useFlashNoteController = ({
   sortedHistory,
   createHistoryRecord,
   onWriteComplete,
-  updateAppData
+  commitAppDataUpdate
 }: UseFlashNoteControllerOptions) => {
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState<FlashStep>('select');
@@ -757,14 +758,41 @@ export const useFlashNoteController = ({
       return;
     }
 
-    updateAppData({ groups: assetGroups, accounts: plan.nextAccounts, history: plan.nextHistory });
-    onWriteComplete(plan.targetAccount);
+    const result = commitAppDataUpdate((latestData) => {
+      const latestPlan = createFlashNoteWritePlanForAppData({
+        appData: latestData,
+        cells,
+        createHistoryRecord,
+        inputMode,
+        selectedAccount,
+        trackDates
+      });
+
+      return latestPlan
+        ? {
+            ok: true,
+            nextData: {
+              groups: latestData.groups,
+              accounts: latestPlan.nextAccounts,
+              history: latestPlan.nextHistory
+            },
+            value: latestPlan.targetAccount
+          }
+        : { ok: false, error: '当前账户无法写入闪记' };
+    });
+
+    if (!result.ok) {
+      return;
+    }
+
+    onWriteComplete(result.value);
     setStep('completed');
     resetDraft(false);
   }, [
     accounts,
     assetGroups,
     cells,
+    commitAppDataUpdate,
     createHistoryRecord,
     history,
     inputMode,
@@ -774,8 +802,7 @@ export const useFlashNoteController = ({
     selectedAccountEntry,
     selectedGroupName,
     sortedHistory,
-    trackDates,
-    updateAppData
+    trackDates
   ]);
 
   useFlashKeyboardInput({

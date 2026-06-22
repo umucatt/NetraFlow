@@ -7,6 +7,7 @@ import { toStoredAmountByNature } from '../../app/accountNature';
 import type {
   Account,
   AccountPointer,
+  AppData,
   AssetGroup,
   HistoryRecord
 } from '../../app/types';
@@ -190,4 +191,60 @@ export const createFlashNoteWritePlan = ({
     rows,
     targetAccount: selectedAccount
   };
+};
+
+export const createFlashNoteWritePlanForAppData = ({
+  appData,
+  cells,
+  createHistoryRecord,
+  inputMode,
+  selectedAccount,
+  trackDates,
+  writeTime
+}: {
+  appData: AppData;
+  cells: Record<string, FlashCell>;
+  createHistoryRecord: (input: FlashHistoryRecordInput) => HistoryRecord;
+  inputMode: FlashInputMode;
+  selectedAccount: AccountPointer;
+  trackDates: string[];
+  writeTime?: Date;
+}): FlashNoteWritePlan | null => {
+  if (!selectedAccount) {
+    return null;
+  }
+
+  const account = appData.accounts.find(
+    (currentAccount) =>
+      currentAccount.id === selectedAccount.accountId && !currentAccount.archived
+  );
+
+  if (!account) {
+    return null;
+  }
+
+  const group = appData.groups.find((currentGroup) => currentGroup.id === account.groupId);
+
+  if (!group) {
+    return null;
+  }
+
+  return createFlashNoteWritePlan({
+    account,
+    accounts: appData.accounts,
+    cells,
+    createHistoryRecord,
+    groupName: group.name,
+    groups: appData.groups,
+    history: appData.history,
+    inputMode,
+    selectedAccount: {
+      accountId: account.id,
+      groupId: account.groupId,
+      groupName: group.name
+    },
+    sortedHistory: [...appData.history].sort(compareHistoryByTimeDesc),
+    trackDates,
+    writeTime
+  });
 };

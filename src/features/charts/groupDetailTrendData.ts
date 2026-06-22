@@ -79,9 +79,14 @@ const setGroupDetailStateAmount = (
 const rollbackGroupDetailRecordForTrend = (
   state: Map<string, { label: string; amount: number }>,
   group: AssetGroupWithAccounts,
-  record: HistoryRecord
+  record: HistoryRecord,
+  hasEarlierAccountRecord: boolean
 ) => {
-  if (record.type === '新增') {
+  if (record.type === '创建') {
+    if (hasEarlierAccountRecord) {
+      return;
+    }
+
     setGroupDetailStateAmount(state, group, record, record.beforeAmount);
     return;
   }
@@ -110,7 +115,16 @@ const getGroupDetailStateAtDate = (
 
   recordsByTimeDesc.forEach((entry) => {
     if (entry.timestamp > cutoff) {
-      rollbackGroupDetailRecordForTrend(state, group, entry.record);
+      rollbackGroupDetailRecordForTrend(
+        state,
+        group,
+        entry.record,
+        recordsByTimeDesc.some(
+          (candidate) =>
+            candidate.record.accountId === entry.record.accountId &&
+            candidate.timestamp <= cutoff
+        )
+      );
     }
   });
 

@@ -1,9 +1,7 @@
 export { FirstWelcomeLayer } from './FirstWelcomeLayer';
 export {
   DEFAULT_FIRST_WELCOME_STATE,
-  loadFirstWelcomeState,
   normalizeFirstWelcomeState,
-  saveFirstWelcomeState,
   shouldShowFirstWelcome
 } from './firstWelcomeStateLogic';
 export type {

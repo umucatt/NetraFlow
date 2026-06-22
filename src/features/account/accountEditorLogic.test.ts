@@ -17,6 +17,7 @@ import {
   getAdjustedEditableAccountAmount,
   hasAddAccountUnsavedChanges,
   hasAmountEditorUnsavedChanges,
+  saveAccountAmountInAppData,
   updateAccountInfoInAppData
 } from './accountEditorLogic';
 
@@ -91,7 +92,7 @@ test('new account stores amount by account type nature', () => {
 
   if (assetResult.ok && debtResult.ok) {
     assert.equal(assetResult.account.amount, 120.5);
-    assert.equal(assetResult.nextData.history[0]?.type, '\u65b0\u589e');
+    assert.equal(assetResult.nextData.history[0]?.type, '\u521b\u5efa');
     assert.equal(assetResult.nextData.history[0]?.afterAmount, 120.5);
     assert.equal(debtResult.account.amount, -120.5);
     assert.equal(debtResult.nextData.history[0]?.afterAmount, -120.5);
@@ -193,6 +194,123 @@ test('adjusted account amount clamps invalid negative preview to zero', () => {
   assert.equal(state.nextAdjustedEditableAmount, 0);
 });
 
+test('account amount save records change against supplied latest account state', () => {
+  const group = createGroup('g-asset', 'Cash');
+  const account: Account = {
+    id: 'a-wallet',
+    groupId: group.id,
+    name: 'Wallet',
+    amount: 150,
+    createdAt: '2026-05-01T09:00:00.000Z'
+  };
+  const otherAccount: Account = {
+    id: 'a-other',
+    groupId: group.id,
+    name: 'Other',
+    amount: 75,
+    createdAt: '2026-05-01T09:00:00.000Z'
+  };
+  const unrelatedHistory = {
+    id: 'h-unrelated',
+    accountId: otherAccount.id,
+    type: '修改' as const,
+    groupName: group.name,
+    accountName: otherAccount.name,
+    beforeAmount: 70,
+    afterAmount: 75,
+    time: '2026-05-02T10:00:00.000Z'
+  };
+
+  const result = saveAccountAmountInAppData({
+    appData: {
+      groups: [group],
+      accounts: [account, otherAccount],
+      history: [unrelatedHistory]
+    },
+    groups: [withAccounts(group, [account, otherAccount])],
+    account,
+    groupId: group.id,
+    editableAmount: 180,
+    savedAt: '2026-05-03T10:00:00.000Z',
+    changeHistoryRecordId: 'h-change'
+  });
+
+  assert.ok(result);
+  assert.equal(result.nextData.accounts.find((item) => item.id === account.id)?.amount, 180);
+  assert.equal(result.nextData.accounts.find((item) => item.id === otherAccount.id)?.amount, 75);
+  assert.deepEqual(
+    {
+      id: result.nextData.history[0]?.id,
+      accountId: result.nextData.history[0]?.accountId,
+      type: result.nextData.history[0]?.type,
+      groupName: result.nextData.history[0]?.groupName,
+      accountName: result.nextData.history[0]?.accountName,
+      beforeAmount: result.nextData.history[0]?.beforeAmount,
+      afterAmount: result.nextData.history[0]?.afterAmount,
+      time: result.nextData.history[0]?.time
+    },
+    {
+      id: 'h-change',
+      accountId: account.id,
+      type: '修改',
+      groupName: group.name,
+      accountName: account.name,
+      beforeAmount: 150,
+      afterAmount: 180,
+      time: '2026-05-03T10:00:00.000Z'
+    }
+  );
+  assert.equal(
+    result.nextData.history.some((historyRecord) => historyRecord.id === unrelatedHistory.id),
+    true
+  );
+});
+
+test('saving account amount allows records earlier than the account creation record', () => {
+  const group = createGroup('g-asset', 'Cash');
+  const account: Account = {
+    id: 'a-wallet',
+    groupId: group.id,
+    name: 'Wallet',
+    amount: 100,
+    createdAt: '2026-06-21T09:00:00.000Z'
+  };
+  const createHistory = {
+    id: 'h-create',
+    accountId: account.id,
+    type: '\u521b\u5efa' as const,
+    groupName: group.name,
+    accountName: account.name,
+    beforeAmount: null,
+    afterAmount: account.amount,
+    time: account.createdAt
+  };
+  const result = saveAccountAmountInAppData({
+    appData: {
+      groups: [group],
+      accounts: [account],
+      history: [createHistory]
+    },
+    groups: [withAccounts(group, [account])],
+    account,
+    groupId: group.id,
+    editableAmount: 80,
+    savedAt: '2026-05-09T10:00:00.000Z',
+    changeHistoryRecordId: 'h-backfill'
+  });
+
+  assert.ok(result);
+  assert.equal(result.nextData.accounts.find((item) => item.id === account.id)?.amount, 80);
+  assert.equal(result.nextData.history[0]?.id, 'h-backfill');
+  assert.equal(result.nextData.history[0]?.type, '\u4fee\u6539');
+  assert.equal(result.nextData.history[0]?.time, '2026-05-09T10:00:00.000Z');
+  assert.equal(result.nextData.history.filter((record) => record.type === '\u521b\u5efa').length, 1);
+  assert.equal(
+    result.nextData.history.find((record) => record.id === 'h-create')?.time,
+    account.createdAt
+  );
+});
+
 test('deleting account removes the account and all related history records', () => {
   const group = createGroup('g-asset', 'Cash');
   const account: Account = {
@@ -209,7 +327,7 @@ test('deleting account removes the account and all related history records', () 
       {
         id: 'h-create',
         accountId: account.id,
-        type: '\u65b0\u589e',
+        type: '\u521b\u5efa',
         groupName: group.name,
         accountName: account.name,
         beforeAmount: null,

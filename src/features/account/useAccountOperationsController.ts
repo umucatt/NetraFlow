@@ -7,6 +7,7 @@ import {
 } from 'react';
 
 import { toStoredAmountByNature } from '../../app/accountNature';
+import { deriveGroupsWithAccounts } from '../../app/accountData';
 import type {
   Account,
   AccountOperationEntrySource,
@@ -14,6 +15,7 @@ import type {
   AppData,
   AssetGroup,
   AssetGroupWithAccounts,
+  CommitAppDataUpdate,
   EditMode
 } from '../../app/types';
 import type {
@@ -68,7 +70,7 @@ type UseAccountOperationsControllerOptions = {
   assetGroups: AssetGroup[];
   formatMoney: (amount: number | null, options?: { compact?: boolean }) => string;
   createHistoryRecordId: () => string;
-  updateAppData: (nextData: AppData) => void;
+  commitAppDataUpdate: CommitAppDataUpdate;
   showConfirmationDialog: (options: AppCallbackConfirmationDialogRequest) => void;
   showNoticeDialog: (options: AppNoticeDialogRequest) => Promise<void>;
   normalizeAlias: (value: string) => string;
@@ -88,6 +90,16 @@ const createParagraphMessage = (...lines: Array<string | false>) =>
       .map((line) => createElement('p', { key: line }, line))
   );
 
+type AmountSaveRequest =
+  | {
+      mode: 'set';
+      editableAmount: number;
+    }
+  | {
+      mode: 'adjust';
+      signedAdjustAmount: number;
+    };
+
 export function useAccountOperationsController({
   appData,
   groups,
@@ -96,7 +108,7 @@ export function useAccountOperationsController({
   assetGroups,
   formatMoney,
   createHistoryRecordId,
-  updateAppData,
+  commitAppDataUpdate,
   showConfirmationDialog,
   showNoticeDialog,
   normalizeAlias,
@@ -453,12 +465,27 @@ export function useAccountOperationsController({
       return;
     }
 
-    const result = updateAccountInfoInAppData({
-      appData,
-      groups,
-      account: accountInfoEntry,
-      accountNameInput: accountNameDraft,
-      aliasInput: accountAliasDraft
+    const result = commitAppDataUpdate((latestData) => {
+      const latestGroups = deriveGroupsWithAccounts(latestData.groups, latestData.accounts);
+      const latestAccount = latestData.accounts.find(
+        (account) => account.id === editingAccountInfo.accountId
+      );
+
+      if (!latestAccount) {
+        return { ok: false, error: '当前账户已不存在，无法保存账户信息' };
+      }
+
+      const updateResult = updateAccountInfoInAppData({
+        appData: latestData,
+        groups: latestGroups,
+        account: latestAccount,
+        accountNameInput: accountNameDraft,
+        aliasInput: accountAliasDraft
+      });
+
+      return updateResult.ok
+        ? { ok: true, nextData: updateResult.nextData, value: null }
+        : updateResult;
     });
 
     if (!result.ok) {
@@ -466,48 +493,82 @@ export function useAccountOperationsController({
         setAccountNameDraft('');
       }
 
-      setAccountInfoError(result.error);
+      setAccountInfoError(result.error ?? '账户信息保存失败');
       return;
     }
 
-    updateAppData(result.nextData);
     closeAccountInfoEditor();
   };
 
-  const performSaveAmount = (editableAmount: number, savedDate: string, note?: string) => {
-    if (!editingAccount || !currentAccount || !currentGroup) {
-      return;
-    }
-
-    if (
-      currentAccount.archived &&
-      hasActiveDuplicateAccountName(groups, currentAccount.name, currentAccount.id)
-    ) {
-      void showNoticeDialog({
-        title: '无法重新启用账户',
-        message: '已有同名启用账户，请先处理后再重新启用'
-      });
+  const performSaveAmount = (saveRequest: AmountSaveRequest, savedDate: string, note?: string) => {
+    if (!editingAccount) {
       return;
     }
 
     const savedAt = toAccountOperationIsoTime(savedDate);
-    const result = saveAccountAmountInAppData({
-      appData,
-      groups,
-      account: currentAccount,
-      groupId: editingAccount.groupId,
-      editableAmount,
-      savedAt,
-      note,
-      changeHistoryRecordId: createHistoryRecordId(),
-      restoreHistoryRecordId: currentAccount.archived ? createHistoryRecordId() : undefined
+    const result = commitAppDataUpdate((latestData) => {
+      const latestGroups = deriveGroupsWithAccounts(latestData.groups, latestData.accounts);
+      const latestAccount = latestData.accounts.find(
+        (account) => account.id === editingAccount.accountId
+      );
+
+      if (!latestAccount) {
+        return { ok: false, error: '当前账户已不存在，无法保存余额' };
+      }
+
+      const latestGroup = latestGroups.find((group) => group.id === latestAccount.groupId);
+
+      if (!latestGroup) {
+        return { ok: false, error: '当前账户类型已不存在，无法保存余额' };
+      }
+
+      if (
+        latestAccount.archived &&
+        hasActiveDuplicateAccountName(latestGroups, latestAccount.name, latestAccount.id)
+      ) {
+        return { ok: false, error: '已有同名启用账户，请先处理后再重新启用' };
+      }
+
+      const editableAmount =
+        saveRequest.mode === 'set'
+          ? saveRequest.editableAmount
+          : roundToMoneyPrecision(
+              toEditableAccountAmount(latestAccount.amount) + saveRequest.signedAdjustAmount
+            );
+
+      if (editableAmount < 0) {
+        return { ok: false, error: '净值将为负数' };
+      }
+
+      const savedResult = saveAccountAmountInAppData({
+        appData: latestData,
+        groups: latestGroups,
+        account: latestAccount,
+        groupId: latestGroup.id,
+        editableAmount,
+        savedAt,
+        note,
+        changeHistoryRecordId: createHistoryRecordId(),
+        restoreHistoryRecordId: latestAccount.archived ? createHistoryRecordId() : undefined
+      });
+
+      return savedResult
+        ? { ok: true, nextData: savedResult.nextData, value: null }
+        : { ok: false, error: '当前账户无法保存余额' };
     });
 
     if (!result) {
       return;
     }
 
-    updateAppData(result.nextData);
+    if (!result.ok) {
+      void showNoticeDialog({
+        title: result.error === '已有同名启用账户，请先处理后再重新启用' ? '无法重新启用账户' : '无法保存余额',
+        message: result.error ?? '当前账户无法保存余额'
+      });
+      return;
+    }
+
     closeEditor();
   };
 
@@ -522,6 +583,11 @@ export function useAccountOperationsController({
     if (editableAmount === null || isAdjustAmountInvalid || !activeAmountEditDate) {
       return;
     }
+
+    const saveRequest: AmountSaveRequest =
+      editMode === 'set'
+        ? { mode: 'set', editableAmount }
+        : { mode: 'adjust', signedAdjustAmount };
 
     if (
       currentAccount.archived &&
@@ -546,33 +612,49 @@ export function useAccountOperationsController({
         title: editMode === 'set' ? '确认修改余额' : '确认调整余额',
         message: `${currentAccount.name}：${formatMoney(currentAccount.amount)} → ${formatMoney(nextAmount)}`,
         confirmLabel: '确认',
-        onConfirm: () => performSaveAmount(editableAmount, savedDate, note)
+        onConfirm: () => performSaveAmount(saveRequest, savedDate, note)
       });
       return;
     }
 
     performSaveAmount(
-      editableAmount,
+      saveRequest,
       activeAmountEditDate,
       activeAmountEditNote.trim() ? activeAmountEditNote : undefined
     );
   };
 
   const performDeleteAccount = (groupId: string, account: Account) => {
-    const nextData = deleteAccountInAppData({
-      appData,
-      groupId,
-      account,
-      deletedAt: new Date().toISOString(),
-      newCreateHistoryRecordId: createHistoryRecordId(),
-      deleteHistoryRecordId: createHistoryRecordId()
+    const deletedAt = new Date().toISOString();
+    const newCreateHistoryRecordId = createHistoryRecordId();
+    const deleteHistoryRecordId = createHistoryRecordId();
+    const result = commitAppDataUpdate((latestData) => {
+      const latestAccount = latestData.accounts.find(
+        (currentAccount) => currentAccount.id === account.id
+      );
+
+      if (!latestAccount) {
+        return { ok: false, error: '当前账户已不存在，无法删除' };
+      }
+
+      const nextData = deleteAccountInAppData({
+        appData: latestData,
+        groupId: latestAccount.groupId || groupId,
+        account: latestAccount,
+        deletedAt,
+        newCreateHistoryRecordId,
+        deleteHistoryRecordId
+      });
+
+      return nextData
+        ? { ok: true, nextData, value: null }
+        : { ok: false, error: '当前账户无法删除' };
     });
 
-    if (!nextData) {
+    if (!result.ok) {
       return;
     }
 
-    updateAppData(nextData);
     setIsDangerActionsOpen(false);
     onCloseAccountDetail();
   };
@@ -588,19 +670,34 @@ export function useAccountOperationsController({
   };
 
   const performArchiveAccount = (groupId: string, account: Account) => {
-    const nextData = archiveAccountInAppData({
-      appData,
-      groupId,
-      account,
-      archivedAt: new Date().toISOString(),
-      historyRecordId: createHistoryRecordId()
+    const archivedAt = new Date().toISOString();
+    const historyRecordId = createHistoryRecordId();
+    const result = commitAppDataUpdate((latestData) => {
+      const latestAccount = latestData.accounts.find(
+        (currentAccount) => currentAccount.id === account.id
+      );
+
+      if (!latestAccount) {
+        return { ok: false, error: '当前账户已不存在，无法归档' };
+      }
+
+      const nextData = archiveAccountInAppData({
+        appData: latestData,
+        groupId: latestAccount.groupId || groupId,
+        account: latestAccount,
+        archivedAt,
+        historyRecordId
+      });
+
+      return nextData
+        ? { ok: true, nextData, value: null }
+        : { ok: false, error: '当前账户无法归档' };
     });
 
-    if (!nextData) {
+    if (!result.ok) {
       return;
     }
 
-    updateAppData(nextData);
     setIsDangerActionsOpen(false);
     onCloseAccountDetail();
   };
@@ -611,7 +708,7 @@ export function useAccountOperationsController({
       message: createParagraphMessage(
         account.amount !== 0 && '账户余额不为 0',
         `确定归档 ${account.name}`,
-        '归档后可在账户新增 / 恢复中重新启用'
+        '归档后可在账户创建 / 恢复中重新启用'
       ),
       confirmLabel: '归档',
       onConfirm: () => performArchiveAccount(groupId, account)
@@ -619,13 +716,31 @@ export function useAccountOperationsController({
   };
 
   const performRestoreAccountToGroup = (account: Account, targetGroup: AssetGroup) => {
-    const result = restoreArchivedAccountInAppData({
-      appData,
-      groups,
-      account,
-      targetGroup,
-      restoredAt: new Date().toISOString(),
-      historyRecordId: createHistoryRecordId()
+    const restoredAt = new Date().toISOString();
+    const historyRecordId = createHistoryRecordId();
+    const result = commitAppDataUpdate((latestData) => {
+      const latestGroups = deriveGroupsWithAccounts(latestData.groups, latestData.accounts);
+      const latestAccount = latestData.accounts.find(
+        (currentAccount) => currentAccount.id === account.id && currentAccount.archived
+      );
+      const latestTargetGroup = latestData.groups.find((group) => group.id === targetGroup.id);
+
+      if (!latestAccount || !latestTargetGroup) {
+        return { ok: false, error: '当前账户无法重新启用' };
+      }
+
+      const restoreResult = restoreArchivedAccountInAppData({
+        appData: latestData,
+        groups: latestGroups,
+        account: latestAccount,
+        targetGroup: latestTargetGroup,
+        restoredAt,
+        historyRecordId
+      });
+
+      return restoreResult.ok
+        ? { ok: true, nextData: restoreResult.nextData, value: null }
+        : restoreResult;
     });
 
     if (!result.ok) {
@@ -638,7 +753,6 @@ export function useAccountOperationsController({
       return false;
     }
 
-    updateAppData(result.nextData);
     return true;
   };
 

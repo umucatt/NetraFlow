@@ -1,60 +1,77 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+type IpcRendererEvent = unknown;
+type IpcRendererLike = {
+  send: (channel: string, ...args: unknown[]) => void;
+  invoke: (channel: string, ...args: unknown[]) => Promise<unknown>;
+  sendSync: (channel: string, ...args: unknown[]) => unknown;
+  on: (
+    channel: string,
+    listener: (event: IpcRendererEvent, ...args: any[]) => void
+  ) => void;
+  removeListener: (
+    channel: string,
+    listener: (event: IpcRendererEvent, ...args: any[]) => void
+  ) => void;
+};
 
-type NfStorageErrorCode =
-  | 'INVALID_BATCH'
-  | 'TEMP_CLEANUP_FAILED'
-  | 'TEMP_CREATE_FAILED'
-  | 'TEMP_WRITE_FAILED'
-  | 'TEMP_SYNC_FAILED'
-  | 'TEMP_VERIFY_FAILED'
-  | 'PREVIOUS_PREPARE_FAILED'
-  | 'FINAL_REPLACE_FAILED'
-  | 'FINAL_VERIFY_FAILED'
-  | 'FINAL_VERIFY_FAILED_RECOVERED'
-  | 'FINAL_VERIFY_FAILED_RECOVERY_FAILED'
-  | 'STORAGE_READ_FAILED'
-  | 'STORAGE_READ_INVALID'
-  | 'STORAGE_SCHEMA_INVALID'
-  | 'STORAGE_SCHEMA_UNSUPPORTED'
-  | 'STORAGE_SCHEMA_FUTURE'
-  | 'STORAGE_RECOVERY_REQUIRED'
-  | 'STORAGE_RECOVERY_FAILED'
-  | 'STORAGE_UNRECOVERABLE';
+const { contextBridge, ipcRenderer } = require('electron') as {
+  contextBridge: { exposeInMainWorld: (key: string, api: unknown) => void };
+  ipcRenderer: IpcRendererLike;
+};
 
-type NfStorageErrorResponse = {
+type PersistenceErrorCode =
+  | 'PERSISTENCE_READ_FAILED'
+  | 'PERSISTENCE_READ_INVALID'
+  | 'PERSISTENCE_SCHEMA_INVALID'
+  | 'PERSISTENCE_TEMP_CLEANUP_FAILED'
+  | 'PERSISTENCE_TEMP_CREATE_FAILED'
+  | 'PERSISTENCE_TEMP_WRITE_FAILED'
+  | 'PERSISTENCE_TEMP_SYNC_FAILED'
+  | 'PERSISTENCE_TEMP_VERIFY_FAILED'
+  | 'PERSISTENCE_REPLACE_FAILED'
+  | 'PERSISTENCE_FINAL_VERIFY_FAILED'
+  | 'DEMO_LIFECYCLE_UNAVAILABLE'
+  | 'DEMO_ALREADY_ACTIVE'
+  | 'DEMO_PATH_UNSAFE'
+  | 'DEMO_CLEANUP_FAILED'
+  | 'DEMO_DIRECTORY_NOT_WRITABLE'
+  | 'DEMO_DOCUMENT_SCHEMA_INVALID'
+  | 'DEMO_NOT_ACTIVE'
+  | 'DEMO_CORE_MISSING';
+
+type PersistenceErrorResponse = {
   ok: false;
-  code: NfStorageErrorCode;
+  code: PersistenceErrorCode;
   message: string;
 };
 
-type NfStorageWriteResponse = { ok: true } | NfStorageErrorResponse;
+type PersistenceWriteResponse = { ok: true } | PersistenceErrorResponse;
 
-const isNfStorageErrorResponse = (value: unknown): value is NfStorageErrorResponse =>
+const isPersistenceErrorResponse = (value: unknown): value is PersistenceErrorResponse =>
   typeof value === 'object' &&
   value !== null &&
   'ok' in value &&
   (value as { ok?: unknown }).ok === false &&
   typeof (value as { code?: unknown }).code === 'string';
 
-const throwNfStorageError = (response: NfStorageErrorResponse): never => {
-  const error = new Error(response.message) as Error & { code: NfStorageErrorCode };
-  error.name = 'NfStorageError';
+const throwPersistenceError = (response: PersistenceErrorResponse): never => {
+  const error = new Error(response.message) as Error & { code: PersistenceErrorCode };
+  error.name = 'NetraFlowPersistenceError';
   error.code = response.code;
 
   throw error;
 };
 
-const unwrapNfStorageResponse = <T>(response: T | NfStorageErrorResponse): T => {
-  if (isNfStorageErrorResponse(response)) {
-    throwNfStorageError(response);
+const unwrapPersistenceResponse = <T>(response: T | PersistenceErrorResponse): T => {
+  if (isPersistenceErrorResponse(response)) {
+    throwPersistenceError(response);
   }
 
   return response as T;
 };
 
-const unwrapNfStorageWriteResponse = (response: NfStorageWriteResponse) => {
-  if (isNfStorageErrorResponse(response)) {
-    throwNfStorageError(response);
+const unwrapPersistenceWriteResponse = (response: PersistenceWriteResponse) => {
+  if (isPersistenceErrorResponse(response)) {
+    throwPersistenceError(response);
   }
 };
 
@@ -102,50 +119,43 @@ const electronAPI = {
   }
 };
 
-const netraflowStorage = {
-  getItem: (key: string) =>
-    unwrapNfStorageResponse(
-      ipcRenderer.sendSync('nf-storage:get-item', key) as string | null | NfStorageErrorResponse
+const netraflowPersistence = {
+  readCoreDocument: () =>
+    unwrapPersistenceResponse(ipcRenderer.sendSync('persistence:read-core') as unknown),
+  writeCoreDocument: (document: unknown) =>
+    unwrapPersistenceWriteResponse(
+      ipcRenderer.sendSync('persistence:write-core', document) as PersistenceWriteResponse
     ),
-  setItem: (key: string, value: string) =>
-    unwrapNfStorageWriteResponse(
-      ipcRenderer.sendSync('nf-storage:set-item', key, value) as NfStorageWriteResponse
+  readSettingsDocument: () =>
+    unwrapPersistenceResponse(ipcRenderer.sendSync('persistence:read-settings') as unknown),
+  writeSettingsDocument: (document: unknown) =>
+    unwrapPersistenceWriteResponse(
+      ipcRenderer.sendSync('persistence:write-settings', document) as PersistenceWriteResponse
     ),
-  setItems: (items: Record<string, string>) =>
-    unwrapNfStorageWriteResponse(
-      ipcRenderer.sendSync('nf-storage:set-items', items) as NfStorageWriteResponse
+  readStateDocument: () =>
+    unwrapPersistenceResponse(ipcRenderer.sendSync('persistence:read-state') as unknown),
+  writeStateDocument: (document: unknown) =>
+    unwrapPersistenceWriteResponse(
+      ipcRenderer.sendSync('persistence:write-state', document) as PersistenceWriteResponse
     ),
-  removeItem: (key: string) =>
-    unwrapNfStorageWriteResponse(
-      ipcRenderer.sendSync('nf-storage:remove-item', key) as NfStorageWriteResponse
+  readSecurityDocument: () =>
+    unwrapPersistenceResponse(ipcRenderer.sendSync('persistence:read-security') as unknown),
+  writeSecurityDocument: (document: unknown) =>
+    unwrapPersistenceWriteResponse(
+      ipcRenderer.sendSync('persistence:write-security', document) as PersistenceWriteResponse
     ),
-  key: (index: number) =>
-    unwrapNfStorageResponse(
-      ipcRenderer.sendSync('nf-storage:key', index) as string | null | NfStorageErrorResponse
+  enterDemoEnvironment: (documents: unknown) =>
+    unwrapPersistenceResponse(
+      ipcRenderer.sendSync('persistence:enter-demo', documents) as unknown
     ),
-  length: () =>
-    unwrapNfStorageResponse(
-      ipcRenderer.sendSync('nf-storage:length') as number | NfStorageErrorResponse
-    ),
-  getAllItems: () =>
-    unwrapNfStorageResponse(
-      ipcRenderer.sendSync('nf-storage:get-all-items') as
-        | Record<string, string>
-        | NfStorageErrorResponse
-    ),
-  migrateLegacyItems: (items: Record<string, string>) =>
-    unwrapNfStorageResponse(
-      ipcRenderer.sendSync('nf-storage:migrate-legacy-items', items) as
-        | {
-            migratedKeys: string[];
-            skippedExistingKeys: string[];
-            skippedNonWhitelistKeys: string[];
-            skippedExampleKeys: string[];
-          }
-        | NfStorageErrorResponse
+  exitDemoEnvironment: () =>
+    unwrapPersistenceResponse(ipcRenderer.sendSync('persistence:exit-demo') as unknown),
+  promoteDemoCoreToRealEnvironment: () =>
+    unwrapPersistenceResponse(
+      ipcRenderer.sendSync('persistence:promote-demo-core-to-real') as unknown
     )
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
 contextBridge.exposeInMainWorld('electronWindow', electronAPI);
-contextBridge.exposeInMainWorld('netraflowStorage', netraflowStorage);
+contextBridge.exposeInMainWorld('netraflowPersistence', netraflowPersistence);

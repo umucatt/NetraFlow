@@ -48,7 +48,7 @@ const natureLabels: Record<AccountTypeNature, string> = {
 };
 
 const historyTypeLabels: Record<HistoryType, string> = {
-  新增: '新增',
+  创建: '创建',
   删除: '删除',
   修改: '修改',
   归档: '归档',

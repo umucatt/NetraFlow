@@ -15,10 +15,7 @@ import type {
   ThemeMode,
   ThemeStyle
 } from '../../features/security/securitySettingsTypes';
-import { nfStorage } from '../nfStorage';
 import { isPlainObject } from '../objectUtils';
-import { readStorageJson } from '../storageJson';
-import { GLOBAL_SETTINGS_STORAGE_KEY } from '../storageKeys';
 
 export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   positiveNegativeColorMode: 'red-positive',
@@ -36,7 +33,6 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   snapshotEncryptionEnabled: false,
   snapshotPasswordHash: null
 };
-
 export const isPositiveNegativeColorMode = (
   value: unknown
 ): value is PositiveNegativeColorMode =>
@@ -134,19 +130,4 @@ export const normalizeGlobalSettings = (value: unknown): GlobalSettings => {
       value.snapshotEncryptionEnabled === true && snapshotPasswordHash !== null,
     snapshotPasswordHash
   };
-};
-
-export const loadGlobalSettings = () => {
-  const storedSettings = readStorageJson(GLOBAL_SETTINGS_STORAGE_KEY);
-
-  return storedSettings.parsed
-    ? normalizeGlobalSettings(storedSettings.value)
-    : DEFAULT_GLOBAL_SETTINGS;
-};
-
-export const saveGlobalSettings = (settings: GlobalSettings) => {
-  nfStorage.setItem(
-    GLOBAL_SETTINGS_STORAGE_KEY,
-    JSON.stringify(normalizeGlobalSettings(settings))
-  );
 };

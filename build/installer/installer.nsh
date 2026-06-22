@@ -5,6 +5,7 @@
 !define NETRAFLOW_INSTALL_DIR_NAME "NetraFlow"
 !define NETRAFLOW_USERDATA_DIR_NAME "userdata"
 !define NETRAFLOW_RUNTIME_DIR_NAME "runtime"
+!define NETRAFLOW_DEMO_DIR_NAME ".demo"
 !define NETRAFLOW_LOGS_DIR_NAME "logs"
 !undef APP_FILENAME
 !define APP_FILENAME "${NETRAFLOW_INSTALL_DIR_NAME}"
@@ -24,21 +25,13 @@
   !define MUI_DIRECTORYPAGE_TEXT_DESTINATION "目标文件夹"
 
   Function NetraFlowApplyDefaultInstallDir
-    StrCpy $0 "$CMDLINE"
+    ${If} $INSTDIR != ""
+      StrCpy $0 "$LOCALAPPDATA\Programs\${NETRAFLOW_INSTALL_DIR_NAME}"
 
-    ${Do}
-      StrCpy $4 $0 3
-
-      ${If} $4 == "/D="
+      ${If} $INSTDIR != $0
         Return
       ${EndIf}
-
-      ${If} $0 == ""
-        ${Break}
-      ${EndIf}
-
-      StrCpy $0 $0 "" 1
-    ${Loop}
+    ${EndIf}
 
     Call NetraFlowFindDefaultInstallDir
   FunctionEnd
@@ -156,12 +149,21 @@
       Delete "$LOCALAPPDATA\${APP_PACKAGE_STORE_FILE}"
     !endif
   FunctionEnd
+
+  Function un.NetraFlowScheduleNsisTempCleanup
+    StrCpy $0 "$TEMP\~nsu.tmp"
+
+    ${If} ${FileExists} "$0\*.*"
+      Exec '"$SYSDIR\cmd.exe" /C ping 127.0.0.1 -n 3 >NUL & rmdir /S /Q "$0"'
+    ${EndIf}
+  FunctionEnd
 !endif
 
 !macro NetraFlowCleanupInstallRoots
   ${IfNot} ${isUpdated}
     Call un.NetraFlowRemoveInstallResidues
     !insertmacro NetraFlowRemoveRuntimeEntries $INSTDIR
+    RMDir /r "$INSTDIR\${NETRAFLOW_DEMO_DIR_NAME}"
 
     ${If} $NetraFlowDeleteLocalUserData == "1"
       RMDir /r "$INSTDIR\${NETRAFLOW_USERDATA_DIR_NAME}"
@@ -304,14 +306,22 @@
     RMDir /r "$INSTDIR\locales"
     RMDir /r "$INSTDIR\licenses"
     !insertmacro NetraFlowRemoveRuntimeEntries $INSTDIR
+    RMDir /r "$INSTDIR\${NETRAFLOW_DEMO_DIR_NAME}"
     !insertmacro NetraFlowRemoveLegacyProfileDirs
+
+    ${If} $NetraFlowDeleteLocalUserData == "1"
+      RMDir /r "$INSTDIR\${NETRAFLOW_USERDATA_DIR_NAME}"
+    ${EndIf}
+
     !insertmacro NetraFlowRemoveInstallDirIfAllowed
   !macroend
 
   Function un.onUninstSuccess
     !insertmacro NetraFlowRemoveRuntimeEntries $INSTDIR
+    RMDir /r "$INSTDIR\${NETRAFLOW_DEMO_DIR_NAME}"
     !insertmacro NetraFlowRemoveLegacyProfileDirs
     !insertmacro NetraFlowRemoveInstallDirIfAllowed
+    Call un.NetraFlowScheduleNsisTempCleanup
   FunctionEnd
 !endif
 

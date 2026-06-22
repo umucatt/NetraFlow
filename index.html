@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pGkulE0ZwXn5kodZkGTv59CfwfpT8N2Afd5HsnXcF3s='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ws:;"
+    />
     <link rel="icon" type="image/x-icon" href="icons/netraflow.ico" />
     <title>NetraFlow</title>
     <script>
@@ -36,20 +40,32 @@
         };
 
         try {
-          var storedSettings = window.netraflowStorage
-            ? window.netraflowStorage.getItem('netraflowGlobalSettings')
-            : null;
-          var parsedSettings = storedSettings ? JSON.parse(storedSettings) : null;
+          var persistence = window.netraflowPersistence;
+          var settingsResult = persistence ? persistence.readSettingsDocument() : null;
+          var stateResult = persistence ? persistence.readStateDocument() : null;
+          var settingsDocument =
+            settingsResult && settingsResult.ok === true ? settingsResult.document : null;
+          var stateDocument =
+            stateResult && stateResult.ok === true ? stateResult.document : null;
+          var parsedSettings =
+            settingsDocument && typeof settingsDocument === 'object'
+              ? settingsDocument.global
+              : null;
+          var personalization =
+            stateDocument && typeof stateDocument === 'object'
+              ? stateDocument.personalization
+              : null;
+          var nyaaThemeUnlocked =
+            personalization &&
+            typeof personalization === 'object' &&
+            personalization.nyaaThemeUnlocked === true;
 
           if (parsedSettings && typeof parsedSettings === 'object') {
             if (isThemeMode(parsedSettings.themeMode)) {
               themeMode = parsedSettings.themeMode;
             }
 
-            if (
-              parsedSettings.nyaaThemeUnlocked === true &&
-              isThemeStyle(parsedSettings.themeStyle)
-            ) {
+            if (nyaaThemeUnlocked && isThemeStyle(parsedSettings.themeStyle)) {
               themeStyle = parsedSettings.themeStyle;
             }
           }

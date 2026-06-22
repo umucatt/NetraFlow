@@ -33,47 +33,18 @@ type ElectronWindowApi = {
   onMaximizedChange: (listener: (isMaximized: boolean) => void) => () => void;
 };
 
-type NfStorageMigrationResult = {
-  migratedKeys: string[];
-  skippedExistingKeys: string[];
-  skippedNonWhitelistKeys: string[];
-  skippedExampleKeys: string[];
-};
-
-type NfStorageErrorCode =
-  | 'INVALID_BATCH'
-  | 'TEMP_CLEANUP_FAILED'
-  | 'TEMP_CREATE_FAILED'
-  | 'TEMP_WRITE_FAILED'
-  | 'TEMP_SYNC_FAILED'
-  | 'TEMP_VERIFY_FAILED'
-  | 'PREVIOUS_PREPARE_FAILED'
-  | 'FINAL_REPLACE_FAILED'
-  | 'FINAL_VERIFY_FAILED'
-  | 'FINAL_VERIFY_FAILED_RECOVERED'
-  | 'FINAL_VERIFY_FAILED_RECOVERY_FAILED'
-  | 'STORAGE_READ_FAILED'
-  | 'STORAGE_READ_INVALID'
-  | 'STORAGE_SCHEMA_INVALID'
-  | 'STORAGE_SCHEMA_UNSUPPORTED'
-  | 'STORAGE_SCHEMA_FUTURE'
-  | 'STORAGE_RECOVERY_REQUIRED'
-  | 'STORAGE_RECOVERY_FAILED'
-  | 'STORAGE_UNRECOVERABLE';
-
-type NfStorageBridgeError = Error & {
-  code: NfStorageErrorCode;
-};
-
-type NfStorageBridge = {
-  getItem: (key: string) => string | null;
-  setItem: (key: string, value: string) => void;
-  setItems: (items: Record<string, string>) => void;
-  removeItem: (key: string) => void;
-  key: (index: number) => string | null;
-  length: () => number;
-  getAllItems: () => Record<string, string>;
-  migrateLegacyItems: (items: Record<string, string>) => NfStorageMigrationResult;
+type NetraFlowPersistenceBridge = {
+  readCoreDocument: () => unknown;
+  writeCoreDocument: (document: unknown) => void;
+  readSettingsDocument: () => unknown;
+  writeSettingsDocument: (document: unknown) => void;
+  readStateDocument: () => unknown;
+  writeStateDocument: (document: unknown) => void;
+  readSecurityDocument: () => unknown;
+  writeSecurityDocument: (document: unknown) => void;
+  enterDemoEnvironment?: (documents: unknown) => unknown;
+  exitDemoEnvironment?: () => unknown;
+  promoteDemoCoreToRealEnvironment?: () => unknown;
 };
 
 interface Window {
@@ -83,5 +54,5 @@ interface Window {
   };
   electronAPI: ElectronWindowApi;
   electronWindow?: ElectronWindowApi;
-  netraflowStorage?: NfStorageBridge;
+  netraflowPersistence?: NetraFlowPersistenceBridge;
 }

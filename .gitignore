@@ -2,6 +2,7 @@ node_modules/
 dist/
 dist-electron/
 release/
+release-diagnostics/
 out/
 coverage/
 .cache/
@@ -9,6 +10,7 @@ coverage/
 
 /runtime/
 /userdata/
+/.demo/
 
 .tools/
 .tmp*/

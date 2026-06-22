@@ -12,7 +12,7 @@ import {
 const FIXED_NOW = new Date('2026-05-27T12:00:00');
 const SETTINGS = { xAxisRange: '1m' as const };
 const HISTORY_TYPE = {
-  create: '\u65b0\u589e' as HistoryRecord['type'],
+  create: '\u521b\u5efa' as HistoryRecord['type'],
   delete: '\u5220\u9664' as HistoryRecord['type'],
   modify: '\u4fee\u6539' as HistoryRecord['type'],
   archive: '\u5f52\u6863' as HistoryRecord['type'],
@@ -741,4 +741,42 @@ test('keeps dates, pointKinds, totals, and series values aligned under a frozen 
     data.dates,
     [...data.dates].sort()
   );
+});
+
+test('group detail trend keeps backfilled records earlier than the creation record visible', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: FIXED_NOW });
+  const data = derive(
+    group('Cash', 'asset', [
+      account('cash', 130, { createdAt: atNoon('2026-06-21') })
+    ]),
+    [
+      historyRecord({
+        id: 'create',
+        type: HISTORY_TYPE.create,
+        beforeAmount: null,
+        afterAmount: 100,
+        time: atNoon('2026-06-21')
+      }),
+      historyRecord({
+        id: 'backfill-1',
+        beforeAmount: 40,
+        afterAmount: 90,
+        time: atNoon('2026-05-09')
+      }),
+      historyRecord({
+        id: 'backfill-2',
+        beforeAmount: 90,
+        afterAmount: 130,
+        time: atNoon('2026-05-10')
+      })
+    ]
+  );
+  const may9Index = data.dates.indexOf('2026-05-09');
+  const may10Index = data.dates.indexOf('2026-05-10');
+
+  assert.notEqual(may9Index, -1);
+  assert.notEqual(may10Index, -1);
+  assert.equal(data.totals[may9Index], 90);
+  assert.equal(data.totals[may10Index], 130);
+  assert.equal(data.series.some((series) => series.values.some(Number.isNaN)), false);
 });

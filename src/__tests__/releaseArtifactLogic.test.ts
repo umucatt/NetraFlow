@@ -137,7 +137,7 @@ const createValidArtifacts = (rootDir: string, version = '0.9.6') => {
   writeFixtureFile(installerPath, 16);
   createZip(portablePath, [
     { name: `NetraFlow_${version}/NetraFlow.exe` },
-    { name: `NetraFlow_${version}/resources/app/dist/index.html` }
+    { name: `NetraFlow_${version}/resources/app.asar` }
   ]);
 
   return { installerPath, portablePath };
@@ -210,7 +210,7 @@ test('artifact verifier supports suffixed version directories created by repeat 
 
   writeFixtureFile(installerPathFor(rootDir, '0.9.6', '0.9.6_1'), 16);
   createZip(portablePathFor(rootDir, '0.9.6', '0.9.6_1'), [
-    { name: 'NetraFlow_0.9.6/resources/app/dist/index.html' }
+    { name: 'NetraFlow_0.9.6/resources/app.asar' }
   ]);
 
   const summary = verifyReleaseArtifacts({ rootDir, version: '0.9.6', minSizeBytes: 1 });
@@ -264,10 +264,13 @@ test('artifact verifier rejects missing portable and duplicate core artifacts', 
     'Portable artifact is missing'
   );
 
-  createZip(portablePathFor(rootDir), [{ name: 'NetraFlow_0.9.6/NetraFlow.exe' }]);
+  createZip(portablePathFor(rootDir), [
+    { name: 'NetraFlow_0.9.6/NetraFlow.exe' },
+    { name: 'NetraFlow_0.9.6/resources/app.asar' }
+  ]);
   writeFixtureFile(installerPathFor(rootDir, '0.9.6', '0.9.6_1'), 16);
   createZip(portablePathFor(rootDir, '0.9.6', '0.9.6_1'), [
-    { name: 'NetraFlow_0.9.6/resources/app/dist/index.html' }
+    { name: 'NetraFlow_0.9.6/resources/app.asar' }
   ]);
 
   assertRejectsWith(
@@ -285,7 +288,10 @@ test('artifact verifier rejects empty or undersized files', async (t) => {
   const rootDir = createFixtureRoot(t);
 
   writeFixtureFile(installerPathFor(rootDir), 0);
-  createZip(portablePathFor(rootDir), [{ name: 'NetraFlow_0.9.6/NetraFlow.exe' }]);
+  createZip(portablePathFor(rootDir), [
+    { name: 'NetraFlow_0.9.6/NetraFlow.exe' },
+    { name: 'NetraFlow_0.9.6/resources/app.asar' }
+  ]);
 
   assertRejectsWith(
     () => verifyReleaseArtifacts({ rootDir, version: '0.9.6', minSizeBytes: 1 }),
@@ -304,6 +310,8 @@ test('artifact verifier rejects forbidden portable zip entries at any depth and 
   const { verifyReleaseArtifacts } = await loadReleaseArtifactLogic();
   const forbiddenEntries = [
     'NetraFlow_0.9.6/userdata/storage.json',
+    'NetraFlow_0.9.6/.demo/core.json',
+    'NetraFlow_0.9.6/resources/app/settings.json',
     'NetraFlow_0.9.6/resources/runtime/session/file',
     'NetraFlow_0.9.6/resources/UserData/file',
     'NetraFlow_0.9.6/resources/app/storage.json.previous',
@@ -318,6 +326,7 @@ test('artifact verifier rejects forbidden portable zip entries at any depth and 
     writeFixtureFile(installerPathFor(rootDir), 16);
     createZip(portablePathFor(rootDir), [
       { name: 'NetraFlow_0.9.6/NetraFlow.exe' },
+      { name: 'NetraFlow_0.9.6/resources/app.asar' },
       { name: forbiddenEntry }
     ]);
 
@@ -328,4 +337,68 @@ test('artifact verifier rejects forbidden portable zip entries at any depth and 
 
     assert.equal(index >= 0, true);
   }
+});
+
+test('artifact verifier enforces ASAR portable layout', async (t) => {
+  const { verifyReleaseArtifacts } = await loadReleaseArtifactLogic();
+
+  {
+    const rootDir = createFixtureRoot(t);
+
+    writeFixtureFile(installerPathFor(rootDir), 16);
+    createZip(portablePathFor(rootDir), [{ name: 'NetraFlow_0.9.6/NetraFlow.exe' }]);
+
+    assertRejectsWith(
+      () => verifyReleaseArtifacts({ rootDir, version: '0.9.6', minSizeBytes: 1 }),
+      'Portable zip is missing resources/app.asar'
+    );
+  }
+
+  for (const forbiddenEntry of [
+    'NetraFlow_0.9.6/resources/app/',
+    'NetraFlow_0.9.6/resources/app/dist/index.html',
+    'NetraFlow_0.9.6/resources/app/node_modules/react/index.js'
+  ]) {
+    const rootDir = createFixtureRoot(t);
+
+    writeFixtureFile(installerPathFor(rootDir), 16);
+    createZip(portablePathFor(rootDir), [
+      { name: 'NetraFlow_0.9.6/NetraFlow.exe' },
+      { name: 'NetraFlow_0.9.6/resources/app.asar' },
+      { name: forbiddenEntry }
+    ]);
+
+    assertRejectsWith(
+      () => verifyReleaseArtifacts({ rootDir, version: '0.9.6', minSizeBytes: 1 }),
+      'forbidden unpacked app layout entries'
+    );
+  }
+});
+
+test('artifact verifier allows narrow app.asar.unpacked content but rejects dependency trees', async (t) => {
+  const { verifyReleaseArtifacts } = await loadReleaseArtifactLogic();
+  const allowedRootDir = createFixtureRoot(t);
+
+  writeFixtureFile(installerPathFor(allowedRootDir), 16);
+  createZip(portablePathFor(allowedRootDir), [
+    { name: 'NetraFlow_0.9.6/NetraFlow.exe' },
+    { name: 'NetraFlow_0.9.6/resources/app.asar' },
+    { name: 'NetraFlow_0.9.6/resources/app.asar.unpacked/bin/native-helper.exe' }
+  ]);
+
+  verifyReleaseArtifacts({ rootDir: allowedRootDir, version: '0.9.6', minSizeBytes: 1 });
+
+  const rejectedRootDir = createFixtureRoot(t);
+
+  writeFixtureFile(installerPathFor(rejectedRootDir), 16);
+  createZip(portablePathFor(rejectedRootDir), [
+    { name: 'NetraFlow_0.9.6/NetraFlow.exe' },
+    { name: 'NetraFlow_0.9.6/resources/app.asar' },
+    { name: 'NetraFlow_0.9.6/resources/app.asar.unpacked/node_modules/react/index.js' }
+  ]);
+
+  assertRejectsWith(
+    () => verifyReleaseArtifacts({ rootDir: rejectedRootDir, version: '0.9.6', minSizeBytes: 1 }),
+    'forbidden unpacked app layout entries'
+  );
 });

@@ -59,7 +59,7 @@ test('development startup keeps Vite, wait-on, and Electron on the same strict p
   );
 });
 
-test('theme bootstrap degrades visually without storage writes on read errors', () => {
+test('theme bootstrap reads formal settings and state without storage writes', () => {
   const mainSource = readProjectFile('electron/main.ts');
   const start = mainSource.indexOf('const readThemeBootstrapSettings = () => {');
   const end = mainSource.indexOf('const getSystemThemeForBootstrap', start);
@@ -67,55 +67,47 @@ test('theme bootstrap degrades visually without storage writes on read errors', 
 
   assert.ok(start >= 0);
   assert.ok(end > start);
-  assert.equal(themeSource.includes('const itemsResult = readNfStorageItems();'), true);
-  assert.equal(themeSource.includes('if (!itemsResult.ok)'), true);
-  assert.equal(themeSource.includes('logStorageReadError'), true);
-  assert.equal(themeSource.includes('return normalizeThemeBootstrapSettings(null);'), true);
-  assert.equal(themeSource.includes('writeNfStorageItems'), false);
+  assert.equal(themeSource.includes('persistenceStore.readSettingsDocument()'), true);
+  assert.equal(themeSource.includes('persistenceStore.readStateDocument()'), true);
+  assert.equal(themeSource.includes('persistenceStore.readCoreDocument()'), false);
+  assert.equal(themeSource.includes('writeSettingsDocument'), false);
+  assert.equal(themeSource.includes('writeStateDocument'), false);
 });
 
-test('main storage write IPC handlers read current storage before writing', () => {
+test('main exposes formal persistence IPC and removes old storage IPC', () => {
   const mainSource = readProjectFile('electron/main.ts');
-  const setItemStart = mainSource.indexOf("ipcMain.on('nf-storage:set-item'");
-  const setItemsStart = mainSource.indexOf("ipcMain.on('nf-storage:set-items'");
-  const removeItemStart = mainSource.indexOf("ipcMain.on('nf-storage:remove-item'");
-  const keyStart = mainSource.indexOf("ipcMain.on('nf-storage:key'");
-  const migrateStart = mainSource.indexOf('const migrateLegacyItemsToNfStorage =');
-  const registerStart = mainSource.indexOf('const registerNfStorageHandlers =');
+  const persistenceIpcSource = readProjectFile('electron/persistenceIpc.ts');
 
-  const setItemSource = mainSource.slice(setItemStart, setItemsStart);
-  const setItemsSource = mainSource.slice(setItemsStart, removeItemStart);
-  const removeItemSource = mainSource.slice(removeItemStart, keyStart);
-  const migrateSource = mainSource.slice(migrateStart, registerStart);
+  assert.equal(mainSource.includes('registerPersistenceHandlers(persistenceStore, {'), true);
+  assert.equal(mainSource.includes('enterDemoPersistenceEnvironment'), true);
+  assert.equal(mainSource.includes('exitDemoPersistenceEnvironment'), true);
+  assert.equal(mainSource.includes("ipcMain.on('nf-storage:"), false);
+  assert.equal(mainSource.includes('registerNfStorageHandlers'), false);
+  assert.equal(mainSource.includes('migrateLegacyItemsToNfStorage'), false);
+  [
+    'persistence:read-core',
+    'persistence:write-core',
+    'persistence:read-settings',
+    'persistence:write-settings',
+    'persistence:read-state',
+    'persistence:write-state',
+    'persistence:read-security',
+    'persistence:write-security'
+  ].forEach((channel) => {
+    assert.equal(persistenceIpcSource.includes(channel), true);
+  });
+});
 
-  assert.ok(setItemStart >= 0);
-  assert.ok(setItemsStart > setItemStart);
-  assert.ok(removeItemStart > setItemsStart);
-  assert.ok(keyStart > removeItemStart);
-  assert.ok(migrateStart >= 0);
-  assert.ok(registerStart > migrateStart);
+test('main wires persistence roots from the same app root used by runtime paths', () => {
+  const mainSource = readProjectFile('electron/main.ts');
+  const rootDeclaration = mainSource.indexOf('const appRoot = getAppInstallRootPath();');
+  const persistenceRootCall = mainSource.indexOf('const persistenceRoots = createPersistenceEnvironmentRoots({');
 
-  assert.ok(
-    setItemSource.indexOf('const items = getReadItemsOrBridgeError();') <
-      setItemSource.indexOf('const writeResult = writeNfStorageItems(items);')
-  );
-  assert.equal(setItemSource.includes('isNfStorageBridgeErrorResult(items)'), true);
-
-  assert.equal(setItemsSource.includes('readItems: readNfStorageItems'), true);
-  assert.equal(setItemsSource.includes('writeItems: writeNfStorageItems'), true);
-
-  assert.ok(
-    removeItemSource.indexOf('const items = getReadItemsOrBridgeError();') <
-      removeItemSource.indexOf('const writeResult = writeNfStorageItems(items);')
-  );
-  assert.equal(removeItemSource.includes('isNfStorageBridgeErrorResult(items)'), true);
-
-  assert.ok(
-    migrateSource.indexOf('const currentItemsResult = readNfStorageItems();') <
-      migrateSource.indexOf('const writeResult = writeNfStorageItems(nextItems);')
-  );
-  assert.ok(
-    migrateSource.indexOf('if (!currentItemsResult.ok)') <
-      migrateSource.indexOf('const writeResult = writeNfStorageItems(nextItems);')
-  );
+  assert.ok(rootDeclaration >= 0);
+  assert.ok(persistenceRootCall > rootDeclaration);
+  assert.equal(mainSource.includes('root: process.env.NETRAFLOW_PERSISTENCE_EXE_DIR'), true);
+  assert.equal(mainSource.includes(': appRoot,'), true);
+  assert.equal(mainSource.includes('execDir: process.env.NETRAFLOW_PERSISTENCE_EXE_DIR'), false);
+  assert.equal(mainSource.includes("path.join(getAppInstallRootPath(), RUNTIME_DIR_NAME)"), true);
+  assert.equal(mainSource.includes("path.join(app.getPath('appData'), APP_NAME)"), false);
 });

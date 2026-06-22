@@ -78,7 +78,7 @@ test('history timestamps sort descending and expose date keys', () => {
 test('ordinary account history display dates hide the internal time', () => {
   const displayCases: Array<Pick<HistoryRecord, 'type' | 'time' | 'source'>> = [
     { type: '修改', time: '2026-05-12T14:52:30.000', source: undefined },
-    { type: '新增', time: '2026-05-12T09:10:00.000', source: undefined },
+    { type: '创建', time: '2026-05-12T09:10:00.000', source: undefined },
     { type: '归档', time: '2026-05-12T17:20:00.000', source: undefined },
     { type: '删除', time: '2026-05-12T17:25:00.000', source: undefined },
     { type: '重新启用', time: '2026-05-12T18:34:00.000', source: undefined },

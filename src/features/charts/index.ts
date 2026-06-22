@@ -51,6 +51,12 @@ export {
   getHomeThumbnailTrendSettings,
   shouldShowHomeCharts
 } from './chartDataLogic';
+export {
+  DEFAULT_ASSET_CHART_SETTINGS,
+  normalizeAccountDetailChartSettings,
+  normalizeAssetChartSettings,
+  normalizeCategoryDetailChartSettings
+} from './assetChartSettingsLogic';
 export type {
   AccountDetailChartSettings,
   AssetChartSettings,

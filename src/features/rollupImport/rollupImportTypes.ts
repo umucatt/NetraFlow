@@ -3,9 +3,8 @@ import type { ChangeEvent } from 'react';
 import type { AccountMarkAccount } from '../../accountMark';
 import type {
   Account,
-  AppData,
-  AssetGroup,
   AssetGroupWithAccounts,
+  CommitAppDataUpdate,
   HistoryRecord
 } from '../../app/types';
 import type {
@@ -93,13 +92,12 @@ export type RollupHistoryRecordInput = {
 };
 
 export type UseRollupImportControllerOptions = {
-  assetGroups: AssetGroup[];
-  accounts: Account[];
   groups: AssetGroupWithAccounts[];
   accountGroups: RollupImportAccountGroup[];
-  history: HistoryRecord[];
   isExampleMode: boolean;
-  updateAppData: (nextData: AppData) => void;
+  initialImportedHashes: string[];
+  commitAppDataUpdate: CommitAppDataUpdate;
+  persistImportedHashes: (hashes: string[]) => void;
   createHistoryRecord: (input: RollupHistoryRecordInput) => HistoryRecord;
   showToast: (message: string, tone?: RollupToastTone) => void;
   onClosePage: () => void;

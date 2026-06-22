@@ -67,6 +67,7 @@ export type SettingsPageProps = {
   onOpenSnapshotPasswordEditor: () => void;
   onImportUserSettings: (event: ChangeEvent<HTMLInputElement>) => void;
   onExportUserSettings: () => void;
+  onOpenUserSettingsFile: () => void;
   onOpenBackupPanel: () => void;
   onSelectExampleTemplate: (templateId: ExampleTemplateId) => void;
   onEnterOrSwitchExampleMode: () => void;

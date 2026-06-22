@@ -46,7 +46,7 @@ export type AccountHistoryGroupSummary = {
   displayType: HistoryType;
 };
 
-const HISTORY_TYPE_CREATE: HistoryType = '\u65b0\u589e';
+const HISTORY_TYPE_CREATE: HistoryType = '\u521b\u5efa';
 const HISTORY_TYPE_MODIFY: HistoryType = '\u4fee\u6539';
 const HISTORY_TYPE_RESTORE: HistoryType = '\u91cd\u65b0\u542f\u7528';
 

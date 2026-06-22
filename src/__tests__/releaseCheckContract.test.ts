@@ -24,6 +24,8 @@ type PackageJsonFixture = {
   scripts?: Record<string, string>;
   build?: {
     icon?: string;
+    asar?: boolean;
+    asarUnpack?: string | string[];
     files?: string[];
     win?: {
       target?: BuildTarget[];
@@ -122,12 +124,14 @@ const createPackageJson = (overrides: PackageJsonFixture = {}): PackageJsonFixtu
       'dist:portable': 'node scripts/package-portable.mjs'
     },
     build: {
+      asar: true,
       files: [
         'dist/**/*',
         'dist-electron/**/*',
         'public/**/*',
         'package.json',
         '!**/userdata/**',
+        '!**/.demo/**',
         '!**/runtime/**',
         '!release/**',
         '!**/AppData/**'
@@ -191,6 +195,7 @@ const defaultGitInfo = (): GitInfoFixture => ({
   ignoredPaths: [
     'runtime',
     'userdata',
+    '.demo',
     '.tmp-tests',
     '.tmp-dev-userdata',
     '.tmp-dev-runtime'
@@ -601,6 +606,60 @@ test('release check validates electron-builder user data exclusions by coverage'
   );
 
   assertHasError(report, 'electron-builder files do not exclude');
+});
+
+test('release check requires ASAR packaging and rejects broad unpack rules', async () => {
+  const { evaluateReleaseCheck } = await loadReleaseCheck();
+
+  assertPasses(evaluateReleaseCheck(createInput()));
+
+  const disabledReport = evaluateReleaseCheck(
+    createInput({
+      packageJson: createPackageJson({
+        build: {
+          asar: false
+        }
+      })
+    })
+  );
+
+  assertHasError(disabledReport, 'electron-builder asar must be true');
+
+  const broadNodeModulesReport = evaluateReleaseCheck(
+    createInput({
+      packageJson: createPackageJson({
+        build: {
+          asarUnpack: ['node_modules/**/*']
+        }
+      })
+    })
+  );
+
+  assertHasError(broadNodeModulesReport, 'electron-builder asarUnpack is too broad');
+
+  const broadResourcesReport = evaluateReleaseCheck(
+    createInput({
+      packageJson: createPackageJson({
+        build: {
+          asarUnpack: ['resources/**/*']
+        }
+      })
+    })
+  );
+
+  assertHasError(broadResourcesReport, 'electron-builder asarUnpack is too broad');
+
+  const minimalReport = evaluateReleaseCheck(
+    createInput({
+      packageJson: createPackageJson({
+        build: {
+          asarUnpack: ['bin/native-helper.exe']
+        }
+      })
+    })
+  );
+
+  assertPasses(minimalReport);
 });
 
 test('release check treats dirty worktrees as warning normally and error in strict mode', async () => {

@@ -21,12 +21,14 @@ type UserSettingsFileControllerOptions<TAssetChartSettings> = {
   globalSettings: GlobalSettings;
   effectiveThemeStyle: ThemeStyle;
   assetChartSettings: TAssetChartSettings;
+  isExampleMode: boolean;
   normalizeAssetChartSettings: (value: unknown) => TAssetChartSettings;
   updateGlobalSettings: (
     createNextSettings: (currentSettings: GlobalSettings) => GlobalSettings
   ) => void;
   setAssetChartSettings: (settings: TAssetChartSettings) => void;
   saveAssetChartSettings: (settings: TAssetChartSettings) => void;
+  isPersistenceCurrent: () => boolean;
   getImportContentAfterIntegrityCheck: (text: string) => Promise<unknown | null>;
   showNoticeDialog: (request: NoticeRequest) => Promise<void>;
 };
@@ -35,14 +37,24 @@ export function useUserSettingsFileController<TAssetChartSettings>({
   globalSettings,
   effectiveThemeStyle,
   assetChartSettings,
+  isExampleMode,
   normalizeAssetChartSettings,
   updateGlobalSettings,
   setAssetChartSettings,
   saveAssetChartSettings,
+  isPersistenceCurrent,
   getImportContentAfterIntegrityCheck,
   showNoticeDialog
 }: UserSettingsFileControllerOptions<TAssetChartSettings>) {
   const exportUserSettings = async () => {
+    if (isExampleMode) {
+      void showNoticeDialog({
+        title: '示例模式下不可导出用户配置',
+        message: '示例模式不会读写真实外部配置文件'
+      });
+      return;
+    }
+
     const api = window.electronAPI ?? window.electronWindow;
     const exportedAt = new Date();
     let selectedDirectory = '';
@@ -67,7 +79,7 @@ export function useUserSettingsFileController<TAssetChartSettings>({
       return;
     }
 
-    if (!selectedDirectory) {
+    if (!selectedDirectory || !isPersistenceCurrent()) {
       return;
     }
 
@@ -81,6 +93,10 @@ export function useUserSettingsFileController<TAssetChartSettings>({
           exportedAt
         })
       );
+
+      if (!isPersistenceCurrent()) {
+        return;
+      }
     } catch (error) {
       console.error('[NetraFlow settings] Failed to prepare user settings export.', error);
       void showNoticeDialog({
@@ -96,6 +112,11 @@ export function useUserSettingsFileController<TAssetChartSettings>({
         fileName: getUserSettingsFileName(exportedAt),
         content: fileContent
       });
+
+      if (!isPersistenceCurrent()) {
+        return;
+      }
+
       void showNoticeDialog({
         title: '导出用户配置',
         message: '用户配置文件已导出'
@@ -113,6 +134,14 @@ export function useUserSettingsFileController<TAssetChartSettings>({
     const file = event.target.files?.[0];
     event.target.value = '';
 
+    if (isExampleMode) {
+      void showNoticeDialog({
+        title: '示例模式下不可导入用户配置',
+        message: '示例模式不会读写真实外部配置文件'
+      });
+      return;
+    }
+
     if (!file) {
       return;
     }
@@ -127,6 +156,10 @@ export function useUserSettingsFileController<TAssetChartSettings>({
           );
 
           if (importContent === null) {
+            return;
+          }
+
+          if (!isPersistenceCurrent()) {
             return;
           }
 

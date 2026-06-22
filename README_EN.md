@@ -38,6 +38,8 @@ Windows builds provide two artifact types:
 - Setup: `NetraFlow_<version>_Setup.exe`, for installation through an installer wizard.
 - Portable: `NetraFlow_<version>_Portable.zip`, unzip it and run `NetraFlow.exe`.
 
+The Setup uninstaller checks local user-data deletion by default. If the user clears that option, `userdata/` is kept under the original installation directory, and reinstalling to the same directory continues to read the retained data. Portable data also lives under the extracted directory, so deleting the whole extracted directory deletes the data unless it has been backed up first.
+
 Current Windows builds are not code signed. Windows or security software may show a source warning on first launch, so verify that the file came from this repository's Releases page before continuing.
 
 ## Basic Usage
@@ -53,9 +55,13 @@ Current Windows builds are not code signed. Windows or security software may sho
 
 NetraFlow stores current data locally. It does not provide cloud sync and does not automatically upload asset data. Users can back up data through manual snapshots and automatic snapshots.
 
-Current local data uses schema 1. The application migrates older data formats. If it detects a future schema version, it refuses to read it so an older app version does not overwrite newer-format data. Storage writes maintain a validated `previous` copy, which can be used to recover when the current data is missing or damaged.
+In 0.9.8, current local data uses four JSON files: `core.json` stores account types, accounts, and history records; `settings.json` stores automatic snapshot, chart, and normal global preferences; `state.json` stores snapshot records, import records, first-welcome state, and theme-unlock runtime state; `security.json` stores local app-access and snapshot-encryption security settings. A valid `core.json` is not rewritten by simple startup, settings changes, state changes, or security setting changes.
 
-The development runtime and userdata are isolated from the production application, so development data does not pollute normal user data. Current local data is not encrypted by default; manually exported and automatically generated snapshot files can be encrypted with the configured snapshot password.
+Both Setup and Portable builds store user data in `userdata/` under the application directory by default. Runtime caches, logs, and Electron profile data are stored in `runtime/` under the application directory. The development runtime and userdata are isolated from the production application, so development data does not pollute normal user data.
+
+0.9.8 does not automatically migrate old development `storage.json` data and no longer uses a `previous` recovery path. Keep old data or snapshot backups before upgrading. The local `core.json` file is not encrypted by default; the local app-access password controls application access and is not file encryption for core data. Manually exported and automatically generated snapshot files can be encrypted with the configured snapshot password, and existing encrypted snapshots still require the original snapshot password used when they were created.
+
+Example mode uses a temporary `.demo` directory next to the executable and cleans it on example exit or next startup. Example-mode operations do not write real `userdata/` and do not create real external snapshots; snapshot import/export and user-settings import/export are blocked while example mode is active.
 
 ## Current Limitations
 
@@ -64,6 +70,7 @@ The development runtime and userdata are isolated from the production applicatio
 - Automatic updates are not provided. Users need to download new versions from Releases manually.
 - Asset data is mainly entered manually or imported from local files. Automatic bank, brokerage, or market account sync is not provided.
 - Local current data is not the same as a cloud backup. Export snapshots regularly and keep them somewhere safe.
+- The Setup uninstaller checks local user-data deletion by default. If the user clears that option, user data is kept according to the installer's existing behavior.
 
 ## Development
 
@@ -180,7 +187,7 @@ If an output directory for the same version already exists, the release scripts 
 
 ## Extension Development Notes
 
-- Changes to the local data structure need to preserve schema versioning, migration logic, future-schema refusal, and the `previous` copy recovery path.
+- Changes to the local data structure need to preserve the four-file boundary, schema versioning, future-schema refusal, and the no-`previous` recovery path.
 - Do not package development runtime, userdata, caches, logs, or user data into release artifacts.
 - The Windows application icon source remains `public/icons/netraflow.ico`; `docs/assets/netraflow-icon.png` is only for README and documentation display.
 - Release-flow changes should update `scripts/`, `.github/workflows/`, related tests, and README documentation together.

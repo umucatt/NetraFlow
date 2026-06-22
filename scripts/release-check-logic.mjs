@@ -14,9 +14,14 @@ const CHANGELOG_VERSION_HEADING_PATTERN = new RegExp(
 const SENSITIVE_GIT_PATHS = [
   'runtime',
   'userdata',
+  '.demo',
   '.tmp-tests',
   '.tmp-dev-userdata',
   '.tmp-dev-runtime',
+  'core.json',
+  'settings.json',
+  'state.json',
+  'security.json',
   'storage.json',
   'storage.json.tmp',
   'storage.json.previous',
@@ -26,6 +31,7 @@ const SENSITIVE_GIT_PATHS = [
 const REQUIRED_IGNORED_PATHS = [
   'runtime',
   'userdata',
+  '.demo',
   '.tmp-tests',
   '.tmp-dev-userdata',
   '.tmp-dev-runtime'
@@ -33,13 +39,26 @@ const REQUIRED_IGNORED_PATHS = [
 
 const REQUIRED_IGNORED_PATH_PROBES = [
   'runtime/cache/file',
+  '.demo/core.json',
   'userdata/storage.json',
+  'userdata/core.json',
+  'userdata/settings.json',
+  'userdata/state.json',
+  'userdata/security.json',
   '.tmp-tests/test.js',
   '.tmp-dev-userdata/storage.json',
   '.tmp-dev-runtime/session/file'
 ];
 
 const REQUIRED_BUILD_EXCLUDED_PATHS = [
+  '.demo/core.json',
+  '.demo/settings.json',
+  '.demo/state.json',
+  '.demo/security.json',
+  'userdata/core.json',
+  'userdata/settings.json',
+  'userdata/state.json',
+  'userdata/security.json',
   'userdata/storage.json',
   'runtime/cache/file',
   '.tmp-tests/test.js',
@@ -50,6 +69,22 @@ const REQUIRED_BUILD_EXCLUDED_PATHS = [
 ];
 
 const PACKAGE_MAIN_ENTRY = 'dist-electron/main.js';
+const BROAD_ASAR_UNPACK_PATTERNS = [
+  '**',
+  '**/*',
+  'app',
+  'app/**',
+  'app/**/*',
+  'resources',
+  'resources/**',
+  'resources/**/*',
+  'node_modules',
+  'node_modules/**',
+  'node_modules/**/*',
+  '**/node_modules',
+  '**/node_modules/**',
+  '**/node_modules/**/*'
+];
 
 const normalizePath = (filePath) =>
   String(filePath ?? '')
@@ -459,6 +494,45 @@ const checkBuildExclusions = (input, report) => {
   pass(report, 'runtime/userdata excluded from packaged files');
 };
 
+const normalizeAsarUnpackPatterns = (asarUnpack) => {
+  if (typeof asarUnpack === 'string') {
+    return [asarUnpack];
+  }
+
+  if (Array.isArray(asarUnpack)) {
+    return asarUnpack.filter((pattern) => typeof pattern === 'string');
+  }
+
+  return [];
+};
+
+const checkAsarConfig = (input, report) => {
+  const build = input.packageJson?.build;
+
+  if (!build || typeof build !== 'object') {
+    fail(report, 'electron-builder build config is missing');
+    return;
+  }
+
+  if (build.asar !== true) {
+    fail(report, 'electron-builder asar must be true');
+  } else {
+    pass(report, 'electron-builder ASAR packaging enabled');
+  }
+
+  const asarUnpackPatterns = normalizeAsarUnpackPatterns(build.asarUnpack);
+  const broadPatterns = asarUnpackPatterns
+    .map(normalizePath)
+    .filter((pattern) => BROAD_ASAR_UNPACK_PATTERNS.includes(pattern.toLowerCase()));
+
+  if (broadPatterns.length > 0) {
+    fail(report, `electron-builder asarUnpack is too broad: ${broadPatterns.join(', ')}`);
+    return;
+  }
+
+  pass(report, 'electron-builder asarUnpack does not unpack the app or full node_modules tree');
+};
+
 const isWindowsTarget = (target) => {
   if (typeof target === 'string') {
     return target === 'nsis' || target === 'portable' || target === 'dir';
@@ -493,6 +567,7 @@ export const evaluateReleaseCheck = (input, options = {}) => {
   checkArtifactNaming(input, report);
   checkGitExclusions(input, report, normalizedOptions);
   checkBuildExclusions(input, report);
+  checkAsarConfig(input, report);
   checkWindowsBoundary(input, report);
 
   return report;

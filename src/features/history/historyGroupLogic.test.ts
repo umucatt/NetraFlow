@@ -10,7 +10,7 @@ import {
 } from './historyGroupLogic';
 
 const HISTORY_TYPE = {
-  create: '\u65b0\u589e' as HistoryRecord['type'],
+  create: '\u521b\u5efa' as HistoryRecord['type'],
   modify: '\u4fee\u6539' as HistoryRecord['type'],
   restore: '\u91cd\u65b0\u542f\u7528' as HistoryRecord['type']
 };

@@ -18,6 +18,14 @@ const ZIP64_SENTINEL_16 = 0xffff;
 const ZIP64_SENTINEL_32 = 0xffffffff;
 
 const forbiddenZipFileNames = new Set([
+  'core.json',
+  'core.json.tmp',
+  'settings.json',
+  'settings.json.tmp',
+  'state.json',
+  'state.json.tmp',
+  'security.json',
+  'security.json.tmp',
   'storage.json',
   'storage.json.tmp',
   'storage.json.previous',
@@ -26,9 +34,18 @@ const forbiddenZipFileNames = new Set([
 
 const forbiddenZipDirectoryNames = new Set([
   'userdata',
+  '.demo',
   'runtime',
   'appdata',
-  '.tmp-tests'
+  '.tmp-tests',
+  '.git'
+]);
+
+const forbiddenSourceZipDirectoryNames = new Set([
+  'src',
+  'electron',
+  '__tests__',
+  'tests'
 ]);
 
 export class ReleaseArtifactVerificationError extends Error {
@@ -207,6 +224,46 @@ export const findForbiddenZipEntries = (zipEntries) =>
       );
     });
 
+const getPortableResourceRelativePath = (entryName) => {
+  const segments = normalizeRelativePath(entryName).split('/').filter(Boolean);
+  const resourcesIndex = segments.findIndex((segment) => segment.toLowerCase() === 'resources');
+
+  if (resourcesIndex < 0) {
+    return null;
+  }
+
+  return segments.slice(resourcesIndex + 1).join('/');
+};
+
+const isPortableResourceEntry = (entryName, resourcePath) =>
+  getPortableResourceRelativePath(entryName)?.toLowerCase() === resourcePath.toLowerCase();
+
+const isPathInsidePortableResource = (entryName, resourcePath) => {
+  const relativeResourcePath = getPortableResourceRelativePath(entryName)?.toLowerCase();
+  const normalizedResourcePath = resourcePath.toLowerCase().replace(/\/+$/, '');
+
+  return (
+    relativeResourcePath === normalizedResourcePath ||
+    relativeResourcePath?.startsWith(`${normalizedResourcePath}/`) === true
+  );
+};
+
+const findForbiddenPortableLayoutEntries = (zipEntries) =>
+  zipEntries
+    .map((entryName) => normalizeRelativePath(entryName))
+    .filter((entryName) => {
+      const lowerSegments = entryName.toLowerCase().split('/').filter(Boolean);
+      const lowerEntryName = entryName.toLowerCase();
+
+      return (
+        isPathInsidePortableResource(entryName, 'app') ||
+        isPathInsidePortableResource(entryName, 'app.asar.unpacked/node_modules') ||
+        lowerSegments.some((segment) => forbiddenSourceZipDirectoryNames.has(segment)) ||
+        lowerEntryName.endsWith('.previous') ||
+        lowerEntryName.endsWith('.tmp')
+      );
+    });
+
 const verifyPortableZipContents = ({ errors, rootDir, portablePath }) => {
   if (!portablePath) {
     return;
@@ -224,10 +281,26 @@ const verifyPortableZipContents = ({ errors, rootDir, portablePath }) => {
   }
 
   const forbiddenEntries = findForbiddenZipEntries(zipEntries);
+  const hasAppAsar = zipEntries.some((entryName) => isPortableResourceEntry(entryName, 'app.asar'));
+  const forbiddenLayoutEntries = findForbiddenPortableLayoutEntries(zipEntries);
 
   if (forbiddenEntries.length > 0) {
     errors.push(
       `Portable zip contains forbidden entries:\n${forbiddenEntries
+        .map((entryName) => `portable:${entryName}`)
+        .join('\n')}`
+    );
+  }
+
+  if (!hasAppAsar) {
+    errors.push(
+      `Portable zip is missing resources/app.asar: ${toReleaseRelativePath(rootDir, portablePath)}`
+    );
+  }
+
+  if (forbiddenLayoutEntries.length > 0) {
+    errors.push(
+      `Portable zip has forbidden unpacked app layout entries:\n${forbiddenLayoutEntries
         .map((entryName) => `portable:${entryName}`)
         .join('\n')}`
     );

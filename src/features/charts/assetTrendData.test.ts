@@ -8,7 +8,7 @@ import { deriveAssetTrendPoints, type TrendChartPoint } from './assetTrendData';
 const FIXED_NOW = new Date('2026-05-27T12:00:00');
 const SETTINGS = { xAxisRange: '1m' as const };
 const HISTORY_TYPE = {
-  create: '\u65b0\u589e' as HistoryRecord['type'],
+  create: '\u521b\u5efa' as HistoryRecord['type'],
   delete: '\u5220\u9664' as HistoryRecord['type'],
   modify: '\u4fee\u6539' as HistoryRecord['type'],
   archive: '\u5f52\u6863' as HistoryRecord['type'],
@@ -693,4 +693,41 @@ test('uses the frozen current date for stable xAxisRange output', (t) => {
 
   assert.equal(points[0]?.date, '2026-04-27');
   assert.equal(points[points.length - 1]?.date, '2026-05-27');
+});
+
+test('asset trend keeps backfilled records earlier than the creation record visible', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: FIXED_NOW });
+  const points = deriveAssetTrendPoints(
+    [
+      group('Assets', 'asset', [
+        account('account-1', 130, { createdAt: atNoon('2026-06-21') })
+      ])
+    ],
+    [
+      createRecord({
+        id: 'create',
+        type: HISTORY_TYPE.create,
+        beforeAmount: null,
+        afterAmount: 100,
+        time: atNoon('2026-06-21')
+      }),
+      createRecord({
+        id: 'backfill-1',
+        beforeAmount: 40,
+        afterAmount: 90,
+        time: atNoon('2026-05-09')
+      }),
+      createRecord({
+        id: 'backfill-2',
+        beforeAmount: 90,
+        afterAmount: 130,
+        time: atNoon('2026-05-10')
+      })
+    ],
+    SETTINGS
+  );
+
+  assert.equal(getPoint(points, '2026-05-09').net, 90);
+  assert.equal(getPoint(points, '2026-05-10').net, 130);
+  assert.equal(points.some((point) => Number.isNaN(point.net)), false);
 });

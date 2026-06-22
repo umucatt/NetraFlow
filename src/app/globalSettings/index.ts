@@ -8,8 +8,6 @@ export {
   isSearchLogicMode,
   isThemeMode,
   isThemeStyle,
-  loadGlobalSettings,
   normalizeGlobalSettings,
-  resolveThemeMode,
-  saveGlobalSettings
+  resolveThemeMode
 } from './globalSettingsLogic';

@@ -24,34 +24,14 @@ import {
 import {
   getExampleModeBadgeSettingsNavigation
 } from './app/exampleModeNavigation';
-import {
-  clearPersistedAssetData,
-  persistAppDataStorageItems
-} from './app/appDataLifecycleLogic';
+import { createTestDataInRealAppData } from './app/appDataLifecycleLogic';
 import { useAppDataLifecycleController } from './app/useAppDataLifecycleController';
 import { useAppDialogController } from './app/useAppDialogController';
 import {
   isPositiveNature,
   toStoredAmountByNature
 } from './app/accountNature';
-import {
-  ACCOUNTS_STORAGE_KEY,
-  CHART_SETTINGS_STORAGE_KEY,
-  GROUPS_STORAGE_KEY,
-  HISTORY_STORAGE_KEY,
-  LEGACY_ACCOUNTS_STORAGE_KEY,
-  LEGACY_ACCOUNT_TYPES_STORAGE_KEY,
-  LEGACY_ARCHIVED_ACCOUNTS_STORAGE_KEY,
-  LEGACY_DELETED_RECORDS_STORAGE_KEY,
-  LEGACY_HISTORY_STORAGE_KEY,
-  MIGRATION_BACKUP_STORAGE_KEY
-} from './app/storageKeys';
-import {
-  migrateLegacyLocalStorageToNfStorage,
-  nfStorage
-} from './app/nfStorage';
 import { isPlainObject } from './app/objectUtils';
-import { readStorageJson } from './app/storageJson';
 import {
   canDeleteAssetGroup,
   cloneAppData,
@@ -59,9 +39,40 @@ import {
   deriveGroupsWithAccounts,
   getArchivedAccountEntries,
   normalizeGroupsAndAccounts,
-  normalizeGroupNature,
   stripRuntimeAccountsFromGroups
 } from './app/accountData';
+import {
+  createAppDataFromCoreDocument,
+  createCoreDocumentFromAppData,
+  createRuntimeGlobalSettings,
+  createSecurityDocumentFromRuntime,
+  createSettingsDocumentFromRuntime,
+  enterDemoPersistenceEnvironment,
+  exitDemoPersistenceEnvironment,
+  getRuntimeBackupState,
+  promoteDemoCoreToRealPersistenceEnvironment,
+  readCoreDocument,
+  readRuntimePersistenceSnapshot,
+  writeCoreDocument,
+  writeSecurityDocument,
+  writeSettingsDocument,
+  writeStateDocument,
+  type RuntimePersistenceSnapshot
+} from './app/persistence/runtimePersistence';
+import {
+  createDefaultCoreDocument,
+  createDefaultSecurityDocument,
+  createDefaultSettingsDocument,
+  createDefaultStateDocument,
+  normalizeSecurityDocument,
+  normalizeSettingsDocument,
+  normalizeStateDocument
+} from './app/persistence/persistenceDefaults';
+import type {
+  SecurityDocument,
+  SettingsDocument,
+  StateDocument
+} from './app/persistence/persistenceDocuments';
 import { createStableGroupId } from './app/ids';
 import {
   NfFlashnoteSourceIcon
@@ -88,8 +99,7 @@ import {
 } from './app/snapshotSecurityDialogs';
 import {
   FirstWelcomeLayer,
-  loadFirstWelcomeState,
-  saveFirstWelcomeState,
+  normalizeFirstWelcomeState,
   shouldShowFirstWelcome,
   type FirstWelcomeStage,
   type FirstWelcomeState,
@@ -105,10 +115,8 @@ import {
   isSearchLogicMode,
   isThemeMode,
   isThemeStyle,
-  loadGlobalSettings,
   normalizeGlobalSettings,
-  resolveThemeMode,
-  saveGlobalSettings
+  resolveThemeMode
 } from './app/globalSettings';
 import { SecretConsoleLayer } from './app/secretConsole';
 import {
@@ -174,8 +182,12 @@ import {
   type ArchivedRestoreSource
 } from './features/account/archivedAccountLogic';
 import {
+  DEFAULT_ASSET_CHART_SETTINGS,
   formatChartNumber,
   getGlobalAccountDetailChartSettings,
+  normalizeAccountDetailChartSettings,
+  normalizeAssetChartSettings,
+  normalizeCategoryDetailChartSettings,
   useChartDataController
 } from './features/charts';
 import { useDashboardController } from './features/dashboard/useDashboardController';
@@ -198,11 +210,7 @@ import type {
 } from './features/settings/settingsPageTypes';
 import {
   DEFAULT_AUTO_BACKUP_SETTINGS,
-  getBackupMethodLabel,
-  loadBackupRecords,
-  loadLastBackupAt,
-  loadLastBackupHistoryCount,
-  markAutoBackupDueOnce
+  getBackupMethodLabel
 } from './features/backup/snapshotBackupLogic';
 import { useSnapshotBackupController } from './features/backup/useSnapshotBackupController';
 import { useSecuritySettingsController } from './features/security/useSecuritySettingsController';
@@ -221,8 +229,6 @@ import {
 import {
   cloneCategoryChartSettings,
   isChartColorAssignmentMode,
-  isChartXAxisRange,
-  normalizeChartPointValueMode,
   normalizeGlobalChartControlMode,
   syncCategoryChartSettingsFromGlobal
 } from './chartLogic';
@@ -252,8 +258,12 @@ import type {
   ArchivedAccountEntry,
   AssetGroup,
   AssetGroupWithAccounts,
+  AutoBackupSettings,
+  BackupRecord,
+  CommitAppDataUpdate,
   HistoryRecord,
-  HistoryType
+  HistoryType,
+  SnapshotImportRecord
 } from './app/types';
 import type { FlashHistoryRecordInput } from './features/flashNote/flashNoteWriteLogic';
 import type { QuickEntryAccountGroup } from './features/quickEntry';
@@ -262,8 +272,6 @@ import type {
   AssetChartSettings,
   CategoryDetailChartSettings,
   HomeThumbnailChartSettings,
-  StructureAssetDisplay,
-  TrendAssetDisplay,
 } from './features/charts';
 import type { ExampleTemplateId } from './exampleData';
 import type {
@@ -435,62 +443,6 @@ const SECRET_CONSOLE_AUTO_BACKUP_DUE_ONCE_SUCCESS = '已设置下次启动自动
 
 const SECRET_CONSOLE_NYAA_SUCCESS = '已解锁nyaa主题';
 
-const DEFAULT_ASSET_CHART_SETTINGS: AssetChartSettings = {
-
-  l0: {
-
-    showStructure: true,
-
-    showTrend: true,
-
-    xAxisRange: '6m'
-
-  },
-
-  globalChartControlMode: 'peer',
-
-  structure: {
-
-    assetDisplay: 'both',
-
-    showDebtMultiple: true
-
-  },
-
-  trend: {
-
-    assetDisplay: 'net',
-
-    adaptiveYAxis: true,
-
-    xAxisRange: '6m',
-
-    pointValueMode: 'adaptive'
-
-  },
-
-  categoryVisibility: {
-
-    showStructure: true,
-
-    showTrend: true
-
-  },
-
-  globalCategoryDetail: {
-
-    xAxisRange: '6m',
-
-    pointValueMode: 'adaptive'
-
-  },
-
-  categoryDetailById: {},
-
-  accountDetailById: {}
-
-};
-
 const SIGNED_AMOUNT_COLORS = {
 
   red: 'var(--signed-red)',
@@ -511,8 +463,45 @@ const SIGNED_AMOUNT_BACKGROUNDS = {
 
 } as const;
 
-migrateLegacyLocalStorageToNfStorage();
+const startupPersistenceState = (() => {
+  try {
+    return {
+      snapshot: readRuntimePersistenceSnapshot(),
+      error: null
+    };
+  } catch (error) {
+    console.error('[NetraFlow persistence] Failed to read startup documents.', error);
 
+    return {
+      snapshot: {
+        core: createDefaultCoreDocument(),
+        settings: createDefaultSettingsDocument(),
+        state: createDefaultStateDocument(),
+        security: createDefaultSecurityDocument()
+      },
+      error
+    };
+  }
+})();
+
+const startupPersistenceSnapshot = startupPersistenceState.snapshot;
+const startupPersistenceError = startupPersistenceState.error;
+const startupAppData = createAppDataFromCoreDocument(startupPersistenceSnapshot.core);
+const startupFirstWelcomeState = normalizeFirstWelcomeState(
+  startupPersistenceSnapshot.state.firstWelcome
+);
+const startupGlobalSettings = createRuntimeGlobalSettings(
+  startupPersistenceSnapshot.settings,
+  startupPersistenceSnapshot.state,
+  startupPersistenceSnapshot.security
+);
+const startupBackupState = getRuntimeBackupState(
+  startupPersistenceSnapshot.state,
+  startupAppData.history.length
+);
+
+const arePersistenceDocumentsEqual = (left: unknown, right: unknown) =>
+  JSON.stringify(left) === JSON.stringify(right);
 
 
 const FIRST_WELCOME_STORY_ROUTES: FirstWelcomeStoryRoute[] = [
@@ -603,10 +592,6 @@ const isTextEditingElement = (element: Element | null): element is HTMLElement =
 
 
 
-const initialGroups: AssetGroup[] = [];
-
-
-
 const getStringField = (value: Record<string, unknown>, fieldNames: string[]) => {
 
   for (const fieldName of fieldNames) {
@@ -616,54 +601,6 @@ const getStringField = (value: Record<string, unknown>, fieldNames: string[]) =>
 
 
     if (typeof fieldValue === 'string') {
-
-      return fieldValue;
-
-    }
-
-  }
-
-
-
-  return undefined;
-
-};
-
-
-
-const getNumberField = (value: Record<string, unknown>, fieldNames: string[]) => {
-
-  for (const fieldName of fieldNames) {
-
-    const fieldValue = value[fieldName];
-
-
-
-    if (typeof fieldValue === 'number' && Number.isFinite(fieldValue)) {
-
-      return fieldValue;
-
-    }
-
-  }
-
-
-
-  return undefined;
-
-};
-
-
-
-const getBooleanField = (value: Record<string, unknown>, fieldNames: string[]) => {
-
-  for (const fieldName of fieldNames) {
-
-    const fieldValue = value[fieldName];
-
-
-
-    if (typeof fieldValue === 'boolean') {
 
       return fieldValue;
 
@@ -712,466 +649,6 @@ const getNullableNumberField = (
 
 
   return null;
-
-};
-
-
-
-const getNfStorageKeyList = () =>
-
-  Array.from({ length: nfStorage.length }, (_, index) =>
-
-    nfStorage.key(index)
-
-  ).filter((key): key is string => typeof key === 'string');
-
-
-
-const getNfStorageSnapshot = () =>
-
-  getNfStorageKeyList().reduce<Record<string, string | null>>((snapshot, key) => {
-
-    snapshot[key] = nfStorage.getItem(key);
-
-
-
-    return snapshot;
-
-  }, {});
-
-
-
-const saveBackupBeforeMigration = (reason: string) => {
-
-  try {
-
-    if (nfStorage.getItem(MIGRATION_BACKUP_STORAGE_KEY) !== null) {
-
-      return;
-
-    }
-
-
-
-    nfStorage.setItem(
-
-      MIGRATION_BACKUP_STORAGE_KEY,
-
-      JSON.stringify({
-
-        createdAt: new Date().toISOString(),
-
-        reason,
-
-        keys: getNfStorageKeyList(),
-
-        data: getNfStorageSnapshot()
-
-      })
-
-    );
-
-  } catch (error) {
-
-    console.warn('[NetraFlow storage] Failed to create migration snapshot.', error);
-
-  }
-
-};
-
-
-
-const isStructureAssetDisplay = (value: unknown): value is StructureAssetDisplay =>
-
-  value === 'positive' || value === 'negative' || value === 'both';
-
-
-
-const isTrendAssetDisplay = (value: unknown): value is TrendAssetDisplay =>
-
-  value === 'net' || value === 'positive' || value === 'positive-negative';
-
-
-
-const isTrendXAxisRange = isChartXAxisRange;
-
-
-
-const normalizeCategoryDetailChartSettings = (
-
-  value: unknown,
-
-  fallback: CategoryDetailChartSettings = DEFAULT_ASSET_CHART_SETTINGS.globalCategoryDetail
-
-): CategoryDetailChartSettings => {
-
-  const rawSettings = isPlainObject(value) ? value : {};
-
-
-
-  return {
-
-    xAxisRange: isTrendXAxisRange(rawSettings.xAxisRange)
-
-      ? rawSettings.xAxisRange
-
-      : fallback.xAxisRange,
-
-    pointValueMode: normalizeChartPointValueMode(
-
-      rawSettings.pointValueMode,
-
-      fallback.pointValueMode
-
-    )
-
-  };
-
-};
-
-
-
-const normalizeAccountDetailChartSettings = (
-
-  value: unknown,
-
-  fallback: AccountDetailChartSettings
-
-): AccountDetailChartSettings => {
-
-  const rawSettings = isPlainObject(value) ? value : {};
-
-
-
-  return {
-
-    adaptiveYAxis:
-
-      typeof rawSettings.adaptiveYAxis === 'boolean'
-
-        ? rawSettings.adaptiveYAxis
-
-        : fallback.adaptiveYAxis,
-
-    xAxisRange: isTrendXAxisRange(rawSettings.xAxisRange)
-
-      ? rawSettings.xAxisRange
-
-      : fallback.xAxisRange,
-
-    pointValueMode: normalizeChartPointValueMode(
-
-      rawSettings.pointValueMode,
-
-      fallback.pointValueMode
-
-    )
-
-  };
-
-};
-
-
-
-const normalizeAssetChartSettings = (value: unknown): AssetChartSettings => {
-
-  if (!isPlainObject(value)) {
-
-    return DEFAULT_ASSET_CHART_SETTINGS;
-
-  }
-
-
-
-  const rawTotalAsset = isPlainObject(value.totalAsset) ? value.totalAsset : {};
-
-  const rawL0 = isPlainObject(value.homeThumbnail)
-
-    ? value.homeThumbnail
-
-    : isPlainObject(value.l0)
-
-      ? value.l0
-
-      : {};
-
-  const rawStructure = isPlainObject(rawTotalAsset.structure)
-
-    ? rawTotalAsset.structure
-
-    : isPlainObject(value.structure)
-
-      ? value.structure
-
-      : {};
-
-  const rawTrend = isPlainObject(rawTotalAsset.trend)
-
-    ? rawTotalAsset.trend
-
-    : isPlainObject(value.trend)
-
-      ? value.trend
-
-      : {};
-
-  const rawCategoryVisibility = isPlainObject(value.categoryVisibility)
-
-    ? value.categoryVisibility
-
-    : isPlainObject(value.categoryDetail)
-
-      ? value.categoryDetail
-
-      : {};
-
-  const rawGlobalCategoryDetail = isPlainObject(value.globalCategoryDetail)
-
-    ? value.globalCategoryDetail
-
-    : isPlainObject(value.globalCategoryChartSettings)
-
-      ? value.globalCategoryChartSettings
-
-      : isPlainObject(value.categoryDetail)
-
-        ? value.categoryDetail
-
-        : {};
-
-  const rawCategoryDetailById = isPlainObject(value.categoryDetailById)
-
-    ? value.categoryDetailById
-
-    : isPlainObject(value.categoryChartSettingsById)
-
-      ? value.categoryChartSettingsById
-
-      : {};
-
-  const rawAccountDetailById = isPlainObject(value.accountDetailById)
-
-    ? value.accountDetailById
-
-    : isPlainObject(value.accountChartSettingsById)
-
-      ? value.accountChartSettingsById
-
-      : {};
-
-  const legacyLocked =
-
-    value.locked === true ||
-
-    value.globalChartLocked === true ||
-
-    value.globalChartControlLocked === true;
-
-  const rawControlMode = isPlainObject(value.globalChartControl)
-
-    ? value.globalChartControl.mode
-
-    : value.globalChartControlMode;
-
-  const globalChartControlMode = legacyLocked
-
-    ? 'locked'
-
-    : normalizeGlobalChartControlMode(
-
-        rawControlMode,
-
-        DEFAULT_ASSET_CHART_SETTINGS.globalChartControlMode
-
-      );
-
-  const globalCategoryDetail = normalizeCategoryDetailChartSettings(
-
-    rawGlobalCategoryDetail,
-
-    DEFAULT_ASSET_CHART_SETTINGS.globalCategoryDetail
-
-  );
-
-  const categoryDetailById = Object.fromEntries(
-
-    Object.entries(rawCategoryDetailById).map(([categoryId, settings]) => [
-
-      categoryId,
-
-      normalizeCategoryDetailChartSettings(settings, globalCategoryDetail)
-
-    ])
-
-  );
-
-  const trend = {
-
-    assetDisplay: isTrendAssetDisplay(rawTrend.assetDisplay)
-
-      ? rawTrend.assetDisplay
-
-      : DEFAULT_ASSET_CHART_SETTINGS.trend.assetDisplay,
-
-    adaptiveYAxis:
-
-      typeof rawTrend.adaptiveYAxis === 'boolean'
-
-        ? rawTrend.adaptiveYAxis
-
-        : DEFAULT_ASSET_CHART_SETTINGS.trend.adaptiveYAxis,
-
-    xAxisRange: isTrendXAxisRange(rawTrend.xAxisRange)
-
-      ? rawTrend.xAxisRange
-
-      : DEFAULT_ASSET_CHART_SETTINGS.trend.xAxisRange,
-
-    pointValueMode: normalizeChartPointValueMode(
-
-      rawTrend.pointValueMode,
-
-      DEFAULT_ASSET_CHART_SETTINGS.trend.pointValueMode
-
-    )
-
-  };
-
-  const globalAccountDetail = {
-
-    adaptiveYAxis: trend.adaptiveYAxis,
-
-    xAxisRange: trend.xAxisRange,
-
-    pointValueMode: trend.pointValueMode
-
-  };
-
-  const accountDetailById = Object.fromEntries(
-
-    Object.entries(rawAccountDetailById).map(([accountId, settings]) => [
-
-      accountId,
-
-      normalizeAccountDetailChartSettings(settings, globalAccountDetail)
-
-    ])
-
-  );
-
-
-
-  return {
-
-    l0: {
-
-      showStructure:
-
-        typeof rawL0.showStructure === 'boolean'
-
-          ? rawL0.showStructure
-
-          : DEFAULT_ASSET_CHART_SETTINGS.l0.showStructure,
-
-      showTrend:
-
-        typeof rawL0.showTrend === 'boolean'
-
-          ? rawL0.showTrend
-
-          : DEFAULT_ASSET_CHART_SETTINGS.l0.showTrend,
-
-      xAxisRange: isTrendXAxisRange(rawL0.xAxisRange)
-
-        ? rawL0.xAxisRange
-
-        : isTrendXAxisRange(rawTrend.xAxisRange)
-
-          ? rawTrend.xAxisRange
-
-          : DEFAULT_ASSET_CHART_SETTINGS.l0.xAxisRange
-
-    },
-
-    globalChartControlMode,
-
-    structure: {
-
-      assetDisplay: isStructureAssetDisplay(rawStructure.assetDisplay)
-
-        ? rawStructure.assetDisplay
-
-        : DEFAULT_ASSET_CHART_SETTINGS.structure.assetDisplay,
-
-      showDebtMultiple:
-
-        typeof rawStructure.showDebtMultiple === 'boolean'
-
-          ? rawStructure.showDebtMultiple
-
-          : DEFAULT_ASSET_CHART_SETTINGS.structure.showDebtMultiple
-
-    },
-
-    trend,
-
-    categoryVisibility: {
-
-      showStructure:
-
-        typeof rawCategoryVisibility.showStructure === 'boolean'
-
-          ? rawCategoryVisibility.showStructure
-
-          : DEFAULT_ASSET_CHART_SETTINGS.categoryVisibility.showStructure,
-
-      showTrend:
-
-        typeof rawCategoryVisibility.showTrend === 'boolean'
-
-          ? rawCategoryVisibility.showTrend
-
-          : DEFAULT_ASSET_CHART_SETTINGS.categoryVisibility.showTrend
-
-    },
-
-    globalCategoryDetail,
-
-    categoryDetailById,
-
-    accountDetailById
-
-  };
-
-};
-
-
-
-const loadAssetChartSettings = () => {
-
-  const storedSettings = readStorageJson(CHART_SETTINGS_STORAGE_KEY);
-
-
-
-  return storedSettings.parsed
-
-    ? normalizeAssetChartSettings(storedSettings.value)
-
-    : DEFAULT_ASSET_CHART_SETTINGS;
-
-};
-
-
-
-const saveAssetChartSettings = (settings: AssetChartSettings) => {
-
-  nfStorage.setItem(
-
-    CHART_SETTINGS_STORAGE_KEY,
-
-    JSON.stringify(normalizeAssetChartSettings(settings))
-
-  );
 
 };
 
@@ -1233,27 +710,9 @@ const getSignedAmountTone = (
 
 
 
-const storedValueLooksNonEmpty = (raw: string | null) => {
-
-  if (raw === null) {
-
-    return false;
-
-  }
-
-
-
-  const trimmedRaw = raw.trim();
-
-  return trimmedRaw !== '' && trimmedRaw !== '[]';
-
-};
-
-
-
 const normalizeHistoryType = (type: unknown): HistoryType | null => {
 
-  if (type === '新增' || type === '删除' || type === '修改' || type === '重新启用') {
+  if (type === '创建' || type === '删除' || type === '修改' || type === '重新启用') {
 
     return type;
 
@@ -1276,32 +735,6 @@ const normalizeHistoryType = (type: unknown): HistoryType | null => {
 
 
 const DEFAULT_HISTORY_TYPE: HistoryType = '修改';
-
-
-
-const looksLikeHistoryRecord = (value: unknown) =>
-
-  isPlainObject(value) &&
-
-  [
-
-    'type',
-
-    'action',
-
-    'kind',
-
-    'beforeAmount',
-
-    'afterAmount',
-
-    'previousAmount',
-
-    'nextAmount',
-
-    'relatedTime'
-
-  ].some((fieldName) => fieldName in value);
 
 
 
@@ -1575,460 +1008,14 @@ const getBackupHistory = (value: unknown, groups: AssetGroupWithAccounts[]) => {
 
 
 
-type LegacyGroupDraft = {
-  name: string;
-  nature: AccountTypeNature;
-  includeInStats: boolean;
-  sortOrder: number;
-  accounts: unknown[];
-} & Record<string, unknown>;
-
-
-
-const normalizeLegacyAccountTypes = (value: unknown): LegacyGroupDraft[] => {
-
-  const accountTypes =
-
-    isPlainObject(value) && Array.isArray(value.accountTypes)
-
-      ? value.accountTypes
-
-      : Array.isArray(value)
-
-        ? value
-
-        : [];
-
-
-
-  return accountTypes.flatMap((accountType, index) => {
-
-    if (typeof accountType === 'string') {
-
-      return [
-
-        {
-
-          name: accountType,
-
-          nature: normalizeGroupNature(undefined, accountType),
-
-          includeInStats: true,
-
-          sortOrder: index,
-
-          accounts: []
-
-        }
-
-      ];
-
-    }
-
-
-
-    if (!isPlainObject(accountType)) {
-
-      return [];
-
-    }
-
-
-
-    const name = getStringField(accountType, ['name', 'label', 'title', 'groupName']) ?? '';
-
-
-
-    if (!name) {
-
-      return [];
-
-    }
-
-
-
-    return [
-
-      {
-
-        ...accountType,
-
-        name,
-
-        nature: normalizeGroupNature(accountType.nature ?? getStringField(accountType, ['kind']), name),
-
-        includeInStats: getBooleanField(accountType, ['includeInStats']) ?? true,
-
-        sortOrder: getNumberField(accountType, ['sortOrder', 'order']) ?? index,
-
-        accounts: Array.isArray(accountType.accounts) ? accountType.accounts : []
-
-      }
-
-    ];
-
-  });
-
-};
-
-
-
-const appendLegacyAccountsToGroups = (
-
-  groups: LegacyGroupDraft[],
-
-  value: unknown,
-
-  archivedFallback: boolean
-
-) => {
-
-  const accounts =
-
-    isPlainObject(value) && Array.isArray(value.accounts)
-
-      ? value.accounts
-
-      : Array.isArray(value)
-
-        ? value
-
-        : [];
-
-
-
-  accounts.filter(isPlainObject).forEach((account) => {
-
-    const accountName = getStringField(account, ['name', 'accountName', 'title']) ?? '';
-
-    const amount = getNumberField(account, ['amount', 'balance', 'value']);
-
-
-
-    if (!accountName || typeof amount !== 'number') {
-
-      return;
-
-    }
-
-
-
-    const groupName =
-
-      getStringField(account, ['groupName', 'accountTypeName', 'accountType', 'type', 'category']) ??
-
-      groups[0]?.name ??
-
-      'Uncategorized';
-
-    let group = groups.find((currentGroup) => currentGroup.name === groupName);
-
-
-
-    if (!group) {
-
-      group = {
-
-        name: groupName,
-
-        nature: normalizeGroupNature(undefined, groupName),
-
-        includeInStats: true,
-
-        sortOrder: groups.length,
-
-        accounts: []
-
-      };
-
-      groups.push(group);
-
-    }
-
-
-
-    group.accounts.push({
-
-      ...account,
-
-      name: accountName,
-
-      amount,
-
-      createdAt: getStringField(account, ['createdAt', 'createdTime', 'time']) ?? INITIAL_TIME,
-
-      alias: getStringField(account, ['alias', 'abbreviation']),
-
-      archived: getBooleanField(account, ['archived']) ?? archivedFallback,
-
-      archivedAt:
-
-        getStringField(account, ['archivedAt']) ??
-
-        (archivedFallback ? INITIAL_TIME : undefined)
-
-    });
-
-  });
-
-};
-
-
-
-const loadLegacyGroupsFromStorage = (): { groups: AssetGroup[]; accounts: Account[] } | null => {
-
-  const storedAccountTypes = readStorageJson(LEGACY_ACCOUNT_TYPES_STORAGE_KEY);
-
-  const storedAccounts = readStorageJson(LEGACY_ACCOUNTS_STORAGE_KEY);
-
-  const storedArchivedAccounts = readStorageJson(LEGACY_ARCHIVED_ACCOUNTS_STORAGE_KEY);
-
-
-
-  if (!storedAccountTypes.exists && !storedAccounts.exists && !storedArchivedAccounts.exists) {
-
-    return null;
-
-  }
-
-
-
-  saveBackupBeforeMigration('migrate legacy account storage');
-
-
-
-  const groups = storedAccountTypes.parsed
-
-    ? normalizeLegacyAccountTypes(storedAccountTypes.value)
-
-    : [];
-
-
-
-  if (storedAccounts.parsed) {
-
-    appendLegacyAccountsToGroups(groups, storedAccounts.value, false);
-
-  }
-
-
-
-  if (storedArchivedAccounts.parsed) {
-
-    appendLegacyAccountsToGroups(groups, storedArchivedAccounts.value, true);
-
-  }
-
-
-
-  return groups.length > 0 ? normalizeStoredAccountData(groups) : null;
-
-};
-
-
-
-const loadLegacyHistoryFromStorage = (groups: AssetGroupWithAccounts[]) => {
-
-  const storedHistory = readStorageJson(LEGACY_HISTORY_STORAGE_KEY);
-
-  const storedDeletedRecords = readStorageJson(LEGACY_DELETED_RECORDS_STORAGE_KEY);
-
-  const legacyHistoryValues: unknown[] = [];
-
-
-
-  if (storedHistory.parsed) {
-
-    const historyValue =
-
-      isPlainObject(storedHistory.value) && Array.isArray(storedHistory.value.historyRecords)
-
-        ? storedHistory.value.historyRecords
-
-        : storedHistory.value;
-
-
-
-    if (Array.isArray(historyValue)) {
-
-      legacyHistoryValues.push(...historyValue);
-
-    }
-
-  }
-
-
-
-  if (storedDeletedRecords.parsed) {
-
-    const deletedValue =
-
-      isPlainObject(storedDeletedRecords.value) && Array.isArray(storedDeletedRecords.value.deletedRecords)
-
-        ? storedDeletedRecords.value.deletedRecords
-
-        : storedDeletedRecords.value;
-
-
-
-    if (Array.isArray(deletedValue)) {
-
-      legacyHistoryValues.push(...deletedValue.filter(looksLikeHistoryRecord));
-
-    }
-
-  }
-
-
-
-  if (legacyHistoryValues.length === 0) {
-
-    return [];
-
-  }
-
-
-
-  saveBackupBeforeMigration('migrate legacy history storage');
-
-
-
-  return normalizeHistory(legacyHistoryValues, groups);
-
-};
-
-
-
-const loadAccountDataFromStorage = () => {
-
-  const storedGroups = readStorageJson(GROUPS_STORAGE_KEY);
-  const storedAccounts = readStorageJson(ACCOUNTS_STORAGE_KEY);
-
-
-
-  if (storedGroups.parsed) {
-
-    saveBackupBeforeMigration('normalize current account storage');
-
-    return {
-      ...normalizeStoredAccountData(
-      storedGroups.value,
-      storedAccounts.parsed ? storedAccounts.value : undefined
-      ),
-      shouldPersist: true
-    };
-
-  }
-
-
-
-  const legacyGroups = loadLegacyGroupsFromStorage();
-
-
-
-  if (legacyGroups) {
-
-    return { ...legacyGroups, shouldPersist: true };
-
-  }
-
-
-
-  return { groups: initialGroups, accounts: [], shouldPersist: false };
-
-};
-
-
-
-const loadHistoryFromStorage = (groups: AssetGroupWithAccounts[]) => {
-
-  const storedHistory = readStorageJson(HISTORY_STORAGE_KEY);
-
-  const legacyHistory = loadLegacyHistoryFromStorage(groups);
-
-
-
-  if (storedHistory.parsed) {
-
-    saveBackupBeforeMigration('normalize current history storage');
-
-
-
-    const currentHistory = normalizeHistory(storedHistory.value, groups);
-
-
-
-    if (currentHistory.length === 0 && legacyHistory.length > 0) {
-
-      return legacyHistory;
-
-    }
-
-
-
-    return currentHistory;
-
-  }
-
-
-
-  return legacyHistory;
-
-};
-
-
-
-const hasPossiblyStoredHistoryRecords = () =>
-
-  [
-
-    HISTORY_STORAGE_KEY,
-
-    LEGACY_HISTORY_STORAGE_KEY,
-
-    LEGACY_DELETED_RECORDS_STORAGE_KEY
-
-  ].some((key) => storedValueLooksNonEmpty(nfStorage.getItem(key)));
-
-
-
-const loadAppData = (): AppData => {
-
-  const { shouldPersist, ...accountData } = loadAccountDataFromStorage();
-  const groupsWithAccounts = deriveGroupsWithAccounts(accountData.groups, accountData.accounts);
-
-  const history = loadHistoryFromStorage(groupsWithAccounts);
-  const appData = { ...accountData, history };
-
-  if (shouldPersist) {
-    saveAppData(appData);
-  }
-
-  return appData;
-
-};
-
-
-
 const saveAppData = (
 
   { groups, accounts, history }: AppData,
 
-  options: { allowEmptyHistoryOverwrite?: boolean } = {}
+  _options: { allowEmptyHistoryOverwrite?: boolean } = {}
 
 ) => {
-  persistAppDataStorageItems(
-    { groups, accounts, history },
-    {
-      ...options,
-      hasStoredHistoryRecords: hasPossiblyStoredHistoryRecords,
-      onSkipEmptyHistory: () => {
-        console.warn(
-          '[NetraFlow storage] Skipped writing empty historyRecords because stored history exists.'
-        );
-      }
-    }
-  );
+  writeCoreDocument(createCoreDocumentFromAppData({ groups, accounts, history }));
 
 };
 
@@ -2108,9 +1095,49 @@ const getAccountDetailTitle = (groupName: string | undefined, accountName: strin
 
 };
 
+function StartupPersistenceErrorScreen({ error }: { error: unknown }) {
+  const message = error instanceof Error ? error.message : 'Unknown persistence startup error.';
+
+  return (
+    <main
+      style={{
+        minHeight: '100vh',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 24,
+        background: 'var(--app-bg)',
+        color: 'var(--text-primary)'
+      }}
+    >
+      <section
+        role="alert"
+        aria-labelledby="startup-persistence-error-title"
+        style={{
+          width: 'min(560px, 100%)',
+          border: '1px solid var(--border)',
+          borderRadius: 8,
+          padding: 24,
+          background: 'var(--surface)',
+          boxShadow: 'var(--shadow-soft)'
+        }}
+      >
+        <h1 id="startup-persistence-error-title" style={{ marginTop: 0 }}>
+          核心数据读取失败
+        </h1>
+        <p>NetraFlow 未修改现有核心数据文件。请检查或恢复测试目录中的 core.json 后重启。</p>
+        <p style={{ color: 'var(--text-muted)', wordBreak: 'break-word' }}>{message}</p>
+      </section>
+    </main>
+  );
+}
+
 
 
 function App() {
+
+  if (startupPersistenceError) {
+    return <StartupPersistenceErrorScreen error={startupPersistenceError} />;
+  }
 
   const mainContentRef = useRef<HTMLElement | null>(null);
 
@@ -2168,13 +1195,23 @@ function App() {
 
   const catPetCountRef = useRef(0);
 
-  const [appData, setAppData] = useState<AppData>(loadAppData);
+  const settingsDocumentRef = useRef<SettingsDocument>(startupPersistenceSnapshot.settings);
 
-  const [, setFirstWelcomeState] = useState<FirstWelcomeState>(loadFirstWelcomeState);
+  const stateDocumentRef = useRef<StateDocument>(startupPersistenceSnapshot.state);
+
+  const securityDocumentRef = useRef<SecurityDocument>(startupPersistenceSnapshot.security);
+
+  const persistenceGenerationRef = useRef(0);
+
+  const latestRealAppDataRef = useRef<AppData>(cloneAppData(startupAppData));
+
+  const [appData, setAppData] = useState<AppData>(() => cloneAppData(startupAppData));
+
+  const [, setFirstWelcomeState] = useState<FirstWelcomeState>(startupFirstWelcomeState);
 
   const [firstWelcomeStage, setFirstWelcomeStage] = useState<FirstWelcomeStage>(() =>
 
-    shouldShowFirstWelcome(loadFirstWelcomeState()) ? 'welcome' : null
+    shouldShowFirstWelcome(startupFirstWelcomeState) ? 'welcome' : null
 
   );
 
@@ -2202,15 +1239,22 @@ function App() {
 
     useState<BackupReturnTarget>('history');
 
-  const [assetChartSettings, setAssetChartSettings] = useState(loadAssetChartSettings);
+  const [assetChartSettings, setAssetChartSettings] = useState(
+    startupPersistenceSnapshot.settings.assetChart
+  );
 
-  const [globalSettings, setGlobalSettings] = useState(loadGlobalSettings);
+  const [globalSettings, setGlobalSettings] = useState(startupGlobalSettings);
 
   const [selectedExampleTemplateId, setSelectedExampleTemplateId] =
 
     useState<ExampleTemplateId>('light');
 
   const [isExampleMode, setIsExampleMode] = useState(false);
+
+  const renderPersistenceGeneration = persistenceGenerationRef.current;
+
+  const isCurrentPersistenceGeneration = () =>
+    renderPersistenceGeneration === persistenceGenerationRef.current;
 
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(getSystemTheme);
 
@@ -2293,6 +1337,154 @@ function App() {
     useState<GlobalSettingsSection>('appearance');
 
   const { toastMessages, showToast, dismissToast } = useToastController();
+
+  const persistSettingsDocument = (document: SettingsDocument) => {
+    if (!isCurrentPersistenceGeneration()) {
+      return;
+    }
+
+    const normalizedDocument = normalizeSettingsDocument(document);
+
+    if (arePersistenceDocumentsEqual(settingsDocumentRef.current, normalizedDocument)) {
+      return;
+    }
+
+    writeSettingsDocument(normalizedDocument);
+    settingsDocumentRef.current = normalizedDocument;
+  };
+
+  const persistStateDocument = (
+    createNextDocument: (currentDocument: StateDocument) => StateDocument
+  ) => {
+    if (!isCurrentPersistenceGeneration()) {
+      return stateDocumentRef.current;
+    }
+
+    const normalizedDocument = normalizeStateDocument(
+      createNextDocument(stateDocumentRef.current)
+    );
+
+    if (arePersistenceDocumentsEqual(stateDocumentRef.current, normalizedDocument)) {
+      return stateDocumentRef.current;
+    }
+
+    writeStateDocument(normalizedDocument);
+    stateDocumentRef.current = normalizedDocument;
+    return normalizedDocument;
+  };
+
+  const persistSecurityDocument = (document: SecurityDocument) => {
+    if (!isCurrentPersistenceGeneration()) {
+      return;
+    }
+
+    const normalizedDocument = normalizeSecurityDocument(document);
+
+    if (arePersistenceDocumentsEqual(securityDocumentRef.current, normalizedDocument)) {
+      return;
+    }
+
+    writeSecurityDocument(normalizedDocument);
+    securityDocumentRef.current = normalizedDocument;
+  };
+
+  const saveAssetChartSettings = (settings: AssetChartSettings) => {
+    persistSettingsDocument({
+      ...settingsDocumentRef.current,
+      assetChart: normalizeAssetChartSettings(settings)
+    });
+  };
+
+  const persistAutoBackupSettings = (settings: AutoBackupSettings) => {
+    persistSettingsDocument({
+      ...settingsDocumentRef.current,
+      autoBackup: settings
+    });
+  };
+
+  const saveGlobalSettings = (settings: GlobalSettings) => {
+    const normalizedSettings = normalizeGlobalSettings(settings);
+    const nextSettingsDocument = createSettingsDocumentFromRuntime({
+      autoBackupSettings: settingsDocumentRef.current.autoBackup,
+      assetChartSettings: settingsDocumentRef.current.assetChart,
+      globalSettings: normalizedSettings
+    });
+    const nextSecurityDocument = createSecurityDocumentFromRuntime(normalizedSettings);
+    const shouldPersistNyaaThemeUnlocked = normalizedSettings.nyaaThemeUnlocked === true;
+    const currentPersonalization = stateDocumentRef.current.personalization;
+    const { nyaaThemeUnlocked: _currentNyaaThemeUnlocked, ...otherPersonalization } =
+      currentPersonalization;
+
+    persistSettingsDocument(nextSettingsDocument);
+    persistSecurityDocument(nextSecurityDocument);
+    persistStateDocument((currentDocument) => ({
+      ...currentDocument,
+      personalization: shouldPersistNyaaThemeUnlocked
+        ? { ...otherPersonalization, nyaaThemeUnlocked: true }
+        : otherPersonalization
+    }));
+  };
+
+  const persistBackupState = ({
+    records,
+    lastBackupAt,
+    lastBackupHistoryCount
+  }: {
+    records: BackupRecord[];
+    lastBackupAt: string;
+    lastBackupHistoryCount: number;
+  }) => {
+    persistStateDocument((currentDocument) => ({
+      ...currentDocument,
+      backup: {
+        ...(lastBackupAt ? { lastBackupAt } : {}),
+        lastBackupHistoryCount: Math.max(0, Math.floor(lastBackupHistoryCount)),
+        records,
+        importRecords: currentDocument.backup.importRecords,
+        ...(currentDocument.backup.forceAutoBackupDueOnce
+          ? { forceAutoBackupDueOnce: true as const }
+          : {})
+      }
+    }));
+  };
+
+  const persistSnapshotImportRecords = (records: SnapshotImportRecord[]) => {
+    persistStateDocument((currentDocument) => ({
+      ...currentDocument,
+      backup: {
+        ...currentDocument.backup,
+        importRecords: records
+      }
+    }));
+  };
+
+  const markAutoBackupDueOnce = () => {
+    persistStateDocument((currentDocument) => ({
+      ...currentDocument,
+      backup: {
+        ...currentDocument.backup,
+        forceAutoBackupDueOnce: true
+      }
+    }));
+  };
+
+  const consumeAutoBackupDueOnce = () => {
+    if (stateDocumentRef.current.backup.forceAutoBackupDueOnce !== true) {
+      return false;
+    }
+
+    persistStateDocument((currentDocument) => {
+      const { forceAutoBackupDueOnce: _forceAutoBackupDueOnce, ...backup } =
+        currentDocument.backup;
+
+      return {
+        ...currentDocument,
+        backup
+      };
+    });
+
+    return true;
+  };
 
   const resolvedTheme = useMemo(
 
@@ -2779,7 +1971,10 @@ function App() {
 
 
 
-    saveFirstWelcomeState(nextState);
+    persistStateDocument((currentDocument) => ({
+      ...currentDocument,
+      firstWelcome: normalizeFirstWelcomeState(nextState)
+    }));
 
     setFirstWelcomeState(nextState);
 
@@ -2801,7 +1996,10 @@ function App() {
 
 
 
-    saveFirstWelcomeState(nextState);
+    persistStateDocument((currentDocument) => ({
+      ...currentDocument,
+      firstWelcome: normalizeFirstWelcomeState(nextState)
+    }));
 
     setFirstWelcomeState(nextState);
 
@@ -2833,7 +2031,10 @@ function App() {
 
 
 
-      saveFirstWelcomeState(nextState);
+      persistStateDocument((currentDocument) => ({
+        ...currentDocument,
+        firstWelcome: normalizeFirstWelcomeState(nextState)
+      }));
 
       return nextState;
 
@@ -2846,11 +2047,21 @@ function App() {
 
 
   const updateAppData = (nextData: AppData) => {
+    if (!isCurrentPersistenceGeneration()) {
+      return;
+    }
+
     const normalizedData: AppData = {
       groups: stripRuntimeAccountsFromGroups(nextData.groups),
       accounts: nextData.accounts,
       history: nextData.history
     };
+
+    saveAppData(normalizedData);
+
+    if (!isExampleMode) {
+      latestRealAppDataRef.current = cloneAppData(normalizedData);
+    }
 
     globalSearch.clearNavigation();
 
@@ -2860,12 +2071,48 @@ function App() {
 
     if (!isExampleMode) {
 
-      saveAppData(normalizedData);
-
       cancelPendingFirstWelcomeForRealChange();
 
     }
 
+  };
+
+  const commitAppDataUpdate: CommitAppDataUpdate = (apply) => {
+    if (!isCurrentPersistenceGeneration()) {
+      return { ok: false };
+    }
+
+    const latestData = createAppDataFromCoreDocument(readCoreDocument());
+    const outcome = apply(latestData);
+
+    if (!outcome.ok) {
+      return outcome;
+    }
+
+    const normalizedData: AppData = {
+      groups: stripRuntimeAccountsFromGroups(outcome.nextData.groups),
+      accounts: outcome.nextData.accounts,
+      history: outcome.nextData.history
+    };
+
+    saveAppData(normalizedData);
+
+    if (!isExampleMode) {
+      latestRealAppDataRef.current = cloneAppData(normalizedData);
+    }
+
+    globalSearch.clearNavigation();
+    setAppData(normalizedData);
+
+    if (!isExampleMode) {
+      cancelPendingFirstWelcomeForRealChange();
+    }
+
+    return {
+      ok: true,
+      nextData: normalizedData,
+      value: outcome.value
+    };
   };
 
 
@@ -2878,6 +2125,10 @@ function App() {
 
     setAssetChartSettings((currentSettings) => {
 
+      if (!isCurrentPersistenceGeneration()) {
+        return currentSettings;
+      }
+
       const nextSettings = normalizeAssetChartSettings(createNextSettings(currentSettings));
 
 
@@ -2887,9 +2138,6 @@ function App() {
       return nextSettings;
 
     });
-
-    cancelPendingFirstWelcomeForRealChange();
-
   };
 
 
@@ -2902,6 +2150,10 @@ function App() {
 
     setGlobalSettings((currentSettings) => {
 
+      if (!isCurrentPersistenceGeneration()) {
+        return currentSettings;
+      }
+
       const nextSettings = normalizeGlobalSettings(createNextSettings(currentSettings));
 
 
@@ -2911,9 +2163,6 @@ function App() {
       return nextSettings;
 
     });
-
-    cancelPendingFirstWelcomeForRealChange();
-
   };
 
   const syncCreatedAccountTypeSideEffects = (group: AssetGroup) => {
@@ -2981,7 +2230,7 @@ function App() {
     groups,
     archivedAccounts,
     createGroupId: () => createStableGroupId(assetGroups.map((group) => group.id)),
-    updateAppData,
+    commitAppDataUpdate,
     onCreateAccountType: syncCreatedAccountTypeSideEffects,
     onUpdateAccountType: syncUpdatedAccountTypeSideEffects
   });
@@ -3017,8 +2266,14 @@ function App() {
     history,
     isExampleMode,
     globalSettings,
+    initialAutoBackupSettings: startupPersistenceSnapshot.settings.autoBackup,
+    initialBackupState: startupBackupState,
     updateAppData,
-    cancelPendingFirstWelcomeForRealChange,
+    persistAutoBackupSettings,
+    persistBackupState,
+    persistSnapshotImportRecords,
+    consumeAutoBackupDueOnce,
+    isPersistenceCurrent: isCurrentPersistenceGeneration,
     clearSearchNavigation: () => globalSearch.clearNavigation(),
     getBackupFieldValue,
     getBackupAccountData,
@@ -3093,6 +2348,7 @@ function App() {
     globalSettings,
     autoBackupEnabled: autoBackupSettings.enabled,
     updateGlobalSettings,
+    isPersistenceCurrent: isCurrentPersistenceGeneration,
     showConfirmationDialog,
     showToast
   });
@@ -3101,10 +2357,16 @@ function App() {
     globalSettings,
     effectiveThemeStyle,
     assetChartSettings,
+    isExampleMode,
     normalizeAssetChartSettings,
     updateGlobalSettings,
-    setAssetChartSettings,
+    setAssetChartSettings: (settings) => {
+      if (isCurrentPersistenceGeneration()) {
+        setAssetChartSettings(settings);
+      }
+    },
     saveAssetChartSettings,
+    isPersistenceCurrent: isCurrentPersistenceGeneration,
     getImportContentAfterIntegrityCheck,
     showNoticeDialog
   });
@@ -3594,6 +2856,167 @@ function App() {
 
   };
 
+  const createDemoRuntimePersistenceSnapshot = (
+    templateId: ExampleTemplateId
+  ): RuntimePersistenceSnapshot => {
+    const generatedData = createExampleData(templateId);
+    const settings = createDefaultSettingsDocument();
+    const security = createDefaultSecurityDocument();
+    const state = normalizeStateDocument({
+      ...createDefaultStateDocument(),
+      backup: {
+        ...(generatedData.lastBackupAt ? { lastBackupAt: generatedData.lastBackupAt } : {}),
+        lastBackupHistoryCount: generatedData.lastBackupHistoryCount,
+        records: generatedData.backupRecords,
+        importRecords: []
+      },
+      firstWelcome: {
+        completed: true,
+        pendingAfterClearAll: false
+      }
+    });
+
+    return {
+      core: createCoreDocumentFromAppData(generatedData.appData),
+      settings,
+      state,
+      security
+    };
+  };
+
+  const applyRuntimePersistenceSnapshot = (
+    snapshot: RuntimePersistenceSnapshot,
+    nextIsExampleMode: boolean
+  ) => {
+    const nextAppData = createAppDataFromCoreDocument(snapshot.core);
+    const nextFirstWelcomeState = normalizeFirstWelcomeState(snapshot.state.firstWelcome);
+    const nextGlobalSettings = createRuntimeGlobalSettings(
+      snapshot.settings,
+      snapshot.state,
+      snapshot.security
+    );
+    const nextBackupState = getRuntimeBackupState(snapshot.state, nextAppData.history.length);
+
+    settingsDocumentRef.current = snapshot.settings;
+    stateDocumentRef.current = snapshot.state;
+    securityDocumentRef.current = snapshot.security;
+
+    setAppData(nextAppData);
+    setAssetChartSettings(snapshot.settings.assetChart);
+    setGlobalSettings(nextGlobalSettings);
+    resetAutoBackupSettings(snapshot.settings.autoBackup);
+    applyBackupState(
+      nextBackupState.backupRecords,
+      nextBackupState.lastBackupAt,
+      nextBackupState.lastBackupHistoryCount,
+      false
+    );
+    setFirstWelcomeState(nextFirstWelcomeState);
+    setFirstWelcomeStage(shouldShowFirstWelcome(nextFirstWelcomeState) ? 'welcome' : null);
+    setIsExampleMode(nextIsExampleMode);
+
+    if (!nextIsExampleMode) {
+      latestRealAppDataRef.current = cloneAppData(nextAppData);
+    }
+  };
+
+  const showDemoLifecycleFailure = (error: unknown) => {
+    const message =
+      error instanceof Error && error.message.includes('程序所在目录不可写')
+        ? error.message
+        : '示例模式初始化失败，请稍后重试。';
+
+    void showNoticeDialog({
+      title: '示例模式不可用',
+      message
+    });
+  };
+
+  const maybeShowDemoCleanupFailure = (cleanup: unknown) => {
+    if (isPlainObject(cleanup) && cleanup.ok === false) {
+      void showNoticeDialog({
+        title: '示例模式清理失败',
+        message: '已恢复真实模式，但临时示例目录未能删除。下次启动会再次尝试清理。'
+      });
+    }
+  };
+
+  const startExampleModeSession = (templateId: ExampleTemplateId) => {
+    try {
+      const transition = enterDemoPersistenceEnvironment(
+        createDemoRuntimePersistenceSnapshot(templateId)
+      );
+
+      persistenceGenerationRef.current += 1;
+      setSelectedExampleTemplateId(templateId);
+      applyRuntimePersistenceSnapshot(transition.snapshot, true);
+      return true;
+    } catch (error) {
+      console.error('[NetraFlow demo] Failed to enter demo mode.', error);
+      showDemoLifecycleFailure(error);
+      return false;
+    }
+  };
+
+  const switchExampleModeSession = (templateId: ExampleTemplateId) => {
+    if (isExampleMode && !exitExampleModeSession()) {
+      return false;
+    }
+
+    return startExampleModeSession(templateId);
+  };
+
+  const exitExampleModeSession = () => {
+    try {
+      const transition = exitDemoPersistenceEnvironment();
+
+      persistenceGenerationRef.current += 1;
+      applyRuntimePersistenceSnapshot(transition.snapshot, false);
+      maybeShowDemoCleanupFailure(transition.cleanup);
+      return true;
+    } catch (error) {
+      console.error('[NetraFlow demo] Failed to exit demo mode.', error);
+      void showNoticeDialog({
+        title: '退出示例模式失败',
+        message: '真实数据重新读取失败，请重启应用后再试。'
+      });
+      return false;
+    }
+  };
+
+  const promoteCurrentDemoCoreToRealData = () => {
+    try {
+      const transition = promoteDemoCoreToRealPersistenceEnvironment();
+
+      persistenceGenerationRef.current += 1;
+      applyRuntimePersistenceSnapshot(transition.snapshot, false);
+      maybeShowDemoCleanupFailure(transition.cleanup);
+      return true;
+    } catch (error) {
+      console.error('[NetraFlow demo] Failed to promote demo core to real data.', error);
+      void showNoticeDialog({
+        title: '写入测试数据失败',
+        message: '当前示例数据未能写入真实数据，示例模式已保留。'
+      });
+      return false;
+    }
+  };
+
+  const writeTestDataToRealData = () => {
+    if (isExampleMode) {
+      return promoteCurrentDemoCoreToRealData();
+    }
+
+    const nextAppData = createTestDataInRealAppData(createExampleData);
+
+    saveAppData(nextAppData, { allowEmptyHistoryOverwrite: true });
+    latestRealAppDataRef.current = cloneAppData(nextAppData);
+    setAppData(nextAppData);
+    setIsExampleMode(false);
+
+    return true;
+  };
+
 
 
   const {
@@ -3610,10 +3033,6 @@ function App() {
     confirmResetAction,
     getResetActionLabel
   } = useAppDataLifecycleController({
-    appData,
-    backupRecords,
-    lastBackupAt,
-    lastBackupHistoryCount,
     selectedExampleTemplateId,
     setSelectedExampleTemplateId,
     isExampleMode,
@@ -3631,23 +3050,18 @@ function App() {
     resetDataViews,
     applyBackupState,
     resetSnapshotImportRecords,
-    createExampleData,
-    loadRealDataSnapshot: () => {
-      const restoredData = loadAppData();
+    persistEmptyAssetData: () => {
+      const emptyData: AppData = { groups: [], accounts: [], history: [] };
 
-      return {
-        appData: restoredData,
-        backupRecords: loadBackupRecords(),
-        lastBackupAt: loadLastBackupAt(),
-        lastBackupHistoryCount: loadLastBackupHistoryCount(restoredData.history.length)
-      };
+      saveAppData(emptyData, { allowEmptyHistoryOverwrite: true });
+      latestRealAppDataRef.current = cloneAppData(emptyData);
     },
-    persistAppData: saveAppData,
-    persistEmptyAssetData: clearPersistedAssetData,
+    startExampleModeSession,
+    switchExampleModeSession,
+    exitExampleModeSession,
+    writeTestDataToRealData,
     showConfirmationDialog,
-    completeFirstWelcome,
-    markPendingFirstWelcomeAfterClearAll,
-    cancelPendingFirstWelcomeForRealChange
+    markPendingFirstWelcomeAfterClearAll
   });
 
 
@@ -4080,13 +3494,17 @@ function App() {
   };
 
   const rollupImport = useRollupImportController({
-    assetGroups,
-    accounts,
     groups,
     accountGroups: groupTotals,
-    history,
     isExampleMode,
-    updateAppData,
+    initialImportedHashes: stateDocumentRef.current.rollupImportHashes,
+    commitAppDataUpdate,
+    persistImportedHashes: (hashes) => {
+      persistStateDocument((currentDocument) => ({
+        ...currentDocument,
+        rollupImportHashes: hashes
+      }));
+    },
     createHistoryRecord: ({
       account,
       afterAmount,
@@ -4121,7 +3539,7 @@ function App() {
     assetGroups,
     formatMoney,
     createHistoryRecordId: () => createId('history'),
-    updateAppData,
+    commitAppDataUpdate,
     showConfirmationDialog,
     showNoticeDialog,
     normalizeAlias: getEffectiveAccountAbbreviation,
@@ -4235,7 +3653,7 @@ function App() {
       setSelectedAccount(targetAccount);
       setExpandedDetailDates([]);
     },
-    updateAppData
+    commitAppDataUpdate
   });
 
   const openFlashNote = () => {
@@ -4417,7 +3835,7 @@ function App() {
 
 
 
-    if (record.type === '新增' || record.type === '重新启用') {
+    if (record.type === '创建' || record.type === '重新启用') {
 
       return {
 
@@ -4912,13 +4330,33 @@ function App() {
 
 
 
-    const result = updateAccountTypeInAppData({
-      appData: { groups: assetGroups, accounts, history },
-      archivedAccounts,
-      groupId: selectedGroupDetail.id,
-      name: groupDetailNameDraft,
-      nature: groupDetailNatureDraft,
-      includeInStats: groupDetailStatsDraft
+    const groupId = selectedGroupDetail.id;
+    const result = commitAppDataUpdate((latestData) => {
+      const latestGroups = deriveGroupsWithAccounts(latestData.groups, latestData.accounts);
+      const latestArchivedAccounts = getArchivedAccountEntries(
+        latestGroups,
+        latestData.accounts,
+        latestData.history
+      );
+      const updateResult = updateAccountTypeInAppData({
+        appData: latestData,
+        archivedAccounts: latestArchivedAccounts,
+        groupId,
+        name: groupDetailNameDraft,
+        nature: groupDetailNatureDraft,
+        includeInStats: groupDetailStatsDraft
+      });
+
+      return updateResult.ok
+        ? {
+            ok: true,
+            nextData: updateResult.nextData,
+            value: {
+              previousName: updateResult.previousGroup.name,
+              nextName: updateResult.group.name
+            }
+          }
+        : updateResult;
     });
 
     if (!result.ok) {
@@ -4926,15 +4364,14 @@ function App() {
         setGroupDetailNameDraft('');
       }
 
-      setGroupDetailError(result.error);
+      setGroupDetailError(result.error ?? '账户类型保存失败');
       return;
     }
 
-    updateAppData(result.nextData);
     syncUpdatedAccountTypeSideEffects({
-      groupId: selectedGroupDetail.id,
-      previousName: result.previousGroup.name,
-      nextName: result.group.name
+      groupId,
+      previousName: result.value.previousName,
+      nextName: result.value.nextName
     });
 
     setGroupDetailError('');
@@ -4966,44 +4403,32 @@ function App() {
 
 
 
-    const nextGroups = [...assetGroups];
+    commitAppDataUpdate((latestData) => {
+      const nextGroups = [...latestData.groups];
+      const fromIndex = nextGroups.findIndex((group) => group.id === draggedGroupId);
+      const toIndex = nextGroups.findIndex((group) => group.id === targetGroupId);
 
-    const fromIndex = nextGroups.findIndex((group) => group.id === draggedGroupId);
+      if (fromIndex < 0 || toIndex < 0) {
+        return { ok: false };
+      }
 
-    const toIndex = nextGroups.findIndex((group) => group.id === targetGroupId);
+      const [draggedGroup] = nextGroups.splice(fromIndex, 1);
 
+      if (!draggedGroup) {
+        return { ok: false };
+      }
 
+      nextGroups.splice(toIndex, 0, draggedGroup);
 
-    if (fromIndex < 0 || toIndex < 0) {
-
-      return;
-
-    }
-
-
-
-    const [draggedGroup] = nextGroups.splice(fromIndex, 1);
-
-
-
-    if (!draggedGroup) {
-
-      return;
-
-    }
-
-
-
-    nextGroups.splice(toIndex, 0, draggedGroup);
-
-    updateAppData({
-
-      groups: nextGroups.map((group, index) => ({ ...group, sortOrder: index })),
-
-      accounts,
-
-      history
-
+      return {
+        ok: true,
+        nextData: {
+          groups: nextGroups.map((group, index) => ({ ...group, sortOrder: index })),
+          accounts: latestData.accounts,
+          history: latestData.history
+        },
+        value: null
+      };
     });
 
   };
@@ -6076,16 +5501,37 @@ function App() {
 
 
 
-    const result = createNewAccountInAppData({
-      appData: { groups: assetGroups, accounts, history },
-      groups,
-      archivedAccounts,
-      groupId: newAccountGroupId,
-      accountTypeInput: newAccountTypeInput,
-      accountNameInput: newAccountName,
-      amountInput: newAccountAmount,
-      createdAt: new Date().toISOString(),
-      historyRecordId: createId('history')
+    const createdAt = new Date().toISOString();
+    const historyRecordId = createId('history');
+    const result = commitAppDataUpdate((latestData) => {
+      const latestGroups = deriveGroupsWithAccounts(latestData.groups, latestData.accounts);
+      const latestArchivedAccounts = getArchivedAccountEntries(
+        latestGroups,
+        latestData.accounts,
+        latestData.history
+      );
+      const createResult = createNewAccountInAppData({
+        appData: latestData,
+        groups: latestGroups,
+        archivedAccounts: latestArchivedAccounts,
+        groupId: newAccountGroupId,
+        accountTypeInput: newAccountTypeInput,
+        accountNameInput: newAccountName,
+        amountInput: newAccountAmount,
+        createdAt,
+        historyRecordId
+      });
+
+      return createResult.ok
+        ? {
+            ok: true,
+            nextData: createResult.nextData,
+            value: {
+              account: createResult.account,
+              group: createResult.group
+            }
+          }
+        : createResult;
     });
 
     if (!result.ok) {
@@ -6094,11 +5540,9 @@ function App() {
         setNewAccountNamePlaceholder(DUPLICATE_NAME_PLACEHOLDER);
       }
 
-      setNewAccountError('error' in result ? result.error : '');
+        setNewAccountError(result.error ?? '账户创建失败');
       return;
     }
-
-    updateAppData(result.nextData);
 
     updateAssetChartSettings((currentSettings) => ({
 
@@ -6108,7 +5552,7 @@ function App() {
 
         ...currentSettings.accountDetailById,
 
-        [result.account.id]: normalizeAccountDetailChartSettings(
+        [result.value.account.id]: normalizeAccountDetailChartSettings(
 
           getGlobalAccountDetailChartSettings(currentSettings.trend),
 
@@ -6123,9 +5567,9 @@ function App() {
 
 
     rollupImport.completePendingNewAccount({
-      groupId: result.group.id,
-      groupName: result.group.name,
-      accountId: result.account.id
+      groupId: result.value.group.id,
+      groupName: result.value.group.name,
+      accountId: result.value.account.id
     });
 
 
@@ -6196,14 +5640,34 @@ function App() {
       return;
     }
 
-    const nextData = deleteAssetGroupFromAppData({ groups: assetGroups, accounts, history }, groupId);
+    const result = commitAppDataUpdate((latestData) => {
+      const latestGroup = latestData.groups.find((currentGroup) => currentGroup.id === groupId);
 
-    if (nextData.groups.length === assetGroups.length) {
+      if (!latestGroup || !canDeleteAssetGroup(groupId, latestData.accounts)) {
+        return { ok: false };
+      }
+
+      const nextData = deleteAssetGroupFromAppData(latestData, groupId);
+
+      if (nextData.groups.length === latestData.groups.length) {
+        return { ok: false };
+      }
+
+      return {
+        ok: true,
+        nextData,
+        value: {
+          id: latestGroup.id,
+          name: latestGroup.name
+        }
+      };
+    });
+
+    if (!result.ok || !result.value) {
       return;
     }
 
-    updateAppData(nextData);
-    clearDeletedAssetGroupUiState(group.id, group.name);
+    clearDeletedAssetGroupUiState(result.value.id, result.value.name);
   };
 
   const getHistoryTypeLabel = (type: HistoryType) => (type === '归档' ? '已归档' : type);
@@ -7392,6 +6856,17 @@ function App() {
     onOpenSnapshotPasswordEditor: requestOpenSnapshotPasswordEditor,
     onImportUserSettings: importUserSettings,
     onExportUserSettings: exportUserSettings,
+    onOpenUserSettingsFile: () => {
+      if (isExampleMode) {
+        void showNoticeDialog({
+          title: '示例模式下不可导入用户配置',
+          message: '示例模式不会读写真实外部配置文件'
+        });
+        return;
+      }
+
+      userSettingsFileInputRef.current?.click();
+    },
     onOpenBackupPanel: openBackupPanelFromGlobalSettings,
     onSelectExampleTemplate: setSelectedExampleTemplateId,
     onEnterOrSwitchExampleMode: isExampleMode ? switchExampleTemplate : enterExampleMode,
@@ -7550,7 +7025,17 @@ function App() {
       hasAutoBackupDraftChanges,
       canSaveAutoBackupSettings,
       onExportBackup: exportBackup,
-      onImportBackup: () => backupFileInputRef.current?.click(),
+      onImportBackup: () => {
+        if (isExampleMode) {
+          void showNoticeDialog({
+            title: '示例模式下不可导入快照',
+            message: '示例模式不会读写真实外部快照文件'
+          });
+          return;
+        }
+
+        backupFileInputRef.current?.click();
+      },
       onAutoBackupEnabledChange: updateAutoBackupEnabled,
       onAutoBackupCycleValueChange: updateAutoBackupCycleValue,
       onAutoBackupCycleValueInputReset: setAutoBackupCycleValueInput,

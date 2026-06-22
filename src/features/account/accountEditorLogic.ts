@@ -147,7 +147,7 @@ export const createNewAccountInAppData = ({
   const nextHistory = [
     createAccountHistoryRecord({
       id: historyRecordId,
-      type: '\u65b0\u589e',
+      type: '\u521b\u5efa',
       account: nextAccount,
       groupName: selectedGroup.name,
       beforeAmount: null,

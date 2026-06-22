@@ -11,7 +11,7 @@ import {
 } from './assetStructureData';
 
 const HISTORY_TYPE = {
-  create: '\u65b0\u589e' as HistoryRecord['type']
+  create: '\u521b\u5efa' as HistoryRecord['type']
 };
 
 const account = (id: string, amount: number, archived = false, groupId = 'group-test'): Account => ({

@@ -1,19 +1,4 @@
-import { cloneAppData, stripRuntimeAccountsFromGroups } from './accountData';
-import { nfStorage, type NfStorageBatchUpdate } from './nfStorage';
-import {
-  ACCOUNTS_STORAGE_KEY,
-  BACKUP_RECORDS_STORAGE_KEY,
-  GROUPS_STORAGE_KEY,
-  HISTORY_STORAGE_KEY,
-  LAST_BACKUP_HISTORY_COUNT_STORAGE_KEY,
-  LAST_BACKUP_STORAGE_KEY,
-  LEGACY_ACCOUNTS_STORAGE_KEY,
-  LEGACY_ACCOUNT_TYPES_STORAGE_KEY,
-  LEGACY_ARCHIVED_ACCOUNTS_STORAGE_KEY,
-  LEGACY_DELETED_RECORDS_STORAGE_KEY,
-  LEGACY_HISTORY_STORAGE_KEY,
-  SNAPSHOT_IMPORT_RECORDS_STORAGE_KEY
-} from './storageKeys';
+import { cloneAppData } from './accountData';
 import type { AppData, BackupRecord } from './types';
 import type {
   AppDataLifecycleSnapshot,
@@ -30,76 +15,6 @@ export const createEmptyAppData = (): AppData => ({
   accounts: [],
   history: []
 });
-
-export type AppDataStorageItemsResult =
-  | { shouldWrite: true; items: NfStorageBatchUpdate }
-  | { shouldWrite: false; reason: 'empty-history-guard' };
-
-export const createAppDataStorageItems = (
-  { groups, accounts, history }: AppData,
-  options: {
-    allowEmptyHistoryOverwrite?: boolean;
-    hasStoredHistoryRecords?: () => boolean;
-  } = {}
-): AppDataStorageItemsResult => {
-  if (
-    history.length === 0 &&
-    !options.allowEmptyHistoryOverwrite &&
-    options.hasStoredHistoryRecords?.()
-  ) {
-    return { shouldWrite: false, reason: 'empty-history-guard' };
-  }
-
-  const groupsJson = JSON.stringify(stripRuntimeAccountsFromGroups(groups));
-  const accountsJson = JSON.stringify(accounts);
-  const historyJson = JSON.stringify(history);
-
-  return {
-    shouldWrite: true,
-    items: {
-      [GROUPS_STORAGE_KEY]: groupsJson,
-      [ACCOUNTS_STORAGE_KEY]: accountsJson,
-      [HISTORY_STORAGE_KEY]: historyJson
-    }
-  };
-};
-
-export const persistAppDataStorageItems = (
-  appData: AppData,
-  options: {
-    allowEmptyHistoryOverwrite?: boolean;
-    hasStoredHistoryRecords?: () => boolean;
-    onSkipEmptyHistory?: () => void;
-    storage?: Pick<typeof nfStorage, 'setItems'>;
-  } = {}
-) => {
-  const result = createAppDataStorageItems(appData, options);
-
-  if (!result.shouldWrite) {
-    options.onSkipEmptyHistory?.();
-    return false;
-  }
-
-  (options.storage ?? nfStorage).setItems(result.items);
-  return true;
-};
-
-export const clearPersistedAssetData = () => {
-  nfStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify([]));
-  nfStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify([]));
-  nfStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify([]));
-  nfStorage.setItem(BACKUP_RECORDS_STORAGE_KEY, JSON.stringify([]));
-  nfStorage.setItem(SNAPSHOT_IMPORT_RECORDS_STORAGE_KEY, JSON.stringify([]));
-  nfStorage.removeItem(LAST_BACKUP_STORAGE_KEY);
-  nfStorage.setItem(LAST_BACKUP_HISTORY_COUNT_STORAGE_KEY, JSON.stringify(0));
-  [
-    LEGACY_ACCOUNTS_STORAGE_KEY,
-    LEGACY_ACCOUNT_TYPES_STORAGE_KEY,
-    LEGACY_HISTORY_STORAGE_KEY,
-    LEGACY_DELETED_RECORDS_STORAGE_KEY,
-    LEGACY_ARCHIVED_ACCOUNTS_STORAGE_KEY
-  ].forEach((key) => nfStorage.removeItem(key));
-};
 
 export const cloneBackupRecords = (records: BackupRecord[]): BackupRecord[] =>
   records.map((record) => ({ ...record }));

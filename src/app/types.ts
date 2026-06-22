@@ -23,7 +23,7 @@ export type AssetGroupWithAccounts = AssetGroup & {
   accounts: Account[];
 };
 
-export type HistoryType = '新增' | '删除' | '修改' | '归档' | '重新启用';
+export type HistoryType = '创建' | '删除' | '修改' | '归档' | '重新启用';
 
 export type EditMode = 'set' | 'adjust';
 
@@ -48,6 +48,21 @@ export type AppData = {
   accounts: Account[];
   history: HistoryRecord[];
 };
+
+export type AppDataCommitOutcome<T> =
+  | {
+      ok: true;
+      nextData: AppData;
+      value: T;
+    }
+  | {
+      ok: false;
+      error?: string;
+    };
+
+export type CommitAppDataUpdate = <T>(
+  apply: (latestData: AppData) => AppDataCommitOutcome<T>
+) => AppDataCommitOutcome<T>;
 
 export type AccountPointer = {
   groupId: string;

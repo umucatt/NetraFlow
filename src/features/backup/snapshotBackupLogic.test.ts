@@ -5,57 +5,20 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import type { Account, AppData, AssetGroup, HistoryRecord } from '../../app/types';
-import {
-  FORCE_AUTO_BACKUP_DUE_ONCE_STORAGE_KEY,
-  LAST_BACKUP_STORAGE_KEY
-} from '../../app/storageKeys';
-import { nfStorage } from '../../app/nfStorage';
 import { parseNetraFlowJsonFile } from '../../app/jsonIntegrity';
 import {
-  consumeAutoBackupDueOnce,
   countChangedHistoryRecords,
+  createBackupPayload,
   createSnapshotRestoreData,
   getAutoSnapshotProgressState,
   createBackupFileContent,
   getBackupFileName,
   isAutoBackupCycleDue,
-  markAutoBackupDueOnce,
   mergeSnapshotImportRecords,
   normalizeSnapshotImportRecords,
   shouldRunStartupAutoBackupCycle,
   SNAPSHOT_INCOMPLETE_ERROR_MESSAGE
 } from './snapshotBackupLogic';
-
-const withStorageWindow = (callback: () => void) => {
-  const items = new Map<string, string>();
-  const previousWindow = (globalThis as unknown as { window?: unknown }).window;
-
-  (globalThis as unknown as { window?: unknown }).window = {
-    localStorage: {
-      get length() {
-        return items.size;
-      },
-      key(index: number) {
-        return Array.from(items.keys())[index] ?? null;
-      },
-      getItem(key: string) {
-        return items.get(key) ?? null;
-      },
-      setItem(key: string, value: string) {
-        items.set(key, value);
-      },
-      removeItem(key: string) {
-        items.delete(key);
-      }
-    }
-  };
-
-  try {
-    callback();
-  } finally {
-    (globalThis as unknown as { window?: unknown }).window = previousWindow;
-  }
-};
 
 const createHistoryRecord = (overrides: Partial<HistoryRecord> = {}): HistoryRecord => ({
   id: 'history-1',
@@ -117,6 +80,30 @@ test('plain snapshot file content is minified integrity payload JSON', async () 
   assert.equal('encrypted' in parsed, false);
   assert.equal(result.status, 'valid');
   assert.deepEqual(result.content, payload);
+});
+
+test('backup payload contains core data and file metadata only', () => {
+  const payload = createBackupPayload({
+    productName: 'NetraFlow',
+    backupAt: '2026-06-09T12:00:00.000Z',
+    groups: [createGroup('group-1', 'Cash')],
+    accounts: [createAccount('account-1', 'group-1', 'Wallet')],
+    history: [createHistoryRecord()]
+  }) as Record<string, unknown>;
+
+  assert.deepEqual(Object.keys(payload).sort(), [
+    'accounts',
+    'app',
+    'exportedAt',
+    'groups',
+    'history',
+    'schemaVersion'
+  ]);
+  assert.equal('autoBackupSettings' in payload, false);
+  assert.equal('backupRecords' in payload, false);
+  assert.equal('lastBackupAt' in payload, false);
+  assert.equal('lastBackupHistoryCount' in payload, false);
+  assert.equal('passwordHash' in payload, false);
 });
 
 test('encrypted snapshot file names keep the encrypted suffix before json', () => {
@@ -230,50 +217,20 @@ test('auto backup cycle due check is not blocked by minute-level time difference
   );
 });
 
-test('doautobackup marker writes, consumes once, clears, and preserves lastBackupAt', () => {
-  withStorageWindow(() => {
-    const lastBackupAt = '2026-06-09T09:00:00.000Z';
-
-    assert.equal(nfStorage.getItem(FORCE_AUTO_BACKUP_DUE_ONCE_STORAGE_KEY), null);
-    markAutoBackupDueOnce();
-    nfStorage.setItem(LAST_BACKUP_STORAGE_KEY, lastBackupAt);
-
-    assert.equal(nfStorage.getItem(FORCE_AUTO_BACKUP_DUE_ONCE_STORAGE_KEY), 'true');
-    assert.equal(consumeAutoBackupDueOnce(), true);
-    assert.equal(nfStorage.getItem(FORCE_AUTO_BACKUP_DUE_ONCE_STORAGE_KEY), null);
-    assert.equal(nfStorage.getItem(LAST_BACKUP_STORAGE_KEY), lastBackupAt);
-    assert.equal(consumeAutoBackupDueOnce(), false);
-  });
-});
-
 test('doautobackup marker can make startup cycle due without changing calendar due logic', () => {
-  withStorageWindow(() => {
-    const todayNoon = new Date(2026, 5, 9, 12);
-    const todayEarly = new Date(2026, 5, 9, 0, 1).toISOString();
-    const cycle = { value: 1, unit: 'day' } as const;
+  const todayNoon = new Date(2026, 5, 9, 12);
+  const todayEarly = new Date(2026, 5, 9, 0, 1).toISOString();
+  const cycle = { value: 1, unit: 'day' } as const;
 
-    assert.equal(isAutoBackupCycleDue(todayEarly, cycle, todayNoon), false);
-    markAutoBackupDueOnce();
-
-    assert.equal(
-      shouldRunStartupAutoBackupCycle(
-        todayEarly,
-        cycle,
-        consumeAutoBackupDueOnce(),
-        todayNoon
-      ),
-      true
-    );
-    assert.equal(
-      shouldRunStartupAutoBackupCycle(
-        todayEarly,
-        cycle,
-        consumeAutoBackupDueOnce(),
-        todayNoon
-      ),
-      false
-    );
-  });
+  assert.equal(isAutoBackupCycleDue(todayEarly, cycle, todayNoon), false);
+  assert.equal(
+    shouldRunStartupAutoBackupCycle(todayEarly, cycle, true, todayNoon),
+    true
+  );
+  assert.equal(
+    shouldRunStartupAutoBackupCycle(todayEarly, cycle, false, todayNoon),
+    false
+  );
 });
 
 test('startup auto backup consumes marker without bypassing enabled or directory checks', () => {
@@ -293,6 +250,30 @@ test('startup auto backup consumes marker without bypassing enabled or directory
   assert.equal(enabledCheckIndex > consumeIndex, true);
   assert.equal(directoryCheckIndex > enabledCheckIndex, true);
   assert.equal(dueCheckIndex > directoryCheckIndex, true);
+});
+
+test('snapshot controller blocks external file operations in sample mode', () => {
+  const source = readFileSync('src/features/backup/useSnapshotBackupController.tsx', 'utf8');
+  const exportSource = source.slice(
+    source.indexOf('const exportBackup = async () => {'),
+    source.indexOf('const runStartupAutoBackup = async () => {')
+  );
+  const autoStart = source.indexOf('const runStartupAutoBackup = async () => {');
+  const autoSource = source.slice(
+    autoStart,
+    source.indexOf('useEffect(() => {', autoStart)
+  );
+  const importSource = source.slice(
+    source.indexOf('const importBackup = (event: ChangeEvent<HTMLInputElement>) => {'),
+    source.indexOf('return {', source.indexOf('const importBackup ='))
+  );
+
+  assert.equal(exportSource.includes('if (isExampleMode)'), true);
+  assert.equal(exportSource.includes('api.selectDirectory()'), true);
+  assert.equal(exportSource.indexOf('if (isExampleMode)') < exportSource.indexOf('api.selectDirectory()'), true);
+  assert.equal(autoSource.includes('if (isExampleMode)'), true);
+  assert.equal(importSource.includes('if (isExampleMode)'), true);
+  assert.equal(source.includes('isPersistenceCurrent'), true);
 });
 
 test('snapshot import records normalize count fields and sort latest first', () => {

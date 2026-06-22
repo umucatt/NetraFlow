@@ -6,12 +6,6 @@ import test from 'node:test';
 
 import type { AppData, BackupRecord } from './types';
 import {
-  ACCOUNTS_STORAGE_KEY,
-  GROUPS_STORAGE_KEY,
-  HISTORY_STORAGE_KEY
-} from './storageKeys';
-import {
-  createAppDataStorageItems,
   createEmptyAppData,
   createExampleDataApplyResult,
   createExampleModeSnapshot,
@@ -21,7 +15,6 @@ import {
   createTestDataInRealAppData,
   getResetActionLabel,
   isResetConfirmationInputValid,
-  persistAppDataStorageItems,
   sanitizeResetConfirmationInput
 } from './appDataLifecycleLogic';
 
@@ -48,7 +41,7 @@ const appData: AppData = {
     {
       id: 'h-wallet',
       accountId: 'a-wallet',
-      type: '\u65b0\u589e',
+      type: '\u521b\u5efa',
       groupName: 'Cash',
       accountName: 'Wallet',
       beforeAmount: null,
@@ -81,135 +74,6 @@ test('creates empty app data for reset without shared arrays', () => {
   });
 
   assert.deepEqual(second, { groups: [], accounts: [], history: [] });
-});
-
-test('AppData persistence writes one core batch and no single-key items', () => {
-  const writes: unknown[] = [];
-  let singleKeyWriteCount = 0;
-  const storage = {
-    setItems(items: unknown) {
-      writes.push(items);
-    },
-    setItem() {
-      singleKeyWriteCount += 1;
-    }
-  };
-
-  assert.equal(
-    persistAppDataStorageItems(appData, {
-      storage
-    }),
-    true
-  );
-  assert.equal(writes.length, 1);
-  assert.equal(singleKeyWriteCount, 0);
-  assert.deepEqual(Object.keys(writes[0] as Record<string, string>).sort(), [
-    ACCOUNTS_STORAGE_KEY,
-    GROUPS_STORAGE_KEY,
-    HISTORY_STORAGE_KEY
-  ].sort());
-});
-
-test('AppData persistence checks empty-history guard before serialization and writes nothing', () => {
-  const writes: unknown[] = [];
-  const unsafeData = {
-    groups: [
-      {
-        id: 'g-bad',
-        name: BigInt(1),
-        nature: 'asset',
-        includeInStats: true,
-        sortOrder: 0
-      }
-    ],
-    accounts: [],
-    history: []
-  } as unknown as AppData;
-
-  assert.equal(
-    persistAppDataStorageItems(unsafeData, {
-      hasStoredHistoryRecords: () => true,
-      storage: {
-        setItems(items: unknown) {
-          writes.push(items);
-        }
-      }
-    }),
-    false
-  );
-  assert.deepEqual(writes, []);
-});
-
-test('AppData persistence serializes every core value before calling setItems', () => {
-  const createStorage = () => {
-    const writes: unknown[] = [];
-
-    return {
-      writes,
-      storage: {
-        setItems(items: unknown) {
-          writes.push(items);
-        }
-      }
-    };
-  };
-  const validHistory = appData.history;
-
-  [
-    {
-      ...appData,
-      groups: [
-        {
-          id: 'g-bad',
-          name: BigInt(1),
-          nature: 'asset',
-          includeInStats: true,
-          sortOrder: 0
-        }
-      ]
-    },
-    {
-      ...appData,
-      accounts: [{ ...appData.accounts[0]!, amount: BigInt(1) }]
-    },
-    {
-      ...appData,
-      history: [{ ...validHistory[0]!, note: BigInt(1) }]
-    }
-  ].forEach((data) => {
-    const { writes, storage } = createStorage();
-
-    assert.throws(() =>
-      persistAppDataStorageItems(data as unknown as AppData, {
-        storage
-      })
-    );
-    assert.deepEqual(writes, []);
-  });
-});
-
-test('AppData storage item serialization keeps existing core payload semantics', () => {
-  const result = createAppDataStorageItems({
-    groups: [
-      {
-        ...appData.groups[0],
-        accounts: appData.accounts
-      }
-    ] as unknown as AppData['groups'],
-    accounts: appData.accounts,
-    history: []
-  }, {
-    allowEmptyHistoryOverwrite: true,
-    hasStoredHistoryRecords: () => true
-  });
-
-  assert.equal(result.shouldWrite, true);
-
-  if (result.shouldWrite) {
-    assert.deepEqual(JSON.parse(result.items[GROUPS_STORAGE_KEY] ?? ''), appData.groups);
-    assert.deepEqual(JSON.parse(result.items[ACCOUNTS_STORAGE_KEY] ?? ''), appData.accounts);
-    assert.deepEqual(JSON.parse(result.items[HISTORY_STORAGE_KEY] ?? ''), []);
-  }
 });
 
 test('clones example snapshots so sample mode does not share real data references', () => {
@@ -279,7 +143,7 @@ test('testdatain real-data helper uses advanced example app data only', () => {
       {
         id: 'h-advanced',
         accountId: 'a-advanced',
-        type: '新增',
+        type: '创建',
         groupName: 'Advanced',
         accountName: 'Advanced Account',
         beforeAmount: null,
@@ -312,15 +176,28 @@ test('testdatain real-data helper uses advanced example app data only', () => {
   assert.deepEqual(result, generatedAppData);
 });
 
-test('testdatain controller overwrites real asset data without touching sample mode data or backup state', () => {
-  const source = readFileSync('src/app/useAppDataLifecycleController.tsx', 'utf8');
+test('testdatain promotes current demo core or generates real asset data only', () => {
+  const source = readFileSync('src/App.tsx', 'utf8');
+  const promoteSource = source.slice(
+    source.indexOf('const promoteCurrentDemoCoreToRealData = () => {'),
+    source.indexOf('const writeTestDataToRealData = () => {')
+  );
   const handlerSource = source.slice(
-    source.indexOf('const writeExampleDataToRealData = () => {'),
-    source.indexOf('const resetUserConfiguration = () => {')
+    source.indexOf('const writeTestDataToRealData = () => {'),
+    source.indexOf('const {', source.indexOf('const writeTestDataToRealData = () => {'))
   );
 
+  assert.equal(promoteSource.includes('promoteDemoCoreToRealPersistenceEnvironment()'), true);
+  assert.equal(
+    promoteSource.includes('applyRuntimePersistenceSnapshot(transition.snapshot, false);'),
+    true
+  );
+  assert.equal(promoteSource.includes('maybeShowDemoCleanupFailure(transition.cleanup);'), true);
+  assert.equal(handlerSource.includes('if (isExampleMode) {'), true);
+  assert.equal(handlerSource.includes('return promoteCurrentDemoCoreToRealData();'), true);
+  assert.equal(handlerSource.includes('exitExampleModeSession()'), false);
   assert.equal(handlerSource.includes('createTestDataInRealAppData(createExampleData)'), true);
-  assert.equal(handlerSource.includes('persistAppData(nextAppData, { allowEmptyHistoryOverwrite: true })'), true);
+  assert.equal(handlerSource.includes('saveAppData(nextAppData, { allowEmptyHistoryOverwrite: true })'), true);
   assert.equal(handlerSource.includes('setAppData(nextAppData)'), true);
   assert.equal(handlerSource.includes('setIsExampleMode(false)'), true);
   assert.equal(handlerSource.includes('applyLifecycleSnapshot'), false);

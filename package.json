@@ -1,6 +1,6 @@
 {
   "name": "netraflow",
-  "version": "0.9.7",
+  "version": "0.9.8",
   "private": true,
   "license": "GPL-3.0-only",
   "productName": "NetraFlow",
@@ -11,7 +11,7 @@
     "appId": "com.netraflow.app",
     "productName": "NetraFlow",
     "icon": "public/icons/netraflow",
-    "asar": false,
+    "asar": true,
     "directories": {
       "output": "release/installer"
     },
@@ -22,6 +22,7 @@
       "package.json",
       "!**/userData/**",
       "!**/userdata/**",
+      "!**/.demo/**",
       "!**/runtime/**",
       "!**/logs/**",
       "!**/Local Storage/**",

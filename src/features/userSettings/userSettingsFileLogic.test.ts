@@ -1,6 +1,7 @@
 /// <reference types="node" />
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -111,4 +112,21 @@ test('imported user settings keep current page focus side for invalid values', (
   });
 
   assert.equal(imported.globalSettings.mainContentPosition, 'right');
+});
+
+test('user settings file controller blocks external files in sample mode', () => {
+  const source = readFileSync('src/features/userSettings/useUserSettingsFileController.ts', 'utf8');
+  const exportSource = source.slice(
+    source.indexOf('const exportUserSettings = async () => {'),
+    source.indexOf('const importUserSettings =')
+  );
+  const importSource = source.slice(
+    source.indexOf('const importUserSettings ='),
+    source.indexOf('return {', source.indexOf('const importUserSettings ='))
+  );
+
+  assert.equal(exportSource.includes('if (isExampleMode)'), true);
+  assert.equal(exportSource.indexOf('if (isExampleMode)') < exportSource.indexOf('api.selectDirectory()'), true);
+  assert.equal(importSource.includes('if (isExampleMode)'), true);
+  assert.equal(source.includes('isPersistenceCurrent'), true);
 });

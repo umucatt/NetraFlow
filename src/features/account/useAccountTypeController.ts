@@ -5,8 +5,13 @@ import type {
   AppData,
   ArchivedAccountEntry,
   AssetGroup,
-  AssetGroupWithAccounts
+  AssetGroupWithAccounts,
+  CommitAppDataUpdate
 } from '../../app/types';
+import {
+  deriveGroupsWithAccounts,
+  getArchivedAccountEntries
+} from '../../app/accountData';
 import {
   type AccountTypeEditorState,
   createAccountTypeInAppData,
@@ -22,7 +27,7 @@ type AccountTypeControllerOptions = {
   groups: AssetGroupWithAccounts[];
   archivedAccounts: ArchivedAccountEntry[];
   createGroupId: () => string;
-  updateAppData: (nextData: AppData) => void;
+  commitAppDataUpdate: CommitAppDataUpdate;
   onCreateAccountType: (group: AssetGroup) => void;
   onUpdateAccountType: (result: {
     groupId: string;
@@ -36,7 +41,7 @@ export function useAccountTypeController({
   groups,
   archivedAccounts,
   createGroupId,
-  updateAppData,
+  commitAppDataUpdate,
   onCreateAccountType,
   onUpdateAccountType
 }: AccountTypeControllerOptions) {
@@ -89,13 +94,26 @@ export function useAccountTypeController({
     }
 
     if (accountTypeEditor.mode === 'create') {
-      const result = createAccountTypeInAppData({
-        appData,
-        archivedAccounts,
-        groupId: createGroupId(),
-        name: accountTypeNameDraft,
-        nature: accountTypeNatureDraft,
-        includeInStats: accountTypeStatsDraft
+      const groupId = createGroupId();
+      const result = commitAppDataUpdate((latestData) => {
+        const latestGroups = deriveGroupsWithAccounts(latestData.groups, latestData.accounts);
+        const latestArchivedAccounts = getArchivedAccountEntries(
+          latestGroups,
+          latestData.accounts,
+          latestData.history
+        );
+        const createResult = createAccountTypeInAppData({
+          appData: latestData,
+          archivedAccounts: latestArchivedAccounts,
+          groupId,
+          name: accountTypeNameDraft,
+          nature: accountTypeNatureDraft,
+          includeInStats: accountTypeStatsDraft
+        });
+
+        return createResult.ok
+          ? { ok: true, nextData: createResult.nextData, value: createResult.group }
+          : createResult;
       });
 
       if (!result.ok) {
@@ -103,12 +121,11 @@ export function useAccountTypeController({
           setAccountTypeNameDraft('');
         }
 
-        setAccountTypeError(result.error);
+        setAccountTypeError(result.error ?? '账户类型创建失败');
         return;
       }
 
-      updateAppData(result.nextData);
-      onCreateAccountType(result.group);
+      onCreateAccountType(result.value);
       closeAccountTypeEditor();
       return;
     }
@@ -120,13 +137,32 @@ export function useAccountTypeController({
       return;
     }
 
-    const result = updateAccountTypeInAppData({
-      appData,
-      archivedAccounts,
-      groupId: currentGroupId,
-      name: accountTypeNameDraft,
-      nature: accountTypeNatureDraft,
-      includeInStats: accountTypeStatsDraft
+    const result = commitAppDataUpdate((latestData) => {
+      const latestGroups = deriveGroupsWithAccounts(latestData.groups, latestData.accounts);
+      const latestArchivedAccounts = getArchivedAccountEntries(
+        latestGroups,
+        latestData.accounts,
+        latestData.history
+      );
+      const updateResult = updateAccountTypeInAppData({
+        appData: latestData,
+        archivedAccounts: latestArchivedAccounts,
+        groupId: currentGroupId,
+        name: accountTypeNameDraft,
+        nature: accountTypeNatureDraft,
+        includeInStats: accountTypeStatsDraft
+      });
+
+      return updateResult.ok
+        ? {
+            ok: true,
+            nextData: updateResult.nextData,
+            value: {
+              previousGroup: updateResult.previousGroup,
+              group: updateResult.group
+            }
+          }
+        : updateResult;
     });
 
     if (!result.ok) {
@@ -143,11 +179,10 @@ export function useAccountTypeController({
       return;
     }
 
-    updateAppData(result.nextData);
     onUpdateAccountType({
       groupId: currentGroupId,
-      previousName: result.previousGroup.name,
-      nextName: result.group.name
+      previousName: result.value.previousGroup.name,
+      nextName: result.value.group.name
     });
     closeAccountTypeEditor();
   };

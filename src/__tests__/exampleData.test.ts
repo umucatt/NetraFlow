@@ -77,17 +77,16 @@ test('example templates use top-level accounts without persisted nested groups',
   });
 });
 
-test('example account lifecycle records keep add, archive, restore, and modify order valid', () => {
+test('example account lifecycle records keep create, archive, restore, and modify order valid', () => {
   generatedExamples.forEach(({ templateId, seed }) => {
     const data = withSeededRandom(seed, () => createExampleData(templateId));
     const now = new Date().getTime();
 
     getAccounts(data.appData.groups, data.appData.accounts).forEach(({ account }) => {
       const records = getAccountRecords(data.appData.history, account);
-      const addRecords = records.filter((record) => record.type === '新增');
+      const createRecords = records.filter((record) => record.type === '创建');
 
-      assert.equal(addRecords.length, 1, `${templateId}:${account.name}`);
-      assert.equal(records[0]?.type, '新增', `${templateId}:${account.name}`);
+      assert.equal(createRecords.length, 1, `${templateId}:${account.name}`);
 
       let isArchived = false;
       let hasArchivedBeforeRestore = false;

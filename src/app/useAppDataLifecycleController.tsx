@@ -1,37 +1,20 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 
 import type { AppCallbackConfirmationDialogRequest } from './useAppDialogController';
-import type {
-  AppData,
-  AutoBackupSettings,
-  BackupRecord
-} from './types';
+import type { AppData, AutoBackupSettings, BackupRecord } from './types';
 import type { AssetChartSettings } from '../features/charts';
 import type { GlobalSettings } from '../features/security/securitySettingsTypes';
 import type { ExampleTemplateId } from '../exampleData';
 import {
   createEmptyAppData,
-  createExampleDataApplyResult,
-  createExampleModeSnapshot,
   createResetConfirmation,
-  createRestoredRealDataState,
-  createTestDataInRealAppData,
   getResetActionLabel,
   isResetConfirmationInputValid,
   sanitizeResetConfirmationInput
 } from './appDataLifecycleLogic';
-import type {
-  AppDataLifecycleSnapshot,
-  AppDataResetAction,
-  AppDataResetConfirmation,
-  ExampleGeneratedData
-} from './appDataLifecycleTypes';
+import type { AppDataResetAction, AppDataResetConfirmation } from './appDataLifecycleTypes';
 
 type UseAppDataLifecycleControllerOptions = {
-  appData: AppData;
-  backupRecords: BackupRecord[];
-  lastBackupAt: string;
-  lastBackupHistoryCount: number;
   selectedExampleTemplateId: ExampleTemplateId;
   setSelectedExampleTemplateId: (templateId: ExampleTemplateId) => void;
   isExampleMode: boolean;
@@ -54,24 +37,16 @@ type UseAppDataLifecycleControllerOptions = {
     persist: boolean
   ) => void;
   resetSnapshotImportRecords: (persist: boolean) => void;
-  createExampleData: (templateId: ExampleTemplateId) => ExampleGeneratedData;
-  loadRealDataSnapshot: () => AppDataLifecycleSnapshot;
-  persistAppData: (
-    data: AppData,
-    options?: { allowEmptyHistoryOverwrite?: boolean }
-  ) => void;
   persistEmptyAssetData: () => void;
+  startExampleModeSession: (templateId: ExampleTemplateId) => boolean;
+  switchExampleModeSession: (templateId: ExampleTemplateId) => boolean;
+  exitExampleModeSession: () => boolean;
+  writeTestDataToRealData: () => boolean;
   showConfirmationDialog: (request: AppCallbackConfirmationDialogRequest) => void;
-  completeFirstWelcome: () => void;
   markPendingFirstWelcomeAfterClearAll: () => void;
-  cancelPendingFirstWelcomeForRealChange: () => void;
 };
 
 export function useAppDataLifecycleController({
-  appData,
-  backupRecords,
-  lastBackupAt,
-  lastBackupHistoryCount,
   selectedExampleTemplateId,
   setSelectedExampleTemplateId,
   isExampleMode,
@@ -89,49 +64,17 @@ export function useAppDataLifecycleController({
   resetDataViews,
   applyBackupState,
   resetSnapshotImportRecords,
-  createExampleData,
-  loadRealDataSnapshot,
-  persistAppData,
   persistEmptyAssetData,
+  startExampleModeSession,
+  switchExampleModeSession,
+  exitExampleModeSession,
+  writeTestDataToRealData,
   showConfirmationDialog,
-  completeFirstWelcome,
-  markPendingFirstWelcomeAfterClearAll,
-  cancelPendingFirstWelcomeForRealChange
+  markPendingFirstWelcomeAfterClearAll
 }: UseAppDataLifecycleControllerOptions) {
-  const realDataBeforeExampleRef = useRef<AppDataLifecycleSnapshot | null>(null);
   const [resetConfirmation, setResetConfirmation] =
     useState<AppDataResetConfirmation>(null);
   const [resetConfirmationInput, setResetConfirmationInputState] = useState('');
-
-  const applyLifecycleSnapshot = (
-    snapshot: AppDataLifecycleSnapshot,
-    persistBackupState: boolean
-  ) => {
-    setAppData(snapshot.appData);
-    applyBackupState(
-      snapshot.backupRecords,
-      snapshot.lastBackupAt,
-      snapshot.lastBackupHistoryCount,
-      persistBackupState
-    );
-  };
-
-  const applyExampleGeneratedData = (generatedData: ExampleGeneratedData) => {
-    resetDataViews();
-    applyLifecycleSnapshot(createExampleDataApplyResult(generatedData), false);
-  };
-
-  const startExampleMode = (templateId: ExampleTemplateId) => {
-    realDataBeforeExampleRef.current = createExampleModeSnapshot({
-      appData,
-      backupRecords,
-      lastBackupAt,
-      lastBackupHistoryCount
-    });
-    setSelectedExampleTemplateId(templateId);
-    applyExampleGeneratedData(createExampleData(templateId));
-    setIsExampleMode(true);
-  };
 
   const enterExampleMode = () => {
     showConfirmationDialog({
@@ -139,19 +82,22 @@ export function useAppDataLifecycleController({
       message: (
         <>
           <p>示例数据不会覆盖你的真实资产数据</p>
-          <p>在示例模式中的修改不会保存到真实数据中</p>
-          <p>退出示例模式后会恢复进入前的状态</p>
+          <p>示例模式中的修改只保存在本次示例环境中</p>
+          <p>退出示例模式后会重新读取真实数据</p>
           <strong>是否继续？</strong>
         </>
       ),
       confirmLabel: '确认进入',
-      onConfirm: () => startExampleMode(selectedExampleTemplateId)
+      onConfirm: () => {
+        resetDataViews();
+        startExampleModeSession(selectedExampleTemplateId);
+      }
     });
   };
 
   const chooseFirstWelcomeStoryRoute = (templateId: ExampleTemplateId) => {
-    completeFirstWelcome();
-    startExampleMode(templateId);
+    resetDataViews();
+    startExampleModeSession(templateId);
   };
 
   const switchExampleTemplate = () => {
@@ -165,20 +111,16 @@ export function useAppDataLifecycleController({
         </>
       ),
       confirmLabel: '确认切换',
-      onConfirm: () => applyExampleGeneratedData(createExampleData(selectedExampleTemplateId))
+      onConfirm: () => {
+        resetDataViews();
+        switchExampleModeSession(selectedExampleTemplateId);
+      }
     });
   };
 
   const performExitExampleMode = () => {
-    const restoredState = createRestoredRealDataState({
-      savedSnapshot: realDataBeforeExampleRef.current,
-      loadFallbackSnapshot: loadRealDataSnapshot
-    });
-
     resetDataViews();
-    setIsExampleMode(false);
-    realDataBeforeExampleRef.current = null;
-    applyLifecycleSnapshot(restoredState, false);
+    exitExampleModeSession();
   };
 
   const exitExampleMode = () => {
@@ -192,7 +134,7 @@ export function useAppDataLifecycleController({
         <>
           <p>退出后将离开当前示例模式</p>
           <p>示例模式中的修改不会保留</p>
-          <p>系统将恢复到进入示例模式前的真实数据状态</p>
+          <p>系统将重新读取真实数据</p>
           <strong>确定退出吗？</strong>
         </>
       ),
@@ -202,16 +144,8 @@ export function useAppDataLifecycleController({
   };
 
   const writeExampleDataToRealData = () => {
-    const nextAppData = createTestDataInRealAppData(createExampleData);
-
     resetDataViews();
-    persistAppData(nextAppData, { allowEmptyHistoryOverwrite: true });
-    setAppData(nextAppData);
-    setIsExampleMode(false);
-    realDataBeforeExampleRef.current = null;
-    cancelPendingFirstWelcomeForRealChange();
-
-    return true;
+    return writeTestDataToRealData();
   };
 
   const resetUserConfiguration = () => {
@@ -239,7 +173,6 @@ export function useAppDataLifecycleController({
   const resetAllData = () => {
     resetUserConfiguration();
     setIsExampleMode(false);
-    realDataBeforeExampleRef.current = null;
     resetAssetHistory(true);
     markPendingFirstWelcomeAfterClearAll();
   };

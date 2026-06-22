@@ -1,12 +1,8 @@
-import { type ChangeEvent, useMemo, useState } from 'react';
+import { type ChangeEvent, useEffect, useMemo, useState } from 'react';
 
-import { toStoredAmountByNature } from '../../app/accountNature';
-import { compareHistoryByTimeDesc } from '../../app/dateUtils';
-import { nfStorage } from '../../app/nfStorage';
-import { ROLLUP_IMPORT_HASHES_STORAGE_KEY } from '../../app/storageKeys';
 import { getAccountOperationTodayDateValue } from '../../accountOperationDate';
 import { normalizeAccountName } from '../account/accountEditorLogic';
-import { formatMoneyValue, roundToMoneyPrecision } from '../../money';
+import { formatMoneyValue } from '../../money';
 import { ROLLUP_IMPORT_EXPLANATION, ROLLUP_IMPORT_PROMPT } from '../../rollupImportContent';
 import {
   areAllRollupGroupsAssigned,
@@ -17,7 +13,7 @@ import {
   type RollupImportReview,
   type RollupRiskLevel
 } from '../../rollupImportLogic';
-import type { Account, AssetGroupWithAccounts } from '../../app/types';
+import type { AssetGroupWithAccounts } from '../../app/types';
 import type {
   RollupImportAccountMatch,
   RollupImportController,
@@ -26,26 +22,7 @@ import type {
   RollupPromptTab,
   UseRollupImportControllerOptions
 } from './rollupImportTypes';
-
-const loadRollupImportHashes = () => {
-  try {
-    const rawValue = nfStorage.getItem(ROLLUP_IMPORT_HASHES_STORAGE_KEY);
-    const parsedValue = rawValue ? JSON.parse(rawValue) : [];
-
-    return Array.isArray(parsedValue)
-      ? parsedValue.filter((item): item is string => typeof item === 'string')
-      : [];
-  } catch {
-    return [];
-  }
-};
-
-const saveRollupImportHashes = (hashes: string[]) => {
-  nfStorage.setItem(
-    ROLLUP_IMPORT_HASHES_STORAGE_KEY,
-    JSON.stringify(Array.from(new Set(hashes)).slice(-80))
-  );
-};
+import { createRollupImportWritePlan } from './rollupImportWriteLogic';
 
 const createRollupImportHash = async (text: string) => {
   if (window.crypto?.subtle) {
@@ -114,13 +91,12 @@ const formatRollupSignedAmount = (record: RollupImportRecord) => {
 const normalizeRollupMatchText = (value: string) => normalizeAccountName(value).replace(/\s+/g, '');
 
 export const useRollupImportController = ({
-  assetGroups,
-  accounts,
   groups,
   accountGroups,
-  history,
   isExampleMode,
-  updateAppData,
+  initialImportedHashes,
+  commitAppDataUpdate,
+  persistImportedHashes,
   createHistoryRecord,
   showToast,
   onClosePage,
@@ -133,7 +109,9 @@ export const useRollupImportController = ({
   const [importError, setImportError] = useState('');
   const [importReview, setImportReview] = useState<RollupImportReview | null>(null);
   const [importHash, setImportHash] = useState('');
-  const [importedHashes, setImportedHashes] = useState(loadRollupImportHashes);
+  const [importedHashes, setImportedHashes] = useState(() =>
+    Array.from(new Set(initialImportedHashes)).slice(-80)
+  );
   const [accountAssignments, setAccountAssignments] = useState<
     Record<string, RollupAccountAssignment | null>
   >({});
@@ -143,6 +121,10 @@ export const useRollupImportController = ({
     () => (importReview ? getRollupAccountGroupKeys(importReview.records) : []),
     [importReview]
   );
+
+  useEffect(() => {
+    setImportedHashes(Array.from(new Set(initialImportedHashes)).slice(-80));
+  }, [initialImportedHashes]);
 
   const recordGroups: RollupImportRecordGroup[] = useMemo(
     () =>
@@ -344,94 +326,47 @@ export const useRollupImportController = ({
       return;
     }
 
-    const runningAmounts = new Map<string, number>();
-    const finalAmounts = new Map<string, number>();
-    const recordsWithAccounts = importReview.records
-      .map((record) => {
-        const assignment = accountAssignments[record.accountKeyword];
+    const result = commitAppDataUpdate((latestData) => {
+      const plan = createRollupImportWritePlan({
+        appData: latestData,
+        accountAssignments,
+        createHistoryRecord,
+        importReview
+      });
 
-        if (!assignment) {
-          return null;
-        }
+      return plan
+        ? {
+            ok: true,
+            nextData: {
+              groups: latestData.groups,
+              accounts: plan.nextAccounts,
+              history: plan.nextHistory
+            },
+            value: plan.historyRecords.length
+          }
+        : { ok: false, error: '仍有账户未确认' };
+    });
 
-        const match = findRollupAccountById(groups, assignment.accountId);
-
-        if (!match || match.account.archived) {
-          return null;
-        }
-
-        return {
-          record,
-          groupId: match.group.id,
-          groupName: match.group.name,
-          account: match.account
-        };
-      })
-      .filter(
-        (
-          item
-        ): item is {
-          record: RollupImportRecord;
-          groupId: string;
-          groupName: string;
-          account: Account;
-        } => Boolean(item)
-      )
-      .sort(
-        (left, right) =>
-          left.account.id.localeCompare(right.account.id) ||
-          left.record.date.localeCompare(right.record.date) ||
-          left.record.inputIndex - right.record.inputIndex
-      );
-
-    if (recordsWithAccounts.length !== importReview.records.length) {
+    if (!result.ok) {
       showToast('仍有账户未确认', 'error');
       return;
     }
 
-    const rollupHistory = recordsWithAccounts.map((item, index) => {
-      const beforeAmount = runningAmounts.get(item.account.id) ?? item.account.amount;
-      const groupNature = groups.find((group) => group.id === item.groupId)?.nature ?? 'asset';
-      const afterAmount = roundToMoneyPrecision(
-        item.record.mode === 'change'
-          ? beforeAmount + item.record.amount
-          : toStoredAmountByNature(groupNature, item.record.amount)
-      );
-      const recordTime = new Date(`${item.record.date}T12:00:00`);
-
-      recordTime.setMilliseconds(index);
-      runningAmounts.set(item.account.id, afterAmount);
-      finalAmounts.set(item.account.id, afterAmount);
-
-      return createHistoryRecord({
-        account: item.account,
-        groupName: item.groupName,
-        beforeAmount,
-        afterAmount,
-        time: recordTime.toISOString(),
-        source: 'rollup'
-      });
-    });
-
-    const nextAccounts = accounts.map((account) => {
-      const finalAmount = finalAmounts.get(account.id);
-
-      return typeof finalAmount === 'number' ? { ...account, amount: finalAmount } : account;
-    });
-
-    const nextHistory = [...rollupHistory, ...history].sort(compareHistoryByTimeDesc);
-
-    updateAppData({ groups: assetGroups, accounts: nextAccounts, history: nextHistory });
-
-    if (importHash && !isExampleMode) {
+    if (importHash) {
       const nextHashes = Array.from(new Set([...importedHashes, importHash]));
 
-      setImportedHashes(nextHashes);
-      saveRollupImportHashes(nextHashes);
+      try {
+        persistImportedHashes(nextHashes);
+        setImportedHashes(nextHashes);
+      } catch (error) {
+        console.error('[NetraFlow rollup] Failed to persist rollup import hash.', error);
+        showToast('汇总记录已导入，防重复标记保存失败', 'error');
+        return;
+      }
     }
 
     closeSession();
-    showToast(`已导入 ${rollupHistory.length} 条汇总记录`, 'success');
+    showToast(`已导入 ${result.value} 条汇总记录`, 'success');
   };
 
   const confirmImportWrite = () => {

@@ -24,6 +24,7 @@ export type AccountTrendPoint = {
 };
 
 const RESTORE_HISTORY_TYPE: HistoryRecord['type'] = '重新启用';
+const CREATE_HISTORY_TYPE: HistoryRecord['type'] = '创建';
 
 const getAccountTrendChangeDateKeys = (history: HistoryRecord[]) =>
   Array.from(
@@ -92,6 +93,13 @@ export const deriveAccountTrendPoints = (
     const cutoff = getDateEndTimestamp(date);
     const amount = recordsByTimeDesc.reduce<number | null>((currentAmount, entry) => {
       if (entry.timestamp > cutoff) {
+        if (
+          entry.record.type === CREATE_HISTORY_TYPE &&
+          recordsByTimeDesc.some((candidate) => candidate.timestamp <= cutoff)
+        ) {
+          return currentAmount;
+        }
+
         return rollbackAccountRecordForTrend(currentAmount, entry.record);
       }
 

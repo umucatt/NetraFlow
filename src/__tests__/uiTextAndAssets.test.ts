@@ -132,9 +132,9 @@ test('global settings security and about copy match the current release text', (
   };
 
   assert.equal(settingsPageSource.includes('是否开启登陆密码保护'), true);
-  assert.equal(packageJson.version, '0.9.7');
-  assert.equal(packageLockJson.version, '0.9.7');
-  assert.equal(packageLockJson.packages?.['']?.version, '0.9.7');
+  assert.equal(packageJson.version, '0.9.8');
+  assert.equal(packageLockJson.version, '0.9.8');
+  assert.equal(packageLockJson.packages?.['']?.version, '0.9.8');
   assert.equal(appSource.includes('APP_VERSION'), true);
   assert.equal(appSource.includes('0.9.1'), false);
   assert.equal(aboutPanelSource.includes('获取信息'), true);
@@ -775,7 +775,7 @@ test('theme bootstrap resolves first frame before React mounts', () => {
   assert.equal(globalSettingsLogicSource.includes("themeMode: 'system'"), true);
   assert.equal(indexSource.indexOf('<script>') < indexSource.indexOf('<script type="module"'), true);
   assert.equal(
-    indexSource.indexOf("window.netraflowStorage.getItem('netraflowGlobalSettings')") <
+    indexSource.indexOf('window.netraflowPersistence') <
       indexSource.indexOf('src="/src/main.tsx"'),
     true
   );
@@ -785,8 +785,10 @@ test('theme bootstrap resolves first frame before React mounts', () => {
   assert.equal(bootstrapSource.includes("window.matchMedia('(prefers-color-scheme: dark)').matches"), true);
   assert.equal(bootstrapSource.includes("value === 'light' || value === 'dark' || value === 'system'"), true);
   assert.equal(bootstrapSource.includes("value === 'default' || value === 'nyaa'"), true);
+  assert.equal(bootstrapSource.includes('persistence.readSettingsDocument()'), true);
+  assert.equal(bootstrapSource.includes('persistence.readStateDocument()'), true);
   assert.equal(bootstrapSource.includes('isThemeMode(parsedSettings.themeMode)'), true);
-  assert.equal(bootstrapSource.includes('parsedSettings.nyaaThemeUnlocked === true'), true);
+  assert.equal(bootstrapSource.includes('personalization.nyaaThemeUnlocked === true'), true);
   assert.equal(bootstrapSource.includes('isThemeStyle(parsedSettings.themeStyle)'), true);
   assert.equal(
     bootstrapSource.includes("var resolvedTheme = themeMode === 'system' ? getSystemTheme() : themeMode;"),
@@ -803,13 +805,10 @@ test('theme bootstrap resolves first frame before React mounts', () => {
   assert.equal(bootstrapSource.includes("'background-color'"), true);
   assert.equal(bootstrapSource.includes('getPrebootBackgroundColor(resolvedTheme, themeStyle)'), true);
   assert.equal(mainSource.includes("nativeTheme.shouldUseDarkColors ? 'dark' : 'light'"), true);
-  assert.equal(mainSource.includes("const GLOBAL_SETTINGS_STORAGE_KEY = 'netraflowGlobalSettings';"), true);
-  assert.equal(mainSource.includes('const itemsResult = readNfStorageItems();'), true);
-  assert.equal(
-    mainSource.includes('(itemsResult.items as NfStorageItems)[GLOBAL_SETTINGS_STORAGE_KEY]'),
-    true
-  );
-  assert.equal(mainSource.includes('normalizeThemeBootstrapSettings(JSON.parse(storedSettings))'), true);
+  assert.equal(mainSource.includes('persistenceStore.readSettingsDocument()'), true);
+  assert.equal(mainSource.includes('persistenceStore.readStateDocument()'), true);
+  assert.equal(mainSource.includes('const globalSettings = isPlainObject(settings.global)'), true);
+  assert.equal(mainSource.includes('const personalization = isPlainObject(state.personalization)'), true);
   assert.equal(mainSource.includes('value === \'light\' || value === \'dark\' || value === \'system\''), true);
   assert.equal(mainSource.includes('value === \'default\' || value === \'nyaa\''), true);
   assert.equal(mainSource.includes('const nyaaThemeUnlocked = value.nyaaThemeUnlocked === true;'), true);
@@ -827,7 +826,7 @@ test('theme bootstrap resolves first frame before React mounts', () => {
   assert.equal(appSource.includes("root.style.removeProperty('background-color');"), true);
 });
 
-test('NF storage adapter owns persisted renderer data and legacy localStorage migration', () => {
+test('formal persistence owns renderer data and old storage bridge is removed', () => {
   const appSource = readProjectFile('src/App.tsx');
   const globalSettingsLogicSource = readProjectFile(
     'src/app/globalSettings/globalSettingsLogic.ts'
@@ -837,7 +836,9 @@ test('NF storage adapter owns persisted renderer data and legacy localStorage mi
   );
   const lifecycleLogicSource = readProjectFile('src/app/appDataLifecycleLogic.ts');
   const storageKeysSource = readProjectFile('src/app/storageKeys.ts');
-  const nfStorageSource = readProjectFile('src/app/nfStorage.ts');
+  const runtimePersistenceSource = readProjectFile(
+    'src/app/persistence/runtimePersistence.ts'
+  );
   const snapshotBackupLogicSource = readProjectFile(
     'src/features/backup/snapshotBackupLogic.ts'
   );
@@ -846,68 +847,50 @@ test('NF storage adapter owns persisted renderer data and legacy localStorage mi
   );
   const mainSource = readProjectFile('electron/main.ts');
   const preloadSource = readProjectFile('electron/preload.ts');
-  const storageFileSource = readProjectFile('electron/storageFile.ts');
   const indexSource = readProjectFile('index.html');
   const saveAppDataSource = appSource.slice(
     appSource.indexOf('const saveAppData'),
     appSource.indexOf('const createHistoryRecord')
   );
-  const persistedStorageSource = [
+  const rendererPersistenceSource = [
     appSource,
     lifecycleLogicSource,
     globalSettingsLogicSource,
-    firstWelcomeStateSource
+    firstWelcomeStateSource,
+    snapshotBackupLogicSource,
+    rollupControllerSource,
+    runtimePersistenceSource
   ].join('\n');
-  const assertNfStorageSetItem = (key: string) => {
-    assert.match(persistedStorageSource, new RegExp(`nfStorage\\.setItem\\(\\s*${key}\\b`));
-  };
 
   assert.equal(appSource.includes('window.localStorage'), false);
   assert.equal(indexSource.includes('window.localStorage'), false);
-  assert.equal(nfStorageSource.includes('window.localStorage'), true);
-  assert.equal(appSource.includes('migrateLegacyLocalStorageToNfStorage();'), true);
-  assert.equal(saveAppDataSource.includes('persistAppDataStorageItems('), true);
-  assert.equal(saveAppDataSource.includes('nfStorage.setItem'), false);
-  assert.equal(saveAppDataSource.includes('nfStorage.setItems'), false);
-  assert.equal(lifecycleLogicSource.includes('.setItems(result.items)'), true);
-  assertNfStorageSetItem('GROUPS_STORAGE_KEY');
-  assertNfStorageSetItem('ACCOUNTS_STORAGE_KEY');
-  assertNfStorageSetItem('HISTORY_STORAGE_KEY');
-  assertNfStorageSetItem('GLOBAL_SETTINGS_STORAGE_KEY');
-  assertNfStorageSetItem('CHART_SETTINGS_STORAGE_KEY');
-  assertNfStorageSetItem('BACKUP_RECORDS_STORAGE_KEY');
-  assert.match(
-    snapshotBackupLogicSource,
-    /nfStorage\.setItem\(\s*SNAPSHOT_IMPORT_RECORDS_STORAGE_KEY\b/
-  );
-  assertNfStorageSetItem('FIRST_WELCOME_STORAGE_KEY');
-  assert.match(
-    rollupControllerSource,
-    /nfStorage\.setItem\(\s*ROLLUP_IMPORT_HASHES_STORAGE_KEY\b/
-  );
-  assert.match(persistedStorageSource, /nfStorage\.removeItem\(\s*LAST_BACKUP_STORAGE_KEY\s*\)/);
-  assert.equal(storageKeysSource.includes('export const NF_STORAGE_WHITELIST_KEYS = ['), true);
-  assert.equal(storageKeysSource.includes('SNAPSHOT_IMPORT_RECORDS_STORAGE_KEY'), true);
-  assert.equal(mainSource.includes("'snapshotImportRecords'"), true);
-  assert.equal(storageKeysSource.includes('MIGRATION_BACKUP_STORAGE_KEY'), true);
-  assert.equal(nfStorageSource.includes('collectMigratableLegacyItems'), true);
-  assert.equal(nfStorageSource.includes('skippedNonWhitelistKeys'), true);
-  assert.equal(nfStorageSource.includes('skippedExistingKeys'), true);
-  assert.equal(nfStorageSource.includes('skippedExampleKeys'), true);
-  assert.equal(nfStorageSource.includes('isExampleStorageEntry'), true);
-  assert.equal(nfStorageSource.includes('NF_STORAGE_WHITELIST_KEYS.forEach((key) => {'), true);
-  assert.equal(nfStorageSource.includes('getLocalStorageFallback()?.removeItem(key);'), true);
-  assert.equal(preloadSource.includes("contextBridge.exposeInMainWorld('netraflowStorage'"), true);
-  assert.equal(preloadSource.includes("'nf-storage:set-items'"), true);
-  assert.equal(preloadSource.includes("'nf-storage:migrate-legacy-items'"), true);
-  assert.equal(mainSource.includes("const NF_STORAGE_FILE_NAME = 'storage.json';"), true);
-  assert.equal(mainSource.includes("path.join(getNfStorageDirectoryPath(), NF_STORAGE_FILE_NAME)"), true);
+  assert.equal(rendererPersistenceSource.includes('window.localStorage'), false);
+  assert.equal(rendererPersistenceSource.includes('nfStorage'), false);
+  assert.equal(appSource.includes('migrateLegacyLocalStorageToNfStorage();'), false);
+  assert.equal(saveAppDataSource.includes('writeCoreDocument(createCoreDocumentFromAppData'), true);
+  assert.equal(saveAppDataSource.includes('persistAppDataStorageItems('), false);
+  assert.equal(lifecycleLogicSource.includes('.setItems('), false);
+  assert.equal(runtimePersistenceSource.includes('writeSettingsDocument'), true);
+  assert.equal(runtimePersistenceSource.includes('writeStateDocument'), true);
+  assert.equal(runtimePersistenceSource.includes('writeSecurityDocument'), true);
+  assert.equal(snapshotBackupLogicSource.includes('autoBackupSettings,'), false);
+  assert.equal(snapshotBackupLogicSource.includes('backupRecords:'), false);
+  assert.equal(rollupControllerSource.includes('persistImportedHashes(nextHashes)'), true);
+  assert.equal(storageKeysSource.includes('NF_STORAGE_WHITELIST_KEYS'), false);
+  assert.equal(storageKeysSource.includes('MIGRATION_BACKUP_STORAGE_KEY'), false);
+  assert.equal(preloadSource.includes("contextBridge.exposeInMainWorld('netraflowStorage'"), false);
+  assert.equal(preloadSource.includes("'nf-storage:"), false);
+  assert.equal(mainSource.includes('storage.json'), false);
   assert.equal(mainSource.includes("const USERDATA_DIR_NAME = 'userdata';"), true);
   assert.equal(mainSource.includes("const RUNTIME_DIR_NAME = 'runtime';"), true);
   assert.equal(mainSource.includes("const WINDOWS_ACCOUNT_MARKER_FILE_NAME = '.windows-account';"), false);
-  assert.equal(mainSource.includes("path.join(getAppInstallRootPath(), USERDATA_DIR_NAME)"), true);
+  assert.equal(mainSource.includes('const getNfUserDataRootPath = () => {'), true);
+  assert.equal(mainSource.includes('return persistenceRoots.realRoot;'), true);
+  assert.equal(mainSource.includes('createPersistenceEnvironmentRoots({'), true);
+  assert.equal(mainSource.includes('NETRAFLOW_PERSISTENCE_EXE_DIR'), true);
+  assert.equal(mainSource.includes('NETRAFLOW_USERDATA_ROOT'), true);
+  assert.equal(mainSource.includes('NETRAFLOW_DEMO_ROOT'), true);
   assert.equal(mainSource.includes("path.join(getAppInstallRootPath(), RUNTIME_DIR_NAME)"), true);
-  assert.equal(mainSource.includes('const getNfStorageDirectoryPath = () => getNfUserDataRootPath();'), true);
   assert.equal(mainSource.includes('const getNfRuntimeUserDataPath = () => getNfRuntimeRootPath();'), true);
   assert.equal(mainSource.includes('getWindowsAccountKey'), false);
   assert.equal(mainSource.includes('getWindowsAccountIdentity'), false);
@@ -917,24 +900,63 @@ test('NF storage adapter owns persisted renderer data and legacy localStorage mi
   assert.equal(mainSource.includes('node:os'), false);
   assert.equal(mainSource.includes('const getDevProjectRootPath = () => app.getAppPath();'), true);
   assert.equal(mainSource.includes('return getDevProjectRootPath();'), true);
-  assert.equal(mainSource.includes("path.join(app.getPath('appData'), APP_NAME)"), true);
-  assert.equal(mainSource.includes("path.join(app.getPath('appData'), APP_NAME.toLowerCase())"), true);
-  assert.equal(mainSource.includes('getLegacyPortableUserDataPath()'), true);
-  assert.equal(mainSource.includes('copyLegacyLocalStorageEntry(legacyUserDataPath, runtimeUserDataPath)'), true);
-  assert.equal(mainSource.includes('if (app.isPackaged) {\n    stageLegacyLocalStorageIfNeeded(runtimeUserDataPath);\n  }'), true);
-  assert.equal(mainSource.includes("cpSync(sourceEntryPath, targetEntryPath"), true);
-  assert.equal(mainSource.includes('force: false'), true);
+  assert.equal(mainSource.includes("path.join(app.getPath('appData'), APP_NAME)"), false);
+  assert.equal(mainSource.includes("path.join(app.getPath('appData'), APP_NAME.toLowerCase())"), false);
+  assert.equal(mainSource.includes('getLegacyPortableUserDataPath()'), false);
+  assert.equal(mainSource.includes('copyLegacyLocalStorageEntry'), false);
+  assert.equal(mainSource.includes('stageLegacyLocalStorageIfNeeded'), false);
+  assert.equal(mainSource.includes('cpSync'), false);
   assert.equal(mainSource.includes("return `win-${digest}`;"), false);
-  assert.equal(mainSource.includes("ipcMain.on('nf-storage:set-item'"), true);
-  assert.equal(mainSource.includes("ipcMain.on('nf-storage:set-items'"), true);
-  assert.equal(mainSource.includes("ipcMain.on('nf-storage:migrate-legacy-items'"), true);
-  assert.equal(storageFileSource.includes('sanitizeNfStorageItems'), true);
-  assert.equal(storageFileSource.includes('writeNfStorageFile'), true);
-  assert.equal(preloadSource.includes('throwNfStorageError'), true);
-  assert.equal(mainSource.includes('isExampleStorageEntry'), true);
+  assert.equal(mainSource.includes("ipcMain.on('nf-storage:"), false);
+  assert.equal(preloadSource.includes('throwNfStorageError'), false);
+  assert.equal(mainSource.includes('isExampleStorageEntry'), false);
   assert.equal(mainSource.includes("'Cache'"), false);
   assert.equal(mainSource.includes('Code Cache'), false);
   assert.equal(mainSource.includes('GPUCache'), false);
+});
+
+test('Electron renderer sandbox keeps the preload bridge boundary narrow', () => {
+  const mainSource = readProjectFile('electron/main.ts');
+  const preloadSource = readProjectFile('electron/preload.ts');
+  const typesSource = readProjectFile('src/vite-env.d.ts');
+  const rendererBridgeSource = [
+    readProjectFile('src/App.tsx'),
+    readProjectFile('src/app/persistence/runtimePersistence.ts'),
+    readProjectFile('src/app/windowFrame/useWindowFrameController.ts'),
+    readProjectFile('src/features/backup/useSnapshotBackupController.tsx'),
+    readProjectFile('src/features/security/useSecuritySettingsController.tsx'),
+    readProjectFile('src/features/userSettings/useUserSettingsFileController.ts')
+  ].join('\n');
+
+  assert.equal(mainSource.includes('contextIsolation: true'), true);
+  assert.equal(mainSource.includes('nodeIntegration: false'), true);
+  assert.equal(mainSource.includes('sandbox: true'), true);
+  assert.equal(mainSource.includes('sandbox: false'), false);
+  assert.equal(mainSource.includes('nodeIntegration: true'), false);
+  assert.equal(mainSource.includes("setWindowOpenHandler(() => ({ action: 'deny' }))"), true);
+  assert.equal(mainSource.includes("createdWindow.webContents.on('will-navigate'"), true);
+  assert.equal(mainSource.includes('isAllowedRendererNavigation'), true);
+  assert.equal(
+    mainSource.includes('setPermissionRequestHandler(\n    (_webContents, _permission, callback)'),
+    true
+  );
+  assert.equal(preloadSource.includes("contextBridge.exposeInMainWorld('appInfo'"), true);
+  assert.equal(preloadSource.includes("contextBridge.exposeInMainWorld('electronAPI'"), true);
+  assert.equal(preloadSource.includes("contextBridge.exposeInMainWorld('electronWindow'"), true);
+  assert.equal(preloadSource.includes("contextBridge.exposeInMainWorld('netraflowPersistence'"), true);
+  assert.equal(preloadSource.includes("contextBridge.exposeInMainWorld('ipcRenderer'"), false);
+  assert.equal(preloadSource.includes("contextBridge.exposeInMainWorld('electron'"), false);
+  assert.equal(preloadSource.includes('remote'), false);
+  assert.equal(preloadSource.includes('process.'), false);
+  assert.equal(preloadSource.includes("require('electron')"), true);
+  assert.equal(preloadSource.includes("require('node:"), false);
+  assert.equal(preloadSource.includes('window.require'), false);
+  assert.equal(preloadSource.includes('listener(_event'), false);
+  assert.equal(preloadSource.includes('listener(event'), false);
+  assert.equal(preloadSource.includes('listener(isMaximized);'), true);
+  assert.equal(rendererBridgeSource.includes('ipcRenderer'), false);
+  assert.equal(typesSource.includes('ipcRenderer'), false);
+  assert.equal(typesSource.includes('Electron.IpcRenderer'), false);
 });
 
 test('page position memory copy and settings search keywords stay wired', () => {
@@ -1006,7 +1028,7 @@ test('main content position setting keeps left default and swaps only app shell 
   );
   const normalizeGlobalSettingsSource = globalSettingsLogicSource.slice(
     globalSettingsLogicSource.indexOf('export const normalizeGlobalSettings'),
-    globalSettingsLogicSource.indexOf('export const loadGlobalSettings')
+    globalSettingsLogicSource.length
   );
   const mainContentSearchItemStart = settingsSectionLogicSource.indexOf(
     "id: 'appearance-main-content-position'"
@@ -1138,6 +1160,8 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
     build?: {
       appId?: string;
       productName?: string;
+      asar?: boolean;
+      asarUnpack?: string | string[];
       directories?: { output?: string };
       afterPack?: string;
       extraFiles?: Array<{
@@ -1190,6 +1214,8 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
   assert.equal(packageJson.build?.appId, 'com.netraflow.app');
   assert.equal(packageJson.build?.productName, 'NetraFlow');
   assert.equal(packageJson.build?.directories?.output, 'release/installer');
+  assert.equal(packageJson.build?.asar, true);
+  assert.equal(packageJson.build?.asarUnpack, undefined);
   assert.equal(packageJson.build?.afterPack, 'scripts/after-pack-installer.mjs');
   assert.deepEqual(packageJson.build?.extraFiles?.[0], {
     from: 'build/licenses',
@@ -1234,7 +1260,7 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
   );
   assert.equal(mainSource.includes('const isPortableBuild = () =>'), true);
   assert.equal(mainSource.includes("process.env.NETRAFLOW_PORTABLE === '1'"), true);
-  assert.equal(mainSource.includes("path.join(process.resourcesPath, 'app', 'portable.flag')"), true);
+  assert.equal(mainSource.includes("path.join(app.getAppPath(), 'portable.flag')"), true);
   assert.equal(mainSource.includes("path.join(process.resourcesPath, 'portable.flag')"), true);
   assert.equal(mainSource.includes("const USERDATA_DIR_NAME = 'userdata';"), true);
   assert.equal(mainSource.includes("const RUNTIME_DIR_NAME = 'runtime';"), true);
@@ -1246,14 +1272,16 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
   assert.equal(mainSource.includes('const getPortableRootPath = () =>'), true);
   assert.equal(mainSource.includes('const getDevProjectRootPath = () => app.getAppPath();'), true);
   assert.equal(mainSource.includes('return isPortableBuild() ? getPortableRootPath() : getPackagedInstallRootPath();'), true);
-  assert.equal(mainSource.includes('path.join(getAppInstallRootPath(), USERDATA_DIR_NAME)'), true);
+  assert.equal(mainSource.includes('const getNfUserDataRootPath = () => {'), true);
+  assert.equal(mainSource.includes('return persistenceRoots.realRoot;'), true);
+  assert.equal(mainSource.includes('createPersistenceEnvironmentRoots({'), true);
   assert.equal(mainSource.includes('path.join(getAppInstallRootPath(), RUNTIME_DIR_NAME)'), true);
   assert.equal(mainSource.includes('path.join(getNfRuntimeRootPath(), SESSION_DATA_DIR_NAME)'), true);
   assert.equal(mainSource.includes('path.join(getNfRuntimeRootPath(), CACHE_DIR_NAME)'), true);
   assert.equal(mainSource.includes('path.join(getNfRuntimeRootPath(), CRASH_DUMPS_DIR_NAME)'), true);
-  assert.equal(mainSource.includes('const getLegacyPortableUserDataPath = () =>'), true);
-  assert.equal(mainSource.includes("path.join(path.dirname(process.execPath), LEGACY_PORTABLE_USER_DATA_DIR_NAME)"), true);
-  assert.equal(mainSource.includes('if (app.isPackaged) {\n    stageLegacyLocalStorageIfNeeded(runtimeUserDataPath);\n  }'), true);
+  assert.equal(mainSource.includes('const getLegacyPortableUserDataPath = () =>'), false);
+  assert.equal(mainSource.includes("path.join(path.dirname(process.execPath), LEGACY_PORTABLE_USER_DATA_DIR_NAME)"), false);
+  assert.equal(mainSource.includes('if (app.isPackaged) {\n    stageLegacyLocalStorageIfNeeded(runtimeUserDataPath);\n  }'), false);
   assert.equal(mainSource.includes('mkdirSync(userDataRootPath, { recursive: true });'), true);
   assert.equal(mainSource.includes("app.setPath('userData', runtimeUserDataPath);"), true);
   assert.equal(mainSource.includes("app.setPath('sessionData', sessionDataPath);"), true);
@@ -1280,6 +1308,9 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
   assert.equal(packageInstallerScriptSource.includes("publish: 'never'"), true);
   assert.equal(packageInstallerScriptSource.includes('output: outputDir'), true);
   assert.equal(packageInstallerScriptSource.includes("rmSync(path.join(outputDir, 'win-unpacked')"), true);
+  assert.equal(packageInstallerScriptSource.includes("path.join(unpackedResourcesDir, 'app.asar')"), true);
+  assert.equal(packageInstallerScriptSource.includes("path.join(unpackedResourcesDir, 'app')"), true);
+  assert.equal(packageInstallerScriptSource.includes("path.join(unpackedResourcesDir, 'app.asar.unpacked', 'node_modules')"), true);
   assert.equal(packageInstallerScriptSource.includes("'builder-debug.yml', 'latest.yml'"), true);
   assert.equal(packageInstallerScriptSource.includes('`${productName}_${version}_Setup.exe`'), true);
   assert.equal(/node:child_process|spawnSync|powershell|cmd(?:\.exe)?|icacls|ExecWait|nsExec::|\.ps1|\.cmd|\.bat/i.test(packageInstallerScriptSource), false);
@@ -1367,6 +1398,9 @@ test('Windows installer install directory and uninstall cleanup rules are wired'
   const electronBuilderInstallerTemplateSource = readProjectFile(
     'node_modules/app-builder-lib/templates/nsis/installer.nsi'
   );
+  const electronBuilderMultiUserTemplateSource = readProjectFile(
+    'node_modules/app-builder-lib/templates/nsis/multiUser.nsh'
+  );
   const packageSource = readProjectFile('package.json');
   const registryCleanupSource = installerSource.slice(
     installerSource.indexOf('!macro NetraFlowCleanupRegistryRoots'),
@@ -1390,6 +1424,7 @@ test('Windows installer install directory and uninstall cleanup rules are wired'
     cleanupInstallRootsSource,
     finalUninstallUiSource
   ].join('\n');
+  const countStringOccurrences = (source: string, needle: string) => source.split(needle).length - 1;
   const installerCustomCopyTexts = [
     'MUI_PAGE_HEADER_TEXT',
     'MUI_PAGE_HEADER_SUBTEXT',
@@ -1439,10 +1474,17 @@ test('Windows installer install directory and uninstall cleanup rules are wired'
   assert.equal(installerSource.includes('GetLogicalDrives'), false);
   assert.equal(installerSource.includes('GetDriveTypeW'), true);
   assert.equal(installerSource.includes('System::Call'), true);
+  assert.equal(installerSource.includes('SHGetKnownFolderPath'), false);
   assert.equal(installerSource.includes('${If} $3 != $1'), true);
   assert.equal(installerSource.includes('${If} $5 == 3'), true);
-  assert.equal(installerSource.includes('StrCpy $INSTDIR "$4${NETRAFLOW_INSTALL_DIR_NAME}"'), true);
+  assert.equal(
+    countStringOccurrences(installerSource, 'StrCpy $INSTDIR "$4${NETRAFLOW_INSTALL_DIR_NAME}"'),
+    3
+  );
   assert.equal(installerSource.includes('StrCpy $INSTDIR "$LOCALAPPDATA\\Programs\\${NETRAFLOW_INSTALL_DIR_NAME}"'), true);
+  assert.equal(installerSource.includes('${If} $INSTDIR != ""'), true);
+  assert.equal(installerSource.includes('StrCpy $0 "$LOCALAPPDATA\\Programs\\${NETRAFLOW_INSTALL_DIR_NAME}"'), true);
+  assert.equal(installerSource.includes('${If} $INSTDIR != $0'), true);
   assert.equal(installerSource.includes('StrCpy $INSTDIR "$0\\${NETRAFLOW_INSTALL_DIR_NAME}"'), false);
   assert.equal(installerSource.includes('Function NetraFlowNormalizeInstallDir'), false);
   assert.equal(installerSource.includes('Function .onVerifyInstDir'), true);
@@ -1463,6 +1505,13 @@ test('Windows installer install directory and uninstall cleanup rules are wired'
   assert.equal(installerSource.includes('MUI_UNPAGE_COMPONENTS'), false);
   assert.equal(electronBuilderInstallerTemplateSource.includes('!ifmacrodef customUnInstallSection'), true);
   assert.equal(electronBuilderInstallerTemplateSource.includes('!insertmacro MUI_UNPAGE_COMPONENTS'), true);
+  assert.equal(electronBuilderMultiUserTemplateSource.includes('!macro setInstallModePerUser'), true);
+  assert.equal(electronBuilderMultiUserTemplateSource.includes('StrCpy $installMode CurrentUser'), true);
+  assert.equal(electronBuilderMultiUserTemplateSource.includes('SetShellVarContext current'), true);
+  assert.equal(electronBuilderMultiUserTemplateSource.includes('ReadRegStr $perUserInstallationFolder HKCU'), true);
+  assert.equal(electronBuilderMultiUserTemplateSource.includes('StrCpy $0 "$LocalAppData\\Programs"'), true);
+  assert.equal(electronBuilderMultiUserTemplateSource.includes('!insertmacro GetDParameter $R0'), true);
+  assert.equal(electronBuilderMultiUserTemplateSource.includes('StrCpy $INSTDIR $R0'), true);
   assert.equal(installerSource.includes('Section "Uninstall"'), false);
   assert.equal(installerSource.includes('Section "un.Uninstall"'), false);
   assert.equal(installerSource.includes('Section "-NetraFlow final cleanup"'), false);
@@ -1474,15 +1523,21 @@ test('Windows installer install directory and uninstall cleanup rules are wired'
   assert.equal(installerSource.includes('仅为我安装'), false);
   assert.equal(finalUninstallUiSource.includes('!macro customUnWelcomePage'), true);
   assert.equal(finalUninstallUiSource.includes('UninstPage custom un.NetraFlowDeleteLocalUserDataPage un.NetraFlowDeleteLocalUserDataPageLeave'), true);
+  assert.equal(finalUninstallUiSource.includes('UninstPage custom un.NetraFlowPreserveLocalUserDataPage'), false);
   assert.equal(finalUninstallUiSource.includes('StrCpy $NetraFlowDeleteLocalUserData "1"'), true);
   assert.equal(installerSource.includes('Var NetraFlowDeleteLocalUserData'), true);
+  assert.equal(installerSource.includes('Var NetraFlowDeleteLocalUserDataCheckbox'), true);
   assert.equal(finalUninstallUiSource.includes('${NSD_CreateLabel} 0u 0u 100% 14u "卸载选项"'), true);
   assert.equal(finalUninstallUiSource.includes('${NSD_CreateLabel} 0u 22u 100% 16u "选择是否同时删除 NetraFlow 的本地用户数据"'), true);
   assert.equal(finalUninstallUiSource.includes('${NSD_CreateLabel} 0u 44u 100% 16u "取消勾选将保留账户、历史记录和用户设置"'), true);
-  assert.equal(finalUninstallUiSource.includes('选择是否同时删除 NetraFlow 的本地用户数据。'), false);
-  assert.equal(finalUninstallUiSource.includes('取消勾选将保留账户、历史记录和用户设置。'), false);
+  assert.equal(finalUninstallUiSource.includes('${NSD_CreateLabel} 0u 22u 100% 16u "卸载会删除程序文件并保留本地用户数据"'), false);
+  assert.equal(finalUninstallUiSource.includes('${NSD_CreateLabel} 0u 44u 100% 16u "用户数据将保留在原安装目录的 userdata 中"'), false);
+  assert.equal(finalUninstallUiSource.includes('${NSD_CreateLabel} 0u 66u 100% 16u "确认不再需要后可手动删除该目录"'), false);
+  assert.equal(finalUninstallUiSource.includes('卸载会删除程序文件并保留本地用户数据。'), false);
+  assert.equal(finalUninstallUiSource.includes('用户数据将保留在原安装目录的 userdata 中。'), false);
   assert.equal(finalUninstallUiSource.includes('${NSD_CreateCheckbox} 0u 76u 100% 14u "删除本地用户数据"'), true);
   assert.equal(finalUninstallUiSource.includes('${NSD_Check} $NetraFlowDeleteLocalUserDataCheckbox'), true);
+  assert.equal(finalUninstallUiSource.includes('${NSD_GetState} $NetraFlowDeleteLocalUserDataCheckbox $0'), true);
   assert.equal(finalUninstallUiSource.includes('MessageBox'), false);
 
   assert.equal(installerSource.includes('Function un.NetraFlowResolveCurrentAccountIdentity'), false);
@@ -1501,13 +1556,52 @@ test('Windows installer install directory and uninstall cleanup rules are wired'
   assert.equal(cleanupInstallRootsSource.includes('Call un.NetraFlowRemoveCurrentAccountUserDataDir'), false);
   assert.equal(cleanupInstallRootsSource.includes('${If} $NetraFlowDeleteLocalUserData == "1"'), true);
   assert.equal(cleanupInstallRootsSource.includes('Call un.NetraFlowRemoveInstallResidues'), true);
+  assert.equal(cleanupInstallRootsSource.includes('Call un.NetraFlowEnsureInstallDir'), false);
   assert.equal(cleanupInstallRootsSource.includes('!insertmacro NetraFlowRemoveRuntimeEntries $INSTDIR'), true);
   assert.equal(cleanupInstallRootsSource.includes('RMDir /r "$INSTDIR\\${NETRAFLOW_USERDATA_DIR_NAME}"'), true);
   assert.equal(cleanupInstallRootsSource.includes('!insertmacro NetraFlowRemoveInstallDirIfAllowed'), true);
+  assert.equal(cleanupInstallRootsSource.includes('!insertmacro NetraFlowCleanupRegistryRoots'), true);
+  assert.equal(finalUninstallBehaviorSource.includes('${If} $NetraFlowDeleteLocalUserData == "1"'), true);
+  assert.equal(finalUninstallBehaviorSource.includes('RMDir /r "$INSTDIR\\${NETRAFLOW_USERDATA_DIR_NAME}"'), true);
+  assert.equal(finalUninstallBehaviorSource.includes('RMDir /r "$INSTDIR\\${NETRAFLOW_DEMO_DIR_NAME}"'), true);
   assert.equal(installerSource.includes('Push "$INSTDIR\\${NETRAFLOW_USERDATA_DIR_NAME}"'), false);
   assert.equal(installerSource.includes('RMDir /r "$INSTDIR\\${NETRAFLOW_USERDATA_DIR_NAME}"'), true);
   assert.equal(installerSource.includes('Push "$INSTDIR\\${NETRAFLOW_RUNTIME_DIR_NAME}"'), false);
   assert.equal(installerSource.includes('!macro NetraFlowRemoveRuntimeEntries ROOT'), true);
+  assert.equal(installerSource.includes('Var NetraFlowInstallUserDataBackupDir'), false);
+  assert.equal(installerSource.includes('StrCmp $INSTDIR "" useNetraFlowDefault'), false);
+  assert.equal(installerSource.includes('StrCpy $0 "$LOCALAPPDATA\\Programs\\${NETRAFLOW_INSTALL_DIR_NAME}"'), true);
+  assert.equal(installerSource.includes('StrCmp $INSTDIR $0 useNetraFlowDefault'), false);
+  assert.equal(installerSource.includes('Call NetraFlowFindDefaultInstallDir'), true);
+  assert.equal(installerSource.includes('Function NetraFlowPrepareExistingUserDataForInstall'), false);
+  assert.equal(installerSource.includes('Function NetraFlowRestoreExistingUserDataAfterInstall'), false);
+  assert.equal(installerSource.includes('Call NetraFlowPrepareExistingUserDataForInstall'), false);
+  assert.equal(installerSource.includes('NetraFlowInstallUserDataBackupDir'), false);
+  assert.equal(installerSource.includes('Call NetraFlowRestoreExistingUserDataAfterInstall'), false);
+  assert.equal(installerSource.includes('userdata.install-backup'), false);
+  assert.equal(installerSource.includes('.userdata.install-backup'), false);
+  assert.equal(installerSource.includes('install-backup'), false);
+  assert.equal(installerSource.includes('StdUtils.GetAllParameters'), false);
+  assert.equal(installerSource.includes('StrCpy $0 "$CMDLINE"'), false);
+  assert.equal(installerSource.includes('${If} $4 == "/D="'), false);
+  assert.equal(installerSource.includes('!define NETRAFLOW_DEMO_DIR_NAME ".demo"'), true);
+  assert.equal(installerSource.includes('!define NETRAFLOW_UNINSTALL_FILENAME "Uninstall ${NETRAFLOW_PRODUCT_NAME}.exe"'), false);
+  assert.equal(installerSource.includes('!define NETRAFLOW_INSTALL_REGISTRY_KEY "Software\\${APP_GUID}"'), false);
+  assert.equal(installerSource.includes('!define /ifndef UNINSTALL_FILENAME'), false);
+  assert.equal(installerSource.includes('Function un.NetraFlowEnsureInstallDir'), false);
+  assert.equal(installerSource.includes('Function un.NetraFlowRestoreInstallDirFromRegistry'), false);
+  assert.equal(installerSource.includes('ReadRegStr $1 HKCU "${NETRAFLOW_INSTALL_REGISTRY_KEY}" InstallLocation'), false);
+  assert.equal(
+    countStringOccurrences(installerSource, 'ReadRegStr $1 HKCU "${NETRAFLOW_INSTALL_REGISTRY_KEY}" InstallLocation'),
+    0
+  );
+  assert.equal(installerSource.includes('ReadRegStr $0 SHELL_CONTEXT "${NETRAFLOW_INSTALL_REGISTRY_KEY}" InstallLocation'), false);
+  assert.equal(installerSource.includes('StrCpy $INSTDIR "$1"'), false);
+  assert.equal(installerSource.includes('StrCpy $NetraFlowResolvedInstallDir "$1"'), false);
+  assert.equal(installerSource.includes('NetraFlowResolvedInstallDir'), false);
+  assert.equal(installerSource.includes('GetFullPathName $0 "$EXEPATH\\.."'), false);
+  assert.equal(installerSource.includes('$EXEPATH\\..'), false);
+  assert.equal(installerSource.includes('$EXEPATH'), false);
   assert.equal(installerSource.includes('RMDir /r "${ROOT}\\${NETRAFLOW_RUNTIME_DIR_NAME}"'), true);
   assert.equal(installerSource.includes('RMDir /r "${ROOT}\\Local Storage"'), true);
   assert.equal(installerSource.includes('Delete "${ROOT}\\Preferences"'), true);
@@ -1529,9 +1623,14 @@ test('Windows installer install directory and uninstall cleanup rules are wired'
   assert.equal(installerSource.includes('!macro NetraFlowRemoveLegacyProfileDirs USER_ROOT'), false);
   assert.equal(installerSource.includes('!macro NetraFlowRemoveLegacyProfileDirs'), true);
   assert.equal(installerSource.includes('RMDir /r "$TEMP\\${NETRAFLOW_PRODUCT_NAME}"'), true);
+  assert.equal(installerSource.includes('Function un.NetraFlowScheduleNsisTempCleanup'), true);
+  assert.equal(installerSource.includes('StrCpy $0 "$TEMP\\~nsu.tmp"'), true);
+  assert.equal(installerSource.includes('rmdir /S /Q "$0"'), true);
+  assert.equal(finalUninstallBehaviorSource.includes('Call un.NetraFlowScheduleNsisTempCleanup'), true);
   assert.equal(installerSource.includes('RMDir /r "${USER_ROOT}\\AppData\\Local\\Temp\\${NETRAFLOW_PRODUCT_NAME}"'), false);
   assert.equal(installerSource.includes('SetShellVarContext all'), false);
   assert.equal(installerSource.includes('Delete "$INSTDIR\\${UNINSTALL_FILENAME}"'), true);
+  assert.equal(installerSource.includes('Delete "$INSTDIR\\${NETRAFLOW_UNINSTALL_FILENAME}"'), false);
   assert.equal(installerSource.includes('Delete /REBOOTOK'), false);
   assert.equal(installerSource.includes('Delete "$INSTDIR\\installer.exe"'), true);
   assert.equal(installerSource.includes('RMDir /r "$INSTDIR\\resources"'), true);
@@ -1541,7 +1640,7 @@ test('Windows installer install directory and uninstall cleanup rules are wired'
   assert.equal(finalUninstallUiSource.includes('!insertmacro NetraFlowRemoveLegacyProfileDirs'), true);
 
   assert.equal(/powershell/i.test(finalUninstallBehaviorSource), false);
-  assert.equal(/cmd(?:\.exe)?/i.test(finalUninstallBehaviorSource), false);
+  assert.equal(countStringOccurrences(finalUninstallBehaviorSource, '$SYSDIR\\cmd.exe'), 1);
   assert.equal(/reg\.exe/i.test(finalUninstallBehaviorSource), false);
   assert.equal(/icacls/i.test(finalUninstallBehaviorSource), false);
   assert.equal(finalUninstallBehaviorSource.includes('ExecWait'), false);
@@ -1554,6 +1653,21 @@ test('Windows installer install directory and uninstall cleanup rules are wired'
   assert.equal(installerSource.includes('DeleteRegKey HKLM "Software\\netraflow"'), false);
   assert.equal(installerSource.includes('DeleteRegKey HKCU "Software\\${NETRAFLOW_APP_ID}"'), true);
   assert.equal(installerSource.includes('DeleteRegKey HKLM "Software\\${NETRAFLOW_APP_ID}"'), false);
+  assert.equal(installerSource.includes('DeleteRegKey HKCU "Software\\${APP_GUID}"'), true);
+  assert.equal(
+    installerSource.includes('DeleteRegKey HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${APP_GUID}"'),
+    true
+  );
+  assert.equal(
+    installerSource.includes(
+      'DeleteRegKey HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${UNINSTALL_APP_KEY}"'
+    ),
+    true
+  );
+  assert.equal(cleanupInstallRootsSource.includes('DeleteRegKey'), false);
+  assert.equal(installerSource.includes('Delete "$SMPROGRAMS\\${NETRAFLOW_PRODUCT_NAME}.lnk"'), true);
+  assert.equal(cleanupInstallRootsSource.includes('Abort'), false);
+  assert.equal(cleanupInstallRootsSource.includes('Quit'), false);
   assert.equal(installerSource.includes('AppListBackup'), false);
   assert.equal(installerSource.includes('RegEnumValueW'), false);
   assert.equal(installerSource.includes('RegEnumKeyExW'), false);
@@ -1565,7 +1679,7 @@ test('Windows installer install directory and uninstall cleanup rules are wired'
   assert.equal(installerSource.includes('NetraFlowMarkIfRegValueDataContainsNeedles'), false);
   assert.equal(installerSource.includes('W~com.netraflow.app'), false);
   assert.equal(installerSource.includes('EnumRegValue'), false);
-  assert.equal(installerSource.includes('ReadRegStr'), false);
+  assert.equal(installerSource.includes('ReadRegStr $2 HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\AppListBackup"'), false);
   assert.equal(installerSource.includes('EnumRegValue $1 HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\AppListBackup" $0'), false);
   assert.equal(installerSource.includes('ReadRegStr $2 HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\AppListBackup" "$1"'), false);
   assert.equal(installerSource.includes('DeleteRegValue HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\AppListBackup" "$1"'), false);
@@ -1611,20 +1725,25 @@ test('packaged first launch starts with empty real data and excludes runtime sto
     lifecycleControllerSource.indexOf('const startExampleMode')
   );
 
-  assert.equal(appSource.includes('const initialGroups: AssetGroup[] = [];'), true);
+  assert.equal(appSource.includes('const startupPersistenceState = (() => {'), true);
+  assert.equal(appSource.includes('snapshot: readRuntimePersistenceSnapshot()'), true);
+  assert.equal(appSource.includes('StartupPersistenceErrorScreen'), true);
+  assert.equal(appSource.includes('核心数据读取失败'), true);
+  assert.equal(appSource.includes('NetraFlow 未修改现有核心数据文件'), true);
+  assert.equal(appSource.includes('const initialGroups: AssetGroup[] = [];'), false);
   assert.equal(appSource.includes('default-cash'), false);
   assert.equal(appSource.includes('default-bank-card'), false);
   assert.equal(appSource.includes('default-stock'), false);
   assert.equal(appSource.includes('default-credit-card'), false);
   assert.equal(appSource.includes('const DEFAULT_FIRST_WELCOME_STATE'), false);
   assert.equal(firstWelcomeStateSource.includes('export const DEFAULT_FIRST_WELCOME_STATE'), true);
-  assert.equal(firstWelcomeStateSource.includes('const FIRST_WELCOME_FOOTPRINT_STORAGE_KEYS'), true);
+  assert.equal(firstWelcomeStateSource.includes('const FIRST_WELCOME_FOOTPRINT_STORAGE_KEYS'), false);
   assert.equal(firstWelcomeStateSource.includes('export const normalizeFirstWelcomeState'), true);
-  assert.equal(firstWelcomeStateSource.includes('export const loadFirstWelcomeState'), true);
-  assert.equal(firstWelcomeStateSource.includes('export const saveFirstWelcomeState'), true);
+  assert.equal(firstWelcomeStateSource.includes('export const loadFirstWelcomeState'), false);
+  assert.equal(firstWelcomeStateSource.includes('export const saveFirstWelcomeState'), false);
   assert.equal(firstWelcomeStateSource.includes('export const shouldShowFirstWelcome'), true);
-  assert.equal(firstWelcomeStateSource.includes('FIRST_WELCOME_STORAGE_KEY'), true);
-  assert.equal(firstWelcomeStateSource.includes('GLOBAL_SETTINGS_STORAGE_KEY'), true);
+  assert.equal(firstWelcomeStateSource.includes('FIRST_WELCOME_STORAGE_KEY'), false);
+  assert.equal(firstWelcomeStateSource.includes('GLOBAL_SETTINGS_STORAGE_KEY'), false);
   assert.equal(appSource.includes('<FirstWelcomeLayer'), true);
   assert.equal(appSource.includes('<SecretConsoleLayer'), true);
   assert.equal(firstWelcomeLayerSource.includes('Halo, 你好像是第一次来到净流，需要跟我一起看看吗？'), true);
@@ -1635,15 +1754,15 @@ test('packaged first launch starts with empty real data and excludes runtime sto
   assert.equal(secretConsoleLayerSource.includes('className="secret-console-layer"'), true);
   assert.equal(secretConsoleLayerSource.includes('aria-label="隐藏控制台"'), true);
   assert.equal(appSource.includes('const runSecretConsoleCommand = (rawCommand: string) =>'), true);
-  assert.equal(chooseFirstWelcomeStoryRouteSource.includes('completeFirstWelcome();'), true);
-  assert.equal(chooseFirstWelcomeStoryRouteSource.includes('startExampleMode(templateId);'), true);
+  assert.equal(chooseFirstWelcomeStoryRouteSource.includes('completeFirstWelcome();'), false);
+  assert.equal(chooseFirstWelcomeStoryRouteSource.includes('startExampleModeSession(templateId);'), true);
   assert.equal(
-    lifecycleControllerSource.includes('applyExampleGeneratedData(createExampleData(templateId))'),
+    appSource.includes('createDemoRuntimePersistenceSnapshot(templateId)'),
     true
   );
-  assert.equal(applyExampleGeneratedDataSource.includes('saveAppData'), false);
-  assert.equal(applyExampleGeneratedDataSource.includes('applyLifecycleSnapshot('), true);
-  assert.equal(applyExampleGeneratedDataSource.includes('false'), true);
+  assert.equal(appSource.includes('enterDemoPersistenceEnvironment('), true);
+  assert.equal(appSource.includes('applyRuntimePersistenceSnapshot(transition.snapshot, true);'), true);
+  assert.equal(appSource.includes('applyRuntimePersistenceSnapshot(transition.snapshot, false);'), true);
   assert.equal(lifecycleControllerSource.includes('applyBackupState('), true);
 
   for (const excludedPath of [
@@ -1665,7 +1784,8 @@ test('packaged first launch starts with empty real data and excludes runtime sto
     '!**/Network/**',
     '!**/Shared Dictionary/**',
     '!release/**',
-    '!**/AppData/**'
+    '!**/AppData/**',
+    '!**/.demo/**'
   ]) {
     assert.equal(packageJson.build?.files?.includes(excludedPath), true);
   }
@@ -1677,13 +1797,14 @@ test('packaged first launch starts with empty real data and excludes runtime sto
   assert.equal(/cmd(?:\.exe)?/i.test(portableScriptSource), false);
   assert.equal(/icacls/i.test(portableScriptSource), false);
   assert.equal(/\.ps1|\.cmd|\.bat/i.test(portableScriptSource), false);
+  assert.equal(portableScriptSource.includes("'.demo'"), true);
   assert.equal(portableScriptSource.includes("'userdata'"), true);
   assert.equal(portableScriptSource.includes("'runtime'"), true);
   assert.equal(portableScriptSource.includes("'logs'"), true);
   assert.equal(portableScriptSource.includes("'Local Storage'"), true);
   assert.equal(portableScriptSource.includes("'IndexedDB'"), true);
   assert.equal(portableScriptSource.includes("'Preferences'"), true);
-  assert.equal(portableScriptSource.includes('removeRuntimeDataEntries(appDir);'), true);
+  assert.equal(portableScriptSource.includes('removeRuntimeDataEntries(appDir);'), false);
   assert.equal(portableScriptSource.includes('removeRuntimeDataEntries(portableRootDir);'), true);
 });
 
@@ -1697,14 +1818,17 @@ test('portable Windows package script creates an isolated zip bundle without ins
   assert.equal(packageJson.scripts?.['dist:portable'], 'node scripts/package-portable.mjs');
   assert.equal(portableScriptSource.includes("prepareVersionedReleaseDir('portable', version)"), true);
   assert.equal(portableScriptSource.includes('`${bundleName}_Portable.zip`'), true);
-  assert.equal(portableScriptSource.includes("writeFileSync(path.join(appDir, 'portable.flag')"), true);
-  assert.equal(mainSource.includes("path.join(process.resourcesPath, 'app', 'portable.flag')"), true);
-  assert.equal(mainSource.includes("path.join(app.getPath('appData'), APP_NAME)"), true);
-  assert.equal(mainSource.includes("path.join(getAppInstallRootPath(), USERDATA_DIR_NAME)"), true);
+  assert.equal(portableScriptSource.includes('writeFileSync(portableFlagPath'), true);
+  assert.equal(mainSource.includes("path.join(app.getAppPath(), 'portable.flag')"), true);
+  assert.equal(mainSource.includes("path.join(process.resourcesPath, 'app', 'portable.flag')"), false);
+  assert.equal(mainSource.includes("path.join(app.getPath('appData'), APP_NAME)"), false);
+  assert.equal(mainSource.includes('const getNfUserDataRootPath = () => {'), true);
+  assert.equal(mainSource.includes('return persistenceRoots.realRoot;'), true);
+  assert.equal(mainSource.includes('createPersistenceEnvironmentRoots({'), true);
   assert.equal(mainSource.includes("path.join(getAppInstallRootPath(), RUNTIME_DIR_NAME)"), true);
   assert.equal(mainSource.includes('getWindowsAccountKey'), false);
   assert.equal(mainSource.includes('.windows-account'), false);
-  assert.equal(mainSource.includes("path.join(path.dirname(process.execPath), LEGACY_PORTABLE_USER_DATA_DIR_NAME)"), true);
+  assert.equal(mainSource.includes("path.join(path.dirname(process.execPath), LEGACY_PORTABLE_USER_DATA_DIR_NAME)"), false);
   assert.equal(mainSource.includes("app.setPath('userData', path.join(path.dirname(process.execPath), 'userData'))"), false);
   assert.equal(mainSource.includes("'Cache'"), false);
   assert.equal(mainSource.includes("'Code Cache'"), false);
@@ -1714,6 +1838,9 @@ test('portable Windows package script creates an isolated zip bundle without ins
   assert.equal(portableScriptSource.includes("import { Arch, Platform, build } from 'electron-builder';"), true);
   assert.equal(portableScriptSource.includes("Platform.WINDOWS.createTarget(['dir'], Arch.x64)"), true);
   assert.equal(portableScriptSource.includes("packagedAppDir = path.join(stagingOutputDir, 'win-unpacked')"), true);
+  assert.equal(portableScriptSource.includes("appAsarPath = path.join(resourcesDir, 'app.asar')"), true);
+  assert.equal(portableScriptSource.includes("portableFlagPath = path.join(resourcesDir, 'portable.flag')"), true);
+  assert.equal(portableScriptSource.includes('listPackage(appAsarPath)'), true);
   assert.equal(portableScriptSource.includes('cpSync(packagedAppDir, portableRootDir'), true);
   assert.equal(portableScriptSource.includes("path.join(rootDir, 'node_modules', 'electron', 'dist')"), true);
   assert.equal(portableScriptSource.includes("path.join(portableRootDir, 'electron.exe')"), false);
@@ -1734,6 +1861,7 @@ test('portable Windows package script creates an isolated zip bundle without ins
   assert.equal(portableScriptSource.includes("'LICENSES.chromium.html'"), true);
   assert.equal(portableScriptSource.includes('assertNoForbiddenPortableEntries(portableRootDir)'), true);
   for (const forbiddenEntry of [
+    "'.demo'",
     "'userData'",
     "'userdata'",
     "'runtime'",
@@ -1794,7 +1922,7 @@ test('release packaging scripts use versioned output folders and safe release cl
     resourcePatchSource
   ].join('\n');
 
-  assert.equal(packageJson.version, '0.9.7');
+  assert.equal(packageJson.version, '0.9.8');
   assert.equal(packageJson.scripts?.['clean:release'], 'node scripts/clean-release.mjs');
   assert.equal(packageJson.scripts?.['dist:installer'], 'node scripts/package-installer.mjs');
   assert.equal(packageJson.scripts?.['dist:portable'], 'node scripts/package-portable.mjs');
@@ -1804,6 +1932,8 @@ test('release packaging scripts use versioned output folders and safe release cl
   assert.equal(releaseCheckSource.includes('rmSync'), false);
   assert.equal(releaseCheckLogicSource.includes('evaluateReleaseCheck'), true);
   assert.equal(releaseCheckLogicSource.includes('formatReleaseCheckReport'), true);
+  assert.equal(releaseCheckLogicSource.includes('checkAsarConfig'), true);
+  assert.equal(releaseCheckLogicSource.includes('electron-builder asar must be true'), true);
   assert.equal(releaseCheckLogicSource.includes('execFileSync'), true);
   assert.equal(releaseCheckLogicSource.includes('writeFile'), false);
   assert.equal(releaseCheckLogicSource.includes('mkdir'), false);
@@ -1823,9 +1953,35 @@ test('release packaging scripts use versioned output folders and safe release cl
   assert.equal(releaseUtilsSource.includes('/^(?:installer|portable)$/'), true);
   assert.equal(cleanReleaseSource.includes('cleanReleaseDirectory();'), true);
   assert.equal(installerScriptSource.includes("prepareVersionedReleaseDir('installer', version)"), true);
+  assert.equal(installerScriptSource.includes('NETRAFLOW_INSTALLER_DIAGNOSTICS'), true);
+  assert.equal(installerScriptSource.includes("path.join(rootDir, 'release-diagnostics', 'installer')"), true);
+  assert.equal(installerScriptSource.includes('patchElectronBuilderPerUserInstallModeTemplate'), true);
+  assert.equal(installerScriptSource.includes("expectedElectronBuilderVersion = '26.8.1'"), true);
+  assert.equal(installerScriptSource.includes("expectedAppBuilderLibVersion = '26.8.1'"), true);
+  assert.equal(installerScriptSource.includes('assertElectronBuilderPatchDependencyVersions'), true);
+  assert.equal(installerScriptSource.includes('Refusing to patch electron-builder NSIS template for an unverified dependency version'), true);
+  assert.equal(installerScriptSource.includes("app-builder-lib',"), true);
+  assert.equal(installerScriptSource.includes("'multiUser.nsh'"), true);
+  assert.equal(installerScriptSource.includes('SHGetKnownFolderPath'), true);
+  assert.equal(installerScriptSource.includes('System::Store S'), true);
+  assert.equal(installerScriptSource.includes('System::Store L'), true);
+  assert.equal(
+    installerScriptSource.includes('NetraFlow keeps per-user installs under LocalAppData\\\\Programs'),
+    true
+  );
+  assert.equal(
+    installerScriptSource.includes('NSIS System.dll can crash before the later /D= override is applied'),
+    true
+  );
+  assert.equal(installerScriptSource.includes('source.includes(safeKnownFolderBlockLf)'), true);
+  assert.equal(installerScriptSource.includes('expected per-user known-folder block was not found'), true);
   assert.equal(installerScriptSource.includes("Platform.WINDOWS.createTarget(['nsis'], Arch.x64)"), true);
   assert.equal(installerScriptSource.includes('output: outputDir'), true);
+  assert.equal(installerScriptSource.includes("path.join(unpackedResourcesDir, 'app.asar')"), true);
+  assert.equal(installerScriptSource.includes("path.join(unpackedResourcesDir, 'app')"), true);
+  assert.equal(installerScriptSource.includes("path.join(unpackedResourcesDir, 'app.asar.unpacked', 'node_modules')"), true);
   assert.equal(installerScriptSource.includes("'builder-debug.yml', 'latest.yml'"), true);
+  assert.equal(installerScriptSource.includes('if (!isDiagnosticsRun)'), true);
   assert.equal(installerScriptSource.includes('`${productName}_${version}_Setup.exe`'), true);
   assert.equal(installerScriptSource.includes('unexpectedInstallerArtifacts'), true);
   assert.equal(installerScriptSource.includes('`${productName}_${version}_1_Setup.exe`'), false);
@@ -1930,7 +2086,7 @@ test('Windows taskbar lock uses Jump List IPC without tray or background hiding'
   assert.equal(mainSource.includes('.hide()'), false);
   assert.equal(mainSource.includes('autoUpdater'), false);
   assert.equal(mainSource.includes('electron-updater'), false);
-  assert.equal(mainSource.includes('event.preventDefault()'), false);
+  assert.equal(mainSource.includes("app.on('window-all-closed', (event"), false);
   assert.equal(mainSource.includes("app.on('window-all-closed'"), true);
   assert.equal(mainSource.includes("process.platform !== 'darwin'"), true);
   assert.equal(mainSource.includes('app.quit();'), true);
@@ -2072,13 +2228,16 @@ test('account add and restore page copy uses archived metadata without extra tit
   const appSource = readProjectFile('src/App.tsx');
   const accountDialogLayerSource = readProjectFile('src/app/accountDialogs/AccountDialogLayer.tsx');
   const accountEditorSource = readProjectFile('src/features/account/AccountEditorDialog.tsx');
+  const rightPanelRendererSource = readProjectFile('src/app/rightPanel/RightPanelRenderer.tsx');
   const stylesSource = readProjectStyles();
   const restorePanelSource = accountEditorSource.slice(
     accountEditorSource.indexOf('className="account-add-restore-panel"'),
     accountEditorSource.indexOf('className="account-add-restore-panel account-add-restore-panel--form"')
   );
 
-  assert.equal(restorePanelSource.includes('账户新增 / 恢复'), false);
+  assert.equal(restorePanelSource.includes('账户创建 / 恢复'), false);
+  assert.equal(accountEditorSource.includes('title="账户创建"'), true);
+  assert.equal(rightPanelRendererSource.includes("'账户创建 / 恢复'"), true);
   assert.equal(restorePanelSource.includes('简易搜索'), false);
   assert.equal(appSource.includes('归档旧账户'), false);
   assert.equal(appSource.includes('归档旧帐户'), false);
@@ -2362,7 +2521,7 @@ test('account detail operation copy and editor previews stay visually scoped', (
   assert.equal(accountActionsSource.includes('返回上一层'), false);
   assert.equal(dangerActionsSource.includes('归档与删除需要再次确认'), false);
   assert.equal(dangerActionsSource.includes('RightPanelSection'), false);
-  assert.equal(dangerActionsSource.includes('归档后可在账户新增 / 恢复中重新启用'), false);
+  assert.equal(dangerActionsSource.includes('归档后可在账户创建 / 恢复中重新启用'), false);
   assert.equal(dangerActionsSource.includes('删除后不可恢复'), false);
   assert.equal(dangerActionsSource.includes('<RightPanelActionButton label="归档账户" tone="danger"'), false);
   assert.equal(dangerActionsSource.includes('<RightPanelActionButton label="归档账户" onClick={onArchiveAccount} />'), true);
@@ -2733,7 +2892,7 @@ test('popup and system prompt copy removes sentence periods without touching dot
     ),
     false
   );
-  assert.equal(packageJson.version, '0.9.7');
+  assert.equal(packageJson.version, '0.9.8');
   assert.equal(
     userSettingsLogicSource.includes(
       'netraflow-settings-${year}${month}${day}-${hour}${minute}${second}.netraflow-settings.json'
@@ -3072,11 +3231,14 @@ test('asset group delete action uses danger styling and clears dangling group ui
     /\.account-type-action-button:disabled\s*\{[^}]*color: var\(--text-subtle\);[^}]*cursor: not-allowed;[^}]*opacity: 0\.46;[^}]*\}/s
   );
   assert.equal(deleteSource.includes('canDeleteAssetGroup(groupId, accounts)'), true);
+  assert.equal(deleteSource.includes('commitAppDataUpdate((latestData)'), true);
+  assert.equal(deleteSource.includes('canDeleteAssetGroup(groupId, latestData.accounts)'), true);
   assert.equal(
-    deleteSource.includes('deleteAssetGroupFromAppData({ groups: assetGroups, accounts, history }, groupId)'),
+    deleteSource.includes('deleteAssetGroupFromAppData(latestData, groupId)'),
     true
   );
-  assert.equal(deleteSource.includes('updateAppData(nextData)'), true);
+  assert.equal(deleteSource.includes('updateAppData(nextData)'), false);
+  assert.equal(deleteSource.includes('clearDeletedAssetGroupUiState(result.value.id, result.value.name)'), true);
   assert.equal(deleteSource.includes('saveAppData'), false);
   assert.equal(updateAppDataSource.includes('if (!isExampleMode)'), true);
   assert.equal(updateAppDataSource.includes('saveAppData(normalizedData)'), true);

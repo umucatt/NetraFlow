@@ -11,7 +11,10 @@ import {
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateRawSync } from 'node:zlib';
+import { listPackage } from '@electron/asar';
 import { Arch, Platform, build } from 'electron-builder';
+import { validatePortableAsarEntries } from './asar-entry-logic.mjs';
+import { assertPackagedRendererLoader } from './packaged-renderer-loader-logic.mjs';
 import { patchExecutableResources } from './patch-executable-resources.mjs';
 import { prepareVersionedReleaseDir } from './release-utils.mjs';
 
@@ -27,7 +30,8 @@ let zipPath = '';
 const electronDistDir = path.join(rootDir, 'node_modules', 'electron', 'dist');
 let appExePath = '';
 let resourcesDir = '';
-let appDir = '';
+let appAsarPath = '';
+let portableFlagPath = '';
 let stagingOutputDir = '';
 let packagedAppDir = '';
 const builtMainPath = path.join(rootDir, 'dist-electron', 'main.js');
@@ -39,6 +43,15 @@ const notoLicenseFiles = [
 const runtimeDataEntryNames = new Set([
   'userData',
   'userdata',
+  '.demo',
+  'core.json',
+  'core.json.tmp',
+  'settings.json',
+  'settings.json.tmp',
+  'state.json',
+  'state.json.tmp',
+  'security.json',
+  'security.json.tmp',
   'runtime',
   'logs',
   'Local Storage',
@@ -57,12 +70,18 @@ const runtimeDataEntryNames = new Set([
   'AppData',
   'netraflow-updater'
 ]);
+const runtimeDataEntryNameKeys = new Set(
+  [...runtimeDataEntryNames].map((entryName) => entryName.toLowerCase())
+);
 const installerOnlyEntryNames = new Set([
   'installer.exe',
   `Uninstall ${productName}.exe`,
   'uninstallerIcon.ico',
   'installerIcon.ico'
 ]);
+const installerOnlyEntryNameKeys = new Set(
+  [...installerOnlyEntryNames].map((entryName) => entryName.toLowerCase())
+);
 const forbiddenFileNamePatterns = [
   /^NetraFlow_.*_Setup\.exe(?:\..+)?$/i,
   /(^|[-_.])nsis([-_.]|$)/i
@@ -112,22 +131,36 @@ const assertNoForbiddenPortableEntries = (directory) => {
   }
 };
 
-const assertPackagedMainLoader = (mainPath) => {
-  const mainSource = readFileSync(mainPath, 'utf8');
-  const requiredSnippets = [
-    'app.isPackaged',
-    'process.resourcesPath',
-    "'app', 'dist', 'index.html'",
-    '!app.isPackaged && devServerUrl'
-  ];
-  const missingSnippet = requiredSnippets.find((snippet) => !mainSource.includes(snippet));
-
-  if (missingSnippet) {
-    throw new Error(`Electron main build is missing packaged loader snippet: ${missingSnippet}`);
+const assertNoForbiddenUnpackedEntries = (directory) => {
+  if (!existsSync(directory)) {
+    return;
   }
 
-  if (mainSource.includes('if (devServerUrl)')) {
-    throw new Error('Electron main build still allows packaged fallback to VITE_DEV_SERVER_URL.');
+  const failures = [];
+  const visit = (currentDirectory) => {
+    for (const entry of readdirSync(currentDirectory, { withFileTypes: true })) {
+      const entryPath = path.join(currentDirectory, entry.name);
+      const relativePath = path.relative(directory, entryPath);
+      const normalizedEntryName = entry.name.toLowerCase();
+
+      if (
+        normalizedEntryName === 'node_modules' ||
+        runtimeDataEntryNameKeys.has(normalizedEntryName) ||
+        installerOnlyEntryNameKeys.has(normalizedEntryName)
+      ) {
+        failures.push(relativePath);
+      }
+
+      if (entry.isDirectory()) {
+        visit(entryPath);
+      }
+    }
+  };
+
+  visit(directory);
+
+  if (failures.length > 0) {
+    throw new Error(`Portable app.asar.unpacked contains forbidden entries:\n${failures.join('\n')}`);
   }
 };
 
@@ -149,10 +182,8 @@ const copyElectronLicenses = () => {
 const assertPortableBundle = () => {
   for (const requiredPath of [
     appExePath,
-    path.join(appDir, 'portable.flag'),
-    path.join(appDir, 'dist', 'index.html'),
-    path.join(appDir, 'dist-electron', 'main.js'),
-    path.join(appDir, 'public', 'icons', 'netraflow.ico'),
+    portableFlagPath,
+    appAsarPath,
     path.join(portableRootDir, 'LICENSE.electron.txt'),
     path.join(portableRootDir, 'LICENSES.chromium.html'),
     ...notoLicenseFiles.map((fileName) => path.join(portableRootDir, 'licenses', fileName))
@@ -162,7 +193,14 @@ const assertPortableBundle = () => {
     }
   }
 
+  const { errors: asarEntryErrors } = validatePortableAsarEntries(listPackage(appAsarPath));
+
+  if (asarEntryErrors.length > 0) {
+    throw new Error(`Portable app.asar is invalid:\n${asarEntryErrors.join('\n')}`);
+  }
+
   assertNoForbiddenPortableEntries(portableRootDir);
+  assertNoForbiddenUnpackedEntries(path.join(resourcesDir, 'app.asar.unpacked'));
 };
 
 const makeCrc32Table = () => {
@@ -372,23 +410,22 @@ for (const requiredPath of [
   }
 }
 
-assertPackagedMainLoader(builtMainPath);
+assertPackagedRendererLoader(builtMainPath);
 ({ folderName, outputDir: outputRoot } = prepareVersionedReleaseDir('portable', version));
 portableRootDir = path.join(outputRoot, bundleName);
 zipPath = path.join(outputRoot, `${bundleName}_Portable.zip`);
 appExePath = path.join(portableRootDir, `${productName}.exe`);
 resourcesDir = path.join(portableRootDir, 'resources');
-appDir = path.join(resourcesDir, 'app');
+appAsarPath = path.join(resourcesDir, 'app.asar');
+portableFlagPath = path.join(resourcesDir, 'portable.flag');
 stagingOutputDir = path.join(outputRoot, '.win-unpacked-source');
 rmSync(portableRootDir, { recursive: true, force: true });
 rmSync(zipPath, { force: true });
 await buildPortableAppSource();
 cpSync(packagedAppDir, portableRootDir, { recursive: true });
 rmSync(stagingOutputDir, { recursive: true, force: true });
-writeFileSync(path.join(appDir, 'portable.flag'), 'NETRAFLOW_PORTABLE=1\n', 'utf8');
-removeRuntimeDataEntries(appDir);
+writeFileSync(portableFlagPath, 'NETRAFLOW_PORTABLE=1\n', 'utf8');
 removeRuntimeDataEntries(portableRootDir);
-assertPackagedMainLoader(path.join(appDir, 'dist-electron', 'main.js'));
 patchExecutableResources(appExePath, { iconPath, productName, version });
 copyElectronLicenses();
 copyNotoLicenses();

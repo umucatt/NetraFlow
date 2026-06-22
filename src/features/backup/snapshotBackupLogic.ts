@@ -1,12 +1,3 @@
-import {
-  AUTO_BACKUP_SETTINGS_STORAGE_KEY,
-  BACKUP_RECORDS_STORAGE_KEY,
-  FORCE_AUTO_BACKUP_DUE_ONCE_STORAGE_KEY,
-  LAST_BACKUP_HISTORY_COUNT_STORAGE_KEY,
-  LAST_BACKUP_STORAGE_KEY,
-  SNAPSHOT_IMPORT_RECORDS_STORAGE_KEY
-} from '../../app/storageKeys';
-import { nfStorage } from '../../app/nfStorage';
 import { DAY_MS, getValidTimestamp } from '../../app/dateUtils';
 import type {
   Account,
@@ -40,9 +31,6 @@ export const SNAPSHOT_INCOMPLETE_ERROR_MESSAGE = '快照文件格式不完整，
 type BackupPayloadOptions = {
   productName: string;
   backupAt: string;
-  backupRecord: BackupRecord;
-  nextBackupRecords: BackupRecord[];
-  autoBackupSettings: AutoBackupSettings;
   groups: AssetGroup[];
   accounts: Account[];
   history: HistoryRecord[];
@@ -180,22 +168,6 @@ export const createSnapshotRestoreData = ({
       nextData.history
     )
   };
-};
-
-const readStorageJson = (key: string) => {
-  const raw = nfStorage.getItem(key);
-
-  if (raw === null) {
-    return { parsed: false, value: undefined, raw };
-  }
-
-  try {
-    return { parsed: true, value: JSON.parse(raw) as unknown, raw };
-  } catch (error) {
-    console.warn(`[NetraFlow storage] Failed to parse storage key "${key}".`, error);
-
-    return { parsed: false, value: undefined, raw };
-  }
 };
 
 const isBackupCycleUnit = (value: unknown): value is BackupCycleUnit =>
@@ -350,32 +322,6 @@ export const mergeSnapshotImportRecords = (
   nextRecord: SnapshotImportRecord
 ) => normalizeSnapshotImportRecords([nextRecord, ...currentRecords]);
 
-export const loadBackupRecords = () => {
-  const storedRecords = readStorageJson(BACKUP_RECORDS_STORAGE_KEY);
-
-  return storedRecords.parsed ? normalizeBackupRecords(storedRecords.value) : [];
-};
-
-export const saveBackupRecords = (records: BackupRecord[]) => {
-  nfStorage.setItem(
-    BACKUP_RECORDS_STORAGE_KEY,
-    JSON.stringify(normalizeBackupRecords(records))
-  );
-};
-
-export const loadSnapshotImportRecords = () => {
-  const storedRecords = readStorageJson(SNAPSHOT_IMPORT_RECORDS_STORAGE_KEY);
-
-  return storedRecords.parsed ? normalizeSnapshotImportRecords(storedRecords.value) : [];
-};
-
-export const saveSnapshotImportRecords = (records: SnapshotImportRecord[]) => {
-  nfStorage.setItem(
-    SNAPSHOT_IMPORT_RECORDS_STORAGE_KEY,
-    JSON.stringify(normalizeSnapshotImportRecords(records))
-  );
-};
-
 export const getBackupCycleDays = (cycle: BackupCycle) => {
   const unitMultiplier = cycle.unit === 'month' ? 30 : cycle.unit === 'week' ? 7 : 1;
 
@@ -460,83 +406,12 @@ export const isAutoBackupCycleDue = (
   return elapsedDays >= getBackupCycleDays(cycle);
 };
 
-export const markAutoBackupDueOnce = () => {
-  nfStorage.setItem(FORCE_AUTO_BACKUP_DUE_ONCE_STORAGE_KEY, 'true');
-};
-
-export const consumeAutoBackupDueOnce = () => {
-  const shouldForceDue =
-    nfStorage.getItem(FORCE_AUTO_BACKUP_DUE_ONCE_STORAGE_KEY) === 'true';
-
-  nfStorage.removeItem(FORCE_AUTO_BACKUP_DUE_ONCE_STORAGE_KEY);
-
-  return shouldForceDue;
-};
-
 export const shouldRunStartupAutoBackupCycle = (
   lastAutoBackupAt: string,
   cycle: BackupCycle,
   forceDueOnce: boolean,
   now: Date | number = Date.now()
 ) => forceDueOnce || isAutoBackupCycleDue(lastAutoBackupAt, cycle, now);
-
-export const hasBackupRecordMissingIncrementCount = () => {
-  const storedRecords = readStorageJson(BACKUP_RECORDS_STORAGE_KEY);
-
-  return (
-    storedRecords.parsed &&
-    Array.isArray(storedRecords.value) &&
-    storedRecords.value.some(
-      (record) => isPlainObject(record) && !('incrementCount' in record)
-    )
-  );
-};
-
-export const loadLastBackupAt = () => {
-  const value = nfStorage.getItem(LAST_BACKUP_STORAGE_KEY);
-
-  return getValidTimestamp(value) === null ? '' : value ?? '';
-};
-
-export const saveLastBackupAt = (time: string) => {
-  nfStorage.setItem(LAST_BACKUP_STORAGE_KEY, time);
-};
-
-export const clearLastBackupAt = () => {
-  nfStorage.removeItem(LAST_BACKUP_STORAGE_KEY);
-};
-
-const getStoredNumber = (key: string) => {
-  const storedValue = readStorageJson(key);
-  const value = storedValue.parsed ? storedValue.value : storedValue.raw;
-  const numberValue =
-    typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
-
-  return Number.isFinite(numberValue) ? numberValue : null;
-};
-
-export const loadLastBackupHistoryCount = (currentHistoryCount: number) => {
-  const storedCount = getStoredNumber(LAST_BACKUP_HISTORY_COUNT_STORAGE_KEY);
-
-  if (storedCount !== null) {
-    return Math.max(0, Math.floor(storedCount));
-  }
-
-  const latestBackupRecord = loadBackupRecords()[0];
-
-  if (latestBackupRecord) {
-    return latestBackupRecord.historyCount;
-  }
-
-  return loadLastBackupAt() ? currentHistoryCount : 0;
-};
-
-export const saveLastBackupHistoryCount = (count: number) => {
-  nfStorage.setItem(
-    LAST_BACKUP_HISTORY_COUNT_STORAGE_KEY,
-    JSON.stringify(Math.max(0, Math.floor(count)))
-  );
-};
 
 export const normalizeAutoBackupSettings = (value: unknown): AutoBackupSettings => {
   if (!isPlainObject(value)) {
@@ -554,21 +429,6 @@ export const normalizeAutoBackupSettings = (value: unknown): AutoBackupSettings 
         ? value.directory
         : DEFAULT_AUTO_BACKUP_SETTINGS.directory
   };
-};
-
-export const loadAutoBackupSettings = () => {
-  const storedSettings = readStorageJson(AUTO_BACKUP_SETTINGS_STORAGE_KEY);
-
-  return storedSettings.parsed
-    ? normalizeAutoBackupSettings(storedSettings.value)
-    : DEFAULT_AUTO_BACKUP_SETTINGS;
-};
-
-export const saveAutoBackupSettings = (settings: AutoBackupSettings) => {
-  nfStorage.setItem(
-    AUTO_BACKUP_SETTINGS_STORAGE_KEY,
-    JSON.stringify(normalizeAutoBackupSettings(settings))
-  );
 };
 
 const areBackupCyclesEqual = (left: BackupCycle, right: BackupCycle) =>
@@ -603,9 +463,6 @@ export const getBackupFileName = (backupAt: string, encrypted: boolean) =>
 export const createBackupPayload = ({
   productName,
   backupAt,
-  backupRecord,
-  nextBackupRecords,
-  autoBackupSettings,
   groups,
   accounts,
   history
@@ -613,10 +470,6 @@ export const createBackupPayload = ({
   app: productName,
   schemaVersion: 1,
   exportedAt: backupAt,
-  lastBackupAt: backupAt,
-  lastBackupHistoryCount: backupRecord.historyCount,
-  backupRecords: nextBackupRecords,
-  autoBackupSettings,
   groups,
   accounts,
   history

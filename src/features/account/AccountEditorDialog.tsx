@@ -371,7 +371,7 @@ function AccountCreateDialog({
   return (
     <DialogShell
       as="form"
-      title="账户新增"
+      title="账户创建"
       headerClassName="account-add-restore-panel__header"
       titleClassName="account-add-restore-panel__title"
       titleStyle={{ margin: 0 }}
