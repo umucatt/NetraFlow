@@ -1,4 +1,5 @@
 import type { LockScreenLayerProps } from './lockScreenTypes';
+import InlineErrorSlot from '../../components/InlineErrorSlot';
 
 export function LockScreenLayer({
   isLocked,
@@ -19,7 +20,7 @@ export function LockScreenLayer({
         <div className="lock-screen__brand">
           <img src={productIconPath} alt="" aria-hidden="true" />
           <div>
-            <p className="eyebrow">净流 / NetraFlow</p>
+            <p className="eyebrow">NetraFlow</p>
             <h2 id="lock-title">已锁定</h2>
           </div>
         </div>
@@ -30,10 +31,13 @@ export function LockScreenLayer({
             type="password"
             autoComplete="current-password"
             value={password}
+            className={error ? 'input--error' : undefined}
+            aria-invalid={error ? true : undefined}
+            aria-describedby="lock-screen-error"
             onChange={(event) => onPasswordChange(event.target.value)}
           />
         </label>
-        {error ? <p className="lock-screen__error">{error}</p> : null}
+        <InlineErrorSlot id="lock-screen-error" message={error} />
         <button type="submit" disabled={isUnlocking} className="lock-screen__button">
           {isUnlocking ? '解锁中' : '解锁'}
         </button>

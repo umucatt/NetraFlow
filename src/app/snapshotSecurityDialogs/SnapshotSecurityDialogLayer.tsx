@@ -1,14 +1,28 @@
+import type { KeyboardEvent } from 'react';
 import {
   PasswordEditorDialog,
-  SnapshotEncryptionDisableDialog,
-  SnapshotPasswordEditorDialog
+  SnapshotEncryptionDisableDialog
 } from '../../features/settings';
+import InlineErrorSlot from '../../components/InlineErrorSlot';
 import { OverlayBackdrop } from '../overlay';
 
 import type {
   PasswordProtectionDisableDialogGroup,
   SnapshotSecurityDialogLayerProps
 } from './snapshotSecurityDialogTypes';
+
+const cancelOnEscape = (
+  event: KeyboardEvent<HTMLElement>,
+  onCancel: () => void
+) => {
+  if (event.key !== 'Escape') {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  onCancel();
+};
 
 function PasswordProtectionDisableDialog({
   password,
@@ -25,6 +39,7 @@ function PasswordProtectionDisableDialog({
         aria-modal="true"
         aria-labelledby="disable-password-protection-title"
         onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => cancelOnEscape(event, onCancel)}
         onSubmit={onSubmit}
         className="modal-card"
       >
@@ -47,14 +62,13 @@ function PasswordProtectionDisableDialog({
             type="password"
             autoComplete="current-password"
             value={password}
+            className={error ? 'input--error' : undefined}
+            aria-invalid={error ? true : undefined}
+            aria-describedby="disable-password-protection-error"
             onChange={(event) => onPasswordChange(event.target.value)}
           />
         </label>
-        {error ? (
-          <p style={{ margin: '12px 0 0', color: '#b91c1c', fontSize: '0.92rem' }}>
-            {error}
-          </p>
-        ) : null}
+        <InlineErrorSlot id="disable-password-protection-error" message={error} />
         <div className="modal-actions">
           <button
             type="button"
@@ -78,17 +92,12 @@ function PasswordProtectionDisableDialog({
 
 export function SnapshotSecurityDialogLayer({
   passwordEditor,
-  snapshotPasswordEditor,
   passwordProtectionDisable,
   snapshotEncryptionDisable
 }: SnapshotSecurityDialogLayerProps) {
   return (
     <>
       {passwordEditor ? <PasswordEditorDialog {...passwordEditor} /> : null}
-
-      {snapshotPasswordEditor ? (
-        <SnapshotPasswordEditorDialog {...snapshotPasswordEditor} />
-      ) : null}
 
       {passwordProtectionDisable ? (
         <PasswordProtectionDisableDialog {...passwordProtectionDisable} />

@@ -1,20 +1,21 @@
-node_modules/
-dist/
-dist-electron/
-release/
-release-diagnostics/
-out/
-coverage/
-.cache/
-.vite/
+/node_modules/
+/dist/
+/dist-electron/
+/release/
+/release-diagnostics/
+/out/
+/coverage/
+/outputs/
+/.cache/
+/.vite/
 
 /runtime/
 /userdata/
 /.demo/
 
 .tools/
-.tmp*/
-.tmp-*/
+/.tmp*/
+/.local-validation/
 build-errors.tmp
 
 *.log
@@ -30,5 +31,9 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 *.tmp
+*.previous
 *.bak
 *.swp
+
+/docs/runtime-validation/
+/docs/error-page-review/

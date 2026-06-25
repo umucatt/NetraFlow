@@ -132,9 +132,9 @@ test('global settings security and about copy match the current release text', (
   };
 
   assert.equal(settingsPageSource.includes('是否开启登陆密码保护'), true);
-  assert.equal(packageJson.version, '0.9.8');
-  assert.equal(packageLockJson.version, '0.9.8');
-  assert.equal(packageLockJson.packages?.['']?.version, '0.9.8');
+  assert.equal(packageJson.version, '0.9.9');
+  assert.equal(packageLockJson.version, '0.9.9');
+  assert.equal(packageLockJson.packages?.['']?.version, '0.9.9');
   assert.equal(appSource.includes('APP_VERSION'), true);
   assert.equal(appSource.includes('0.9.1'), false);
   assert.equal(aboutPanelSource.includes('获取信息'), true);
@@ -867,7 +867,8 @@ test('formal persistence owns renderer data and old storage bridge is removed', 
   assert.equal(rendererPersistenceSource.includes('window.localStorage'), false);
   assert.equal(rendererPersistenceSource.includes('nfStorage'), false);
   assert.equal(appSource.includes('migrateLegacyLocalStorageToNfStorage();'), false);
-  assert.equal(saveAppDataSource.includes('writeCoreDocument(createCoreDocumentFromAppData'), true);
+  assert.equal(saveAppDataSource.includes('writeCoreDocument('), true);
+  assert.equal(saveAppDataSource.includes('createCoreDocumentFromAppData'), true);
   assert.equal(saveAppDataSource.includes('persistAppDataStorageItems('), false);
   assert.equal(lifecycleLogicSource.includes('.setItems('), false);
   assert.equal(runtimePersistenceSource.includes('writeSettingsDocument'), true);
@@ -1254,10 +1255,7 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
   assert.equal(mainSource.includes("process.platform === 'win32'"), true);
   assert.equal(mainSource.includes("const APP_USER_MODEL_ID = 'com.netraflow.app';"), true);
   assert.equal(mainSource.includes("const DEV_APP_USER_MODEL_ID = 'com.netraflow.app.dev';"), true);
-  assert.equal(
-    mainSource.includes('app.setAppUserModelId(app.isPackaged ? APP_USER_MODEL_ID : DEV_APP_USER_MODEL_ID)'),
-    true
-  );
+  assert.equal(mainSource.includes('app.setAppUserModelId('), true);
   assert.equal(mainSource.includes('const isPortableBuild = () =>'), true);
   assert.equal(mainSource.includes("process.env.NETRAFLOW_PORTABLE === '1'"), true);
   assert.equal(mainSource.includes("path.join(app.getAppPath(), 'portable.flag')"), true);
@@ -1728,8 +1726,9 @@ test('packaged first launch starts with empty real data and excludes runtime sto
   assert.equal(appSource.includes('const startupPersistenceState = (() => {'), true);
   assert.equal(appSource.includes('snapshot: readRuntimePersistenceSnapshot()'), true);
   assert.equal(appSource.includes('StartupPersistenceErrorScreen'), true);
-  assert.equal(appSource.includes('核心数据读取失败'), true);
-  assert.equal(appSource.includes('NetraFlow 未修改现有核心数据文件'), true);
+  assert.equal(appSource.includes('<FatalErrorPage'), true);
+  assert.equal(appSource.includes('核心数据无法读取'), true);
+  assert.equal(appSource.includes('核心数据异常，NetraFlow 无法正常读取'), true);
   assert.equal(appSource.includes('const initialGroups: AssetGroup[] = [];'), false);
   assert.equal(appSource.includes('default-cash'), false);
   assert.equal(appSource.includes('default-bank-card'), false);
@@ -1922,7 +1921,7 @@ test('release packaging scripts use versioned output folders and safe release cl
     resourcePatchSource
   ].join('\n');
 
-  assert.equal(packageJson.version, '0.9.8');
+  assert.equal(packageJson.version, '0.9.9');
   assert.equal(packageJson.scripts?.['clean:release'], 'node scripts/clean-release.mjs');
   assert.equal(packageJson.scripts?.['dist:installer'], 'node scripts/package-installer.mjs');
   assert.equal(packageJson.scripts?.['dist:portable'], 'node scripts/package-portable.mjs');
@@ -2074,6 +2073,7 @@ test('Windows executable icon resources use the local mature rcedit path only', 
 
 test('Windows taskbar lock uses Jump List IPC without tray or background hiding', () => {
   const mainSource = readProjectFile('electron/main.ts');
+  const productLockSource = readProjectFile('electron/productInstanceLock.ts');
   const preloadSource = readProjectFile('electron/preload.ts');
   const appSource = readProjectFile('src/App.tsx');
   const securityControllerSource = readProjectFile(
@@ -2099,6 +2099,13 @@ test('Windows taskbar lock uses Jump List IPC without tray or background hiding'
   assert.equal(mainSource.includes('iconPath: app.isPackaged ? process.execPath : getAppIconPath()'), true);
   assert.equal(mainSource.includes('app.requestSingleInstanceLock()'), true);
   assert.equal(mainSource.includes("app.on('second-instance'"), true);
+  assert.equal(mainSource.includes('createProductInstanceCoordinator'), true);
+  assert.equal(mainSource.includes('productInstanceCoordinator.acquire()'), true);
+  assert.equal(mainSource.includes('productInstanceCoordinator.notifyExisting()'), true);
+  assert.equal(mainSource.includes('productInstanceCoordinator.release()'), true);
+  assert.equal(productLockSource.includes('PRODUCT_INSTANCE_PIPE_PATH'), true);
+  assert.equal(productLockSource.includes('netraflow-com-netraflow-app-single-instance'), true);
+  assert.equal(productLockSource.includes("if (error.code === 'EADDRINUSE')"), true);
   assert.equal(mainSource.includes("argv.includes('--lock')"), true);
   assert.equal(mainSource.includes("targetWindow.webContents.send('netraflow-lock')"), true);
   assert.equal(preloadSource.includes('onNetraFlowLock'), true);
@@ -2106,14 +2113,16 @@ test('Windows taskbar lock uses Jump List IPC without tray or background hiding'
   assert.equal(preloadSource.includes("ipcRenderer.removeListener('netraflow-lock'"), true);
   assert.equal(typesSource.includes('onNetraFlowLock?: (listener: () => void) => () => void;'), true);
   assert.equal(rendererLockSource.includes('api.onNetraFlowLock(() => {'), true);
-  assert.equal(rendererLockSource.includes("showToast('请先开启登陆密码保护', 'info')"), true);
-  assert.equal(rendererLockSource.includes('setIsLocked(true);'), true);
   assert.equal(
-    rendererLockSource.includes('verifyPassword(') &&
-      rendererLockSource.includes('unlockPasswordInput') &&
-      rendererLockSource.includes('globalSettings.passwordHash'),
+    rendererLockSource.includes('showToast(') &&
+      rendererLockSource.includes('passwordProtectionEnabled'),
     true
   );
+  assert.equal(rendererLockSource.includes('lockCoreDocument();'), true);
+  assert.equal(rendererLockSource.includes('setIsLocked(true);'), true);
+  assert.equal(rendererLockSource.includes('unlockCoreDocument(unlockPasswordInput);'), true);
+  assert.equal(rendererLockSource.includes('verifyPassword('), false);
+  assert.equal(rendererLockSource.includes('globalSettings.passwordHash'), false);
 });
 
 test('history panel opacity and two-column title alignment use shared structure classes', () => {
@@ -2797,9 +2806,6 @@ test('popup and system prompt copy removes sentence periods without touching dot
     'src/features/account/useAccountOperationsController.ts'
   );
   const passwordEditorSource = readProjectFile('src/features/settings/PasswordEditorDialog.tsx');
-  const snapshotPasswordEditorSource = readProjectFile(
-    'src/features/settings/SnapshotPasswordEditorDialog.tsx'
-  );
   const snapshotEncryptionDisableSource = readProjectFile(
     'src/features/settings/SnapshotEncryptionDisableDialog.tsx'
   );
@@ -2845,7 +2851,6 @@ test('popup and system prompt copy removes sentence periods without touching dot
     accountInfoEditorSource,
     accountOperationsControllerSource,
     passwordEditorSource,
-    snapshotPasswordEditorSource,
     snapshotEncryptionDisableSource
   ].filter((source) => source.length > 0);
 
@@ -2853,7 +2858,7 @@ test('popup and system prompt copy removes sentence periods without touching dot
   assert.equal(appSource.includes('<ResetDangerDialogLayer'), true);
   assert.equal(appSource.includes('<LockScreenLayer'), true);
   assert.equal(snapshotSecurityDialogLayerSource.includes('<PasswordEditorDialog'), true);
-  assert.equal(snapshotSecurityDialogLayerSource.includes('<SnapshotPasswordEditorDialog'), true);
+  assert.equal(snapshotSecurityDialogLayerSource.includes('<SnapshotPasswordEditorDialog'), false);
   assert.equal(snapshotSecurityDialogLayerSource.includes('<SnapshotEncryptionDisableDialog'), true);
   assert.equal(resetDangerDialogLayerSource.includes('id="reset-confirmation-title"'), true);
   assert.equal(resetDangerDialogLayerSource.includes('className="reset-confirmation-code"'), true);
@@ -2892,7 +2897,7 @@ test('popup and system prompt copy removes sentence periods without touching dot
     ),
     false
   );
-  assert.equal(packageJson.version, '0.9.8');
+  assert.equal(packageJson.version, '0.9.9');
   assert.equal(
     userSettingsLogicSource.includes(
       'netraflow-settings-${year}${month}${day}-${hour}${minute}${second}.netraflow-settings.json'
@@ -3239,9 +3244,10 @@ test('asset group delete action uses danger styling and clears dangling group ui
   );
   assert.equal(deleteSource.includes('updateAppData(nextData)'), false);
   assert.equal(deleteSource.includes('clearDeletedAssetGroupUiState(result.value.id, result.value.name)'), true);
-  assert.equal(deleteSource.includes('saveAppData'), false);
+  assert.equal(deleteSource.includes('saveAppData('), false);
   assert.equal(updateAppDataSource.includes('if (!isExampleMode)'), true);
-  assert.equal(updateAppDataSource.includes('saveAppData(normalizedData)'), true);
+  assert.equal(updateAppDataSource.includes('saveAppDataWithExternalModificationCheck('), true);
+  assert.equal(updateAppDataSource.includes('normalizedData'), true);
   [
     'setExpandedGroupIds',
     "setSelectedGroupDetailId('')",

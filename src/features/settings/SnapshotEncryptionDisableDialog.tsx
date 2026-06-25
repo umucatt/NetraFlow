@@ -1,5 +1,6 @@
-import { type FormEvent } from 'react';
+import { type FormEvent, type KeyboardEvent } from 'react';
 import DialogShell from '../../components/dialogs/DialogShell';
+import InlineErrorSlot from '../../components/InlineErrorSlot';
 
 type SnapshotEncryptionDisableDialogProps = {
   password: string;
@@ -18,13 +19,23 @@ function SnapshotEncryptionDisableDialog({
   onSubmit,
   onCancel
 }: SnapshotEncryptionDisableDialogProps) {
+  const handleDialogKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== 'Escape') {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    onCancel();
+  };
+
   return (
     <DialogShell
       as="form"
       title="关闭快照加密"
       titleId="disable-snapshot-encryption-title"
-      eyebrow="快照密码确认"
       onClose={onCancel}
+      onKeyDown={handleDialogKeyDown}
       onSubmit={onSubmit}
       actions={(
         <>
@@ -46,23 +57,22 @@ function SnapshotEncryptionDisableDialog({
       )}
     >
       <p style={{ margin: '0 0 14px', color: 'var(--text-muted)', fontSize: '0.94rem' }}>
-        关闭后，之后导出的快照将不再加密，已经加密的快照仍需要对应快照密码才能恢复
+        关闭后之后导出的快照将不再加密，已加密的快照仍需要创建时使用的密码恢复
       </p>
       <label className="right-panel-label">
-        快照密码
+        登录密码
         <input
           autoFocus
           type="password"
           autoComplete="current-password"
           value={password}
+          className={error ? 'input--error' : undefined}
+          aria-invalid={error ? true : undefined}
+          aria-describedby="disable-snapshot-encryption-error"
           onChange={(event) => onPasswordChange(event.target.value)}
         />
       </label>
-      {error ? (
-        <p style={{ margin: '12px 0 0', color: '#b91c1c', fontSize: '0.92rem' }}>
-          {error}
-        </p>
-      ) : null}
+      <InlineErrorSlot id="disable-snapshot-encryption-error" message={error} />
     </DialogShell>
   );
 }

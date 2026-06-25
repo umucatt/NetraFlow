@@ -5,15 +5,10 @@ import type {
 
 import type {
   PasswordEditorDialog,
-  SnapshotEncryptionDisableDialog,
-  SnapshotPasswordEditorDialog
+  SnapshotEncryptionDisableDialog
 } from '../../features/settings';
 
 export type PasswordEditorDialogGroup = ComponentProps<typeof PasswordEditorDialog>;
-
-export type SnapshotPasswordEditorDialogGroup = ComponentProps<
-  typeof SnapshotPasswordEditorDialog
->;
 
 export type SnapshotEncryptionDisableDialogGroup = ComponentProps<
   typeof SnapshotEncryptionDisableDialog
@@ -30,7 +25,6 @@ export type PasswordProtectionDisableDialogGroup = {
 
 export type SnapshotSecurityDialogLayerProps = {
   passwordEditor: PasswordEditorDialogGroup | null;
-  snapshotPasswordEditor: SnapshotPasswordEditorDialogGroup | null;
   passwordProtectionDisable: PasswordProtectionDisableDialogGroup | null;
   snapshotEncryptionDisable: SnapshotEncryptionDisableDialogGroup | null;
 };

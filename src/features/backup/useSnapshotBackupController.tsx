@@ -2,6 +2,11 @@ import { type ChangeEvent, type ReactNode, useEffect, useState } from 'react';
 
 import { getValidTimestamp } from '../../app/dateUtils';
 import { deriveGroupsWithAccounts } from '../../app/accountData';
+import {
+  decryptSnapshotDocumentWithCurrentSession,
+  decryptSnapshotDocumentWithPassword,
+  encryptSnapshotDocumentWithCurrentSession
+} from '../../app/persistence/runtimePersistence';
 import type {
   Account,
   AppData,
@@ -14,15 +19,14 @@ import type {
   HistoryRecord,
   SnapshotImportRecord
 } from '../../app/types';
-import { verifyPassword } from '../../security/passwordHash';
 import {
   SNAPSHOT_DECRYPTION_ERROR_MESSAGE,
-  decryptSnapshotPayload,
   isEncryptedSnapshotFile
 } from '../../security/snapshotCrypto';
 import type { GlobalSettings } from '../security/securitySettingsTypes';
 import {
   areAutoBackupSettingsEqual,
+  createEncryptedBackupFileContent,
   createBackupFileContent,
   createBackupPayload,
   createSnapshotRestoreData,
@@ -95,7 +99,7 @@ type SnapshotBackupControllerOptions = {
   globalSettings: GlobalSettings;
   initialAutoBackupSettings: AutoBackupSettings;
   initialBackupState: InitialBackupState;
-  updateAppData: (nextData: AppData) => void;
+  updateAppData: (nextData: AppData, options?: { flush?: boolean }) => void;
   persistAutoBackupSettings: (settings: AutoBackupSettings) => void;
   persistBackupState: (state: PersistBackupStateInput) => void;
   persistSnapshotImportRecords: (records: SnapshotImportRecord[]) => void;
@@ -123,6 +127,12 @@ const createId = (prefix: string) => {
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isErrorWithCode = (error: unknown, code: string) =>
+  typeof error === 'object' &&
+  error !== null &&
+  'code' in error &&
+  (error as { code?: unknown }).code === code;
 
 const getStandardSnapshotFieldValue = (value: unknown, fieldName: string) =>
   isPlainObject(value) ? value[fieldName] : undefined;
@@ -248,10 +258,10 @@ export function useSnapshotBackupController({
 
     if (enabled && !autoBackupDraft.enabled && globalSettings.snapshotEncryptionEnabled) {
       void requestConfirmationDialog({
-        title: '自动快照将使用快照密码加密',
+        title: '自动快照将使用登录密码加密',
         message: (
           <>
-            <p>忘记快照密码将无法恢复自动生成的加密快照</p>
+            <p>忘记创建快照时的登录密码将无法恢复自动生成的加密快照</p>
             <strong>是否继续？</strong>
           </>
         ),
@@ -393,55 +403,17 @@ export function useSnapshotBackupController({
     method
   });
 
-  const requestVerifiedSnapshotPassword = async (
-    promptMessage: string,
-    invalidMessage = '快照密码不正确',
-    snapshotPasswordHash = globalSettings.snapshotPasswordHash
-  ) => {
-    if (!snapshotPasswordHash) {
+  const ensureEncryptedSnapshotSession = async () => {
+    if (!globalSettings.passwordProtectionEnabled) {
       await showNoticeDialog({
-        title: '快照密码未设置',
-        message: '请先设置快照密码'
+        title: '登录密码保护未启用',
+        message: '请先启用登录密码保护'
       });
 
       return null;
     }
 
-    const snapshotPassword = await requestInputDialog({
-      title: '输入快照密码',
-      message: promptMessage,
-      label: '快照密码',
-      confirmLabel: '确认',
-      cancelLabel: '取消',
-      inputType: 'password',
-      autoComplete: 'current-password'
-    });
-
-    if (snapshotPassword === null) {
-      return null;
-    }
-
-    if (snapshotPassword.trim() === '') {
-      await showNoticeDialog({
-        title: '快照密码为空',
-        message: '请输入快照密码'
-      });
-
-      return null;
-    }
-
-    const isPasswordValid = await verifyPassword(snapshotPassword, snapshotPasswordHash);
-
-    if (!isPasswordValid) {
-      await showNoticeDialog({
-        title: '快照密码错误',
-        message: invalidMessage
-      });
-
-      return null;
-    }
-
-    return snapshotPassword;
+    return true;
   };
 
   const saveBackupSuccess = (backupRecord: BackupRecord, nextBackupRecords: BackupRecord[]) => {
@@ -514,7 +486,7 @@ export function useSnapshotBackupController({
     }
 
     const api = window.electronAPI ?? window.electronWindow;
-    let snapshotPassword: string | null = null;
+    const shouldEncryptSnapshot = globalSettings.snapshotEncryptionEnabled;
 
     if (!api?.selectDirectory || !api?.writeSnapshotFile) {
       void showNoticeDialog({
@@ -524,12 +496,8 @@ export function useSnapshotBackupController({
       return;
     }
 
-    if (globalSettings.snapshotEncryptionEnabled) {
-      snapshotPassword = await requestVerifiedSnapshotPassword(
-        '已启用快照加密，导出的快照文件将使用快照密码加密。请输入快照密码，用于加密本次导出的快照'
-      );
-
-      if (!snapshotPassword) {
+    if (shouldEncryptSnapshot) {
+      if ((await ensureEncryptedSnapshotSession()) !== true) {
         return;
       }
 
@@ -568,7 +536,12 @@ export function useSnapshotBackupController({
     let fileContent = '';
 
     try {
-      fileContent = await createBackupFileContent(backupPayload, snapshotPassword);
+      if (shouldEncryptSnapshot) {
+        const encryptedSnapshot = encryptSnapshotDocumentWithCurrentSession(backupPayload);
+        fileContent = await createEncryptedBackupFileContent(encryptedSnapshot);
+      } else {
+        fileContent = await createBackupFileContent(backupPayload, null);
+      }
 
       if (!isPersistenceCurrent()) {
         return;
@@ -577,7 +550,9 @@ export function useSnapshotBackupController({
       console.error('[NetraFlow snapshot] Failed to encrypt manual snapshot.', error);
       void showNoticeDialog({
         title: '导出快照失败',
-        message: '快照加密失败，请稍后再试'
+        message: isErrorWithCode(error, 'PERSISTENCE_CRYPTO_SESSION_UNAVAILABLE')
+          ? '加密会话不可用，请先解锁 NF'
+          : '快照加密失败，请稍后再试'
       });
       return;
     }
@@ -585,7 +560,7 @@ export function useSnapshotBackupController({
     try {
       await api.writeSnapshotFile({
         directory: selectedDirectory,
-        fileName: getBackupFileName(backupAt, snapshotPassword !== null),
+        fileName: getBackupFileName(backupAt, shouldEncryptSnapshot),
         content: fileContent
       });
 
@@ -596,7 +571,7 @@ export function useSnapshotBackupController({
       saveBackupSuccess(backupRecord, nextBackupRecords);
       void showNoticeDialog({
         title: '导出快照',
-        message: snapshotPassword !== null ? '加密快照文件已导出' : '快照文件已导出'
+        message: shouldEncryptSnapshot ? '加密快照文件已导出' : '快照文件已导出'
       });
     } catch (error) {
       console.error('[NetraFlow snapshot] Manual snapshot failed.', error);
@@ -646,16 +621,10 @@ export function useSnapshotBackupController({
       return;
     }
 
-    let snapshotPassword: string | null = null;
+    const shouldEncryptSnapshot = currentGlobalSettings.snapshotEncryptionEnabled;
 
-    if (currentGlobalSettings.snapshotEncryptionEnabled) {
-      snapshotPassword = await requestVerifiedSnapshotPassword(
-        '自动快照文件将使用快照密码加密，请输入快照密码',
-        '自动快照已跳过：快照密码不正确',
-        currentGlobalSettings.snapshotPasswordHash
-      );
-
-      if (!snapshotPassword) {
+    if (shouldEncryptSnapshot) {
+      if ((await ensureEncryptedSnapshotSession()) !== true) {
         showToast('自动快照已跳过', 'info');
         return;
       }
@@ -689,7 +658,12 @@ export function useSnapshotBackupController({
     let fileContent = '';
 
     try {
-      fileContent = await createBackupFileContent(backupPayload, snapshotPassword);
+      if (shouldEncryptSnapshot) {
+        const encryptedSnapshot = encryptSnapshotDocumentWithCurrentSession(backupPayload);
+        fileContent = await createEncryptedBackupFileContent(encryptedSnapshot);
+      } else {
+        fileContent = await createBackupFileContent(backupPayload, null);
+      }
 
       if (!isPersistenceCurrent()) {
         dismissToast(progressToastId);
@@ -698,7 +672,7 @@ export function useSnapshotBackupController({
 
       await api.writeSnapshotFile({
         directory,
-        fileName: getBackupFileName(backupAt, snapshotPassword !== null),
+        fileName: getBackupFileName(backupAt, shouldEncryptSnapshot),
         content: fileContent
       });
 
@@ -716,6 +690,11 @@ export function useSnapshotBackupController({
     } catch (error) {
       console.error('[NetraFlow snapshot] Auto snapshot failed.', error);
       dismissToast(progressToastId);
+      if (isErrorWithCode(error, 'PERSISTENCE_CRYPTO_SESSION_UNAVAILABLE')) {
+        showToast('自动快照已跳过：加密会话不可用，请先解锁 NF', 'info');
+        return;
+      }
+
       showToast('自动快照失败，请检查目录', 'error');
     }
   };
@@ -765,21 +744,27 @@ export function useSnapshotBackupController({
         groups: restoreResult.nextData.groups,
         accounts: restoreResult.nextData.accounts,
         history: restoreResult.nextData.history
-      });
+      }, { flush: true });
       return importResult;
     }
 
-    updateAppData(restoreResult.nextData);
+    updateAppData(restoreResult.nextData, { flush: true });
 
     return importResult;
   };
 
   const readImportSnapshotData = async (value: unknown) => {
     if (isEncryptedSnapshotFile(value)) {
+      try {
+        return decryptSnapshotDocumentWithCurrentSession(value);
+      } catch {
+        // Historical snapshots may use an older login password.
+      }
+
       const snapshotPassword = await requestInputDialog({
         title: '导入加密快照',
-        message: '该快照已加密，请输入快照密码',
-        label: '快照密码',
+        message: '该快照可能使用创建时的旧登录密码加密',
+        label: '创建时密码',
         confirmLabel: '确认导入',
         cancelLabel: '取消导入',
         inputType: 'password',
@@ -792,14 +777,18 @@ export function useSnapshotBackupController({
 
       if (snapshotPassword.trim() === '') {
         await showNoticeDialog({
-          title: '快照密码为空',
-          message: '请输入快照密码'
+          title: '创建时密码为空',
+          message: '请输入创建该快照时的密码'
         });
 
         return null;
       }
 
-      return decryptSnapshotPayload(value, snapshotPassword);
+      try {
+        return decryptSnapshotDocumentWithPassword(value, snapshotPassword);
+      } catch {
+        throw new Error(SNAPSHOT_DECRYPTION_ERROR_MESSAGE);
+      }
     }
 
     if (

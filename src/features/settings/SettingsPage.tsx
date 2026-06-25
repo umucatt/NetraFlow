@@ -46,8 +46,8 @@ function SettingsSecurityPanel({
   onOpenPasswordEditor,
   onAutoLockMinutesInputChange,
   onResetInvalidAutoLockMinutesInput,
-  onSnapshotEncryptionChange,
-  onOpenSnapshotPasswordEditor
+  onForceSnapshotEncryptionChange,
+  onSnapshotEncryptionChange
 }: Pick<
   SettingsPageProps,
   | 'globalSettings'
@@ -56,9 +56,12 @@ function SettingsSecurityPanel({
   | 'onOpenPasswordEditor'
   | 'onAutoLockMinutesInputChange'
   | 'onResetInvalidAutoLockMinutesInput'
+  | 'onForceSnapshotEncryptionChange'
   | 'onSnapshotEncryptionChange'
-  | 'onOpenSnapshotPasswordEditor'
 >) {
+  const isSnapshotEncryptionManaged =
+    globalSettings.passwordProtectionEnabled && globalSettings.forceSnapshotEncryption;
+
   return (
     <>
       <SettingsFieldGroup title="登陆密码保护">
@@ -77,7 +80,7 @@ function SettingsSecurityPanel({
             className="global-settings-reserved-button"
             onClick={onOpenPasswordEditor}
           >
-            {globalSettings.passwordHash ? '修改登录密码' : '设置登录密码'}
+            {globalSettings.passwordProtectionEnabled ? '修改登录密码' : '设置登录密码'}
           </button>
         </SettingsActionRow>
         <SettingsActionRow label="自动锁定时间">
@@ -96,12 +99,22 @@ function SettingsSecurityPanel({
         {!globalSettings.passwordProtectionEnabled ? (
           <p className="global-settings-note">开启密码保护后生效</p>
         ) : null}
+        <SettingsControlRow
+          label="强制启用快照加密"
+          options={[
+            { value: 'yes', label: '是' },
+            { value: 'no', label: '否' }
+          ]}
+          currentValue={globalSettings.forceSnapshotEncryption ? 'yes' : 'no'}
+          onChange={onForceSnapshotEncryptionChange}
+          disabled={!globalSettings.passwordProtectionEnabled}
+        />
+        <p className="global-settings-note">
+          启用登录密码保护后，将强制开启快照加密，并使用登录密码加密之后创建的快照。关闭此设置会同时关闭快照加密。
+        </p>
       </SettingsFieldGroup>
 
-      <SettingsFieldGroup
-        title="快照加密"
-        note="仅加密手动导出和自动生成的快照文件，不加密本地当前数据。"
-      >
+      <SettingsFieldGroup title="快照加密">
         <SettingsControlRow
           label="是否启用快照加密"
           options={[
@@ -110,16 +123,16 @@ function SettingsSecurityPanel({
           ]}
           currentValue={globalSettings.snapshotEncryptionEnabled ? 'yes' : 'no'}
           onChange={onSnapshotEncryptionChange}
+          disabled={
+            !globalSettings.passwordProtectionEnabled || isSnapshotEncryptionManaged
+          }
         />
-        <SettingsActionRow label="设置快照密码">
-          <button
-            type="button"
-            className="global-settings-reserved-button"
-            onClick={onOpenSnapshotPasswordEditor}
-          >
-            {globalSettings.snapshotPasswordHash ? '修改快照密码' : '设置快照密码'}
-          </button>
-        </SettingsActionRow>
+        {!globalSettings.passwordProtectionEnabled ? (
+          <p className="global-settings-note">启用登录密码保护后可用</p>
+        ) : null}
+        {isSnapshotEncryptionManaged ? (
+          <p className="global-settings-note">由“强制启用快照加密”设置管理。</p>
+        ) : null}
       </SettingsFieldGroup>
     </>
   );
@@ -422,8 +435,8 @@ function renderSettingsContent(props: SettingsPageProps) {
         onOpenPasswordEditor={props.onOpenPasswordEditor}
         onAutoLockMinutesInputChange={props.onAutoLockMinutesInputChange}
         onResetInvalidAutoLockMinutesInput={props.onResetInvalidAutoLockMinutesInput}
+        onForceSnapshotEncryptionChange={props.onForceSnapshotEncryptionChange}
         onSnapshotEncryptionChange={props.onSnapshotEncryptionChange}
-        onOpenSnapshotPasswordEditor={props.onOpenSnapshotPasswordEditor}
       />
     );
   }

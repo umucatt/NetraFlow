@@ -5,7 +5,6 @@ import {
   isHomeAssetStatMetric
 } from '../../homeAssetStats';
 import type { SearchLogicMode } from '../../search/searchTypes';
-import { isPasswordHash } from '../../security/passwordHash';
 import type {
   GlobalSettings,
   MainContentPosition,
@@ -30,6 +29,7 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   passwordProtectionEnabled: false,
   passwordHash: null,
   autoLockMinutes: 10,
+  forceSnapshotEncryption: true,
   snapshotEncryptionEnabled: false,
   snapshotPasswordHash: null
 };
@@ -83,10 +83,6 @@ export const normalizeGlobalSettings = (value: unknown): GlobalSettings => {
     return DEFAULT_GLOBAL_SETTINGS;
   }
 
-  const passwordHash = isPasswordHash(value.passwordHash) ? value.passwordHash : null;
-  const snapshotPasswordHash = isPasswordHash(value.snapshotPasswordHash)
-    ? value.snapshotPasswordHash
-    : null;
   const nyaaThemeUnlocked = value.nyaaThemeUnlocked === true;
 
   return {
@@ -123,11 +119,14 @@ export const normalizeGlobalSettings = (value: unknown): GlobalSettings => {
       typeof value.homeAssetStatCompact === 'boolean'
         ? value.homeAssetStatCompact
         : DEFAULT_GLOBAL_SETTINGS.homeAssetStatCompact,
-    passwordProtectionEnabled: value.passwordProtectionEnabled === true && passwordHash !== null,
-    passwordHash,
+    passwordProtectionEnabled: value.passwordProtectionEnabled === true,
+    passwordHash: null,
     autoLockMinutes: normalizeAutoLockMinutes(value.autoLockMinutes),
-    snapshotEncryptionEnabled:
-      value.snapshotEncryptionEnabled === true && snapshotPasswordHash !== null,
-    snapshotPasswordHash
+    forceSnapshotEncryption:
+      typeof value.forceSnapshotEncryption === 'boolean'
+        ? value.forceSnapshotEncryption
+        : DEFAULT_GLOBAL_SETTINGS.forceSnapshotEncryption,
+    snapshotEncryptionEnabled: value.snapshotEncryptionEnabled === true,
+    snapshotPasswordHash: null
   };
 };

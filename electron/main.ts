@@ -3,7 +3,8 @@ import fs from 'node:fs/promises';
 import {
   appendFileSync,
   existsSync,
-  mkdirSync
+  mkdirSync,
+  type PathLike
 } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,8 +14,16 @@ import {
   preflightDemoDirectory
 } from './persistenceEnvironment.js';
 import { createPersistenceEnvironmentStoreController } from './persistenceEnvironmentStore.js';
-import { createPersistenceStore, type PersistenceStore } from './persistenceFileStore.js';
+import { createDefaultPersistenceDocument } from './persistenceContracts.js';
+import {
+  createPersistenceStore,
+  defaultPersistenceFileAdapter,
+  type PersistenceFileAdapter,
+  type PersistenceStore
+} from './persistenceFileStore.js';
 import { registerPersistenceHandlers } from './persistenceIpc.js';
+import { createProductInstanceCoordinator } from './productInstanceLock.js';
+import { createCloseBeforeWindowCoordinator } from './closeBeforeWindowState.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,6 +65,157 @@ const THEME_BOOTSTRAP_BACKGROUND_COLORS: Record<
 };
 let mainWindow: BrowserWindow | null = null;
 let pendingRendererLock = process.argv.includes('--lock');
+const forceClosingWindows = new WeakSet<BrowserWindow>();
+const appendValidationDiagnostic = (
+  event: string,
+  details: Record<string, unknown> = {}
+) => {
+  const diagnosticsFile = process.env.NETRAFLOW_VALIDATION_DIAGNOSTICS_FILE;
+
+  if (!diagnosticsFile) {
+    return;
+  }
+
+  try {
+    const resolvedDiagnosticsFile = path.resolve(diagnosticsFile);
+
+    mkdirSync(path.dirname(resolvedDiagnosticsFile), { recursive: true });
+    appendFileSync(
+      resolvedDiagnosticsFile,
+      `${JSON.stringify({
+        generatedAt: new Date().toISOString(),
+        diagnosticEvent: event,
+        ...details
+      })}\n`,
+      'utf8'
+    );
+  } catch (error) {
+    console.error('[NetraFlow validation] Failed to write diagnostic event.', error);
+  }
+};
+
+type ValidationPersistenceRole = 'real' | 'demo';
+
+const getDiagnosticsPathText = (value: PathLike) =>
+  typeof value === 'string'
+    ? value
+    : value instanceof URL
+      ? fileURLToPath(value)
+      : value.toString();
+
+const normalizeDiagnosticsPath = (value: PathLike) =>
+  path.resolve(getDiagnosticsPathText(value)).toLowerCase();
+
+const createValidationPersistenceAdapter = (
+  root: string,
+  role: ValidationPersistenceRole
+): PersistenceFileAdapter | undefined => {
+  if (!process.env.NETRAFLOW_VALIDATION_DIAGNOSTICS_FILE) {
+    return undefined;
+  }
+
+  const corePath = normalizeDiagnosticsPath(path.join(root, 'core.json'));
+  const coreTmpPath = normalizeDiagnosticsPath(path.join(root, 'core.json.tmp'));
+  let activeCoreCandidateCount = 0;
+  let maxActiveCoreCandidateCount = 0;
+
+  const writeCandidateMetric = (stage: string, filePath: PathLike) => {
+    maxActiveCoreCandidateCount = Math.max(
+      maxActiveCoreCandidateCount,
+      activeCoreCandidateCount
+    );
+    appendValidationDiagnostic('persistence-core-candidate', {
+      role,
+      stage,
+      filePath: getDiagnosticsPathText(filePath),
+      activeCoreCandidateCount,
+      maxActiveCoreCandidateCount
+    });
+  };
+
+  return {
+    ...defaultPersistenceFileAdapter,
+    openSync(filePath, flags, mode) {
+      const fd = defaultPersistenceFileAdapter.openSync(filePath, flags, mode);
+
+      if (normalizeDiagnosticsPath(filePath) === coreTmpPath) {
+        activeCoreCandidateCount += 1;
+        writeCandidateMetric('created', filePath);
+      }
+
+      return fd;
+    },
+    renameSync(oldPath, newPath) {
+      defaultPersistenceFileAdapter.renameSync(oldPath, newPath);
+
+      if (
+        normalizeDiagnosticsPath(oldPath) === coreTmpPath &&
+        normalizeDiagnosticsPath(newPath) === corePath
+      ) {
+        activeCoreCandidateCount = Math.max(0, activeCoreCandidateCount - 1);
+        appendValidationDiagnostic('persistence-core-replace', {
+          role,
+          oldPath: getDiagnosticsPathText(oldPath),
+          newPath: getDiagnosticsPathText(newPath),
+          activeCoreCandidateCount,
+          maxActiveCoreCandidateCount
+        });
+      }
+    },
+    unlinkSync(filePath) {
+      defaultPersistenceFileAdapter.unlinkSync(filePath);
+
+      if (normalizeDiagnosticsPath(filePath) === coreTmpPath) {
+        activeCoreCandidateCount = Math.max(0, activeCoreCandidateCount - 1);
+        writeCandidateMetric('removed', filePath);
+      }
+    }
+  };
+};
+
+const createValidationPersistenceStore = (
+  store: PersistenceStore,
+  role: ValidationPersistenceRole
+): PersistenceStore => ({
+  ...store,
+  writeCoreDocument: (document, options) => {
+    appendValidationDiagnostic('persistence-core-write', {
+      role,
+      allowExternalCoreOverwrite: options?.allowExternalCoreOverwrite === true
+    });
+    const result = store.writeCoreDocument(document, options);
+
+    appendValidationDiagnostic('persistence-core-write-result', {
+      role,
+      ok: result.ok,
+      ...(!result.ok ? { code: result.code } : {})
+    });
+
+    return result;
+  }
+});
+
+const createRuntimePersistenceStore = (
+  root: string,
+  role: ValidationPersistenceRole
+): PersistenceStore => {
+  const adapter = createValidationPersistenceAdapter(root, role);
+
+  return createValidationPersistenceStore(
+    createPersistenceStore({
+      root,
+      logger: console,
+      ...(adapter ? { adapter } : {})
+    }),
+    role
+  );
+};
+const closeBeforeWindows = createCloseBeforeWindowCoordinator({
+  onStateChange: (event) => appendValidationDiagnostic('close-before-window-state', event)
+});
+let requestProductInstanceActivation = () => {
+  pendingRendererLock = true;
+};
 
 app.setName(APP_NAME);
 
@@ -109,6 +269,17 @@ const getNfLogsPath = () => path.join(getNfRuntimeUserDataPath(), LOGS_DIR_NAME)
 
 const getNfCrashDumpsPath = () => path.join(getNfRuntimeRootPath(), CRASH_DUMPS_DIR_NAME);
 
+const productInstanceCoordinator = createProductInstanceCoordinator({
+  onActivate: () => requestProductInstanceActivation(),
+  logger: console
+});
+
+const gotProductInstanceLock = await productInstanceCoordinator.acquire();
+
+if (!gotProductInstanceLock) {
+  app.exit(0);
+}
+
 const persistenceRoots = createPersistenceEnvironmentRoots({
   root: process.env.NETRAFLOW_PERSISTENCE_EXE_DIR
     ? path.resolve(process.env.NETRAFLOW_PERSISTENCE_EXE_DIR)
@@ -129,15 +300,9 @@ if (!startupDemoCleanupResult.ok) {
   });
 }
 
-const realPersistenceStore = createPersistenceStore({
-  root: persistenceRoots.realRoot,
-  logger: console
-});
+const realPersistenceStore = createRuntimePersistenceStore(persistenceRoots.realRoot, 'real');
 
-const demoPersistenceStore = createPersistenceStore({
-  root: persistenceRoots.demoRoot,
-  logger: console
-});
+const demoPersistenceStore = createRuntimePersistenceStore(persistenceRoots.demoRoot, 'demo');
 
 const persistenceEnvironmentStore = createPersistenceEnvironmentStoreController({
   realStore: realPersistenceStore,
@@ -168,10 +333,24 @@ const readPersistenceSnapshotFromStore = (store: PersistenceStore) => {
     return createLifecycleError(settings.code, settings.message);
   }
 
+  if ('locked' in settings) {
+    return createLifecycleError(
+      'PERSISTENCE_SCHEMA_INVALID',
+      'Settings document is unexpectedly locked.'
+    );
+  }
+
   const state = store.readStateDocument();
 
   if (!state.ok) {
     return createLifecycleError(state.code, state.message);
+  }
+
+  if ('locked' in state) {
+    return createLifecycleError(
+      'PERSISTENCE_SCHEMA_INVALID',
+      'State document is unexpectedly locked.'
+    );
   }
 
   const security = store.readSecurityDocument();
@@ -180,13 +359,34 @@ const readPersistenceSnapshotFromStore = (store: PersistenceStore) => {
     return createLifecycleError(security.code, security.message);
   }
 
+  if ('locked' in security) {
+    return createLifecycleError(
+      'PERSISTENCE_SCHEMA_INVALID',
+      'Security document is unexpectedly locked.'
+    );
+  }
+
+  const coreProtection =
+    'locked' in core
+      ? {
+          enabled: true,
+          locked: true,
+          ...(core.integrityWarning ? { integrityWarning: core.integrityWarning } : {})
+        }
+      : {
+          enabled: core.encrypted === true,
+          locked: false,
+          ...(core.integrityWarning ? { integrityWarning: core.integrityWarning } : {})
+        };
+
   return {
     ok: true as const,
     snapshot: {
-      core: core.document,
+      core: 'locked' in core ? createDefaultPersistenceDocument('core') : core.document,
       settings: settings.document,
       state: state.document,
-      security: security.document
+      security: security.document,
+      coreProtection
     }
   };
 };
@@ -321,11 +521,11 @@ const readThemeBootstrapSettings = () => {
   const settingsResult = persistenceStore.readSettingsDocument();
   const stateResult = persistenceStore.readStateDocument();
   const settings =
-    settingsResult.ok && isPlainObject(settingsResult.document)
+    settingsResult.ok && !('locked' in settingsResult) && isPlainObject(settingsResult.document)
       ? settingsResult.document as Record<string, unknown>
       : {};
   const state =
-    stateResult.ok && isPlainObject(stateResult.document)
+    stateResult.ok && !('locked' in stateResult) && isPlainObject(stateResult.document)
       ? stateResult.document as Record<string, unknown>
       : {};
   const globalSettings = isPlainObject(settings.global)
@@ -387,6 +587,19 @@ const configureRuntimeUserDataPath = () => {
 };
 
 configureRuntimeUserDataPath();
+
+const writeValidationPathDiagnostics = () => {
+  appendValidationDiagnostic('resolved-paths', {
+    resolvedUserdataRoot: persistenceRoots.realRoot,
+    resolvedRuntimeRoot: getNfRuntimeRootPath(),
+    resolvedDemoRoot: persistenceRoots.demoRoot,
+    electronUserDataPath: app.getPath('userData'),
+    electronSessionDataPath: app.getPath('sessionData'),
+    electronCachePath: getNfCachePath()
+  });
+};
+
+writeValidationPathDiagnostics();
 registerPersistenceHandlers(persistenceStore, {
   enterDemoEnvironment: enterDemoPersistenceEnvironment,
   exitDemoEnvironment: exitDemoPersistenceEnvironment,
@@ -486,16 +699,17 @@ const requestRendererLock = () => {
 
   sendRendererLock(targetWindow);
 };
+requestProductInstanceActivation = requestRendererLock;
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!gotSingleInstanceLock) {
+  void productInstanceCoordinator.notifyExisting();
   app.quit();
 } else {
   app.on('second-instance', (_event, argv) => {
-    if (argv.includes('--lock')) {
-      requestRendererLock();
-    }
+    pendingRendererLock = pendingRendererLock || argv.includes('--lock');
+    requestRendererLock();
   });
 }
 
@@ -540,7 +754,44 @@ ipcMain.handle('window:unmaximize', (event) => {
 });
 
 ipcMain.on('window:close', (event) => {
-  getEventWindow(event)?.close();
+  const targetWindow = getEventWindow(event);
+
+  if (!targetWindow) {
+    return;
+  }
+
+  closeBeforeWindows.requestRendererCloseApproval(targetWindow);
+});
+
+ipcMain.on('window:allow-close', (event) => {
+  const targetWindow = getEventWindow(event);
+
+  if (!targetWindow) {
+    return;
+  }
+
+  closeBeforeWindows.allowNextWindowClose(targetWindow);
+});
+
+ipcMain.on('window:cancel-close-request', (event) => {
+  const targetWindow = getEventWindow(event);
+
+  if (!targetWindow) {
+    return;
+  }
+
+  closeBeforeWindows.cancelCloseRequest(targetWindow);
+});
+
+ipcMain.on('window:force-close', (event) => {
+  const targetWindow = getEventWindow(event);
+
+  if (!targetWindow) {
+    return;
+  }
+
+  forceClosingWindows.add(targetWindow);
+  targetWindow.close();
 });
 
 ipcMain.handle('window:is-maximized', (event) => getEventWindow(event)?.isMaximized() ?? false);
@@ -551,6 +802,14 @@ ipcMain.handle('app:open-external-url', async (_event, url: unknown) => {
   }
 
   await shell.openExternal(url);
+});
+
+ipcMain.handle('app:open-userdata-directory', async () => {
+  const errorMessage = await shell.openPath(persistenceRoots.realRoot);
+
+  if (errorMessage) {
+    throw new Error(errorMessage);
+  }
 });
 
 ipcMain.handle('dialog:select-directory', async (event) => {
@@ -783,7 +1042,20 @@ function createWindow() {
   mainWindow = createdWindow;
 
   createdWindow.setMenu(null);
+  createdWindow.on('close', (event) => {
+    if (forceClosingWindows.has(createdWindow)) {
+      forceClosingWindows.delete(createdWindow);
+      return;
+    }
+
+    if (closeBeforeWindows.handleWindowClose(createdWindow, event)) {
+      return;
+    }
+
+    closeBeforeWindows.requestRendererCloseApproval(createdWindow);
+  });
   createdWindow.on('closed', () => {
+    closeBeforeWindows.deleteWindow(createdWindow);
     mainWindow = null;
   });
   createdWindow.webContents.on('did-finish-load', () => {
@@ -903,7 +1175,10 @@ const cleanupDemoOnAppQuit = () => {
 };
 
 app.on('before-quit', cleanupDemoOnAppQuit);
-app.on('will-quit', cleanupDemoOnAppQuit);
+app.on('will-quit', () => {
+  cleanupDemoOnAppQuit();
+  void productInstanceCoordinator.release();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

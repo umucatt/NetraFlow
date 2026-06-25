@@ -1354,3 +1354,214 @@ export const createExampleData = (templateId: ExampleTemplateId): ExampleGenerat
     lastBackupHistoryCount: backupRecords[0]?.historyCount ?? history.length
   };
 };
+
+export const EXTREME_EXAMPLE_HISTORY_COUNT = 48000;
+export const EXTREME_EXAMPLE_DAY_SPAN = 1095;
+const EXTREME_EXAMPLE_BASE_DATE = '2026-06-23T12:00:00.000Z';
+
+const cloneJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
+const withSeededRandom = <T,>(seed: number, createValue: () => T): T => {
+  const originalRandom = Math.random;
+  let state = seed >>> 0;
+
+  Math.random = () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+
+    return state / 0x100000000;
+  };
+
+  try {
+    return createValue();
+  } finally {
+    Math.random = originalRandom;
+  }
+};
+
+const getExtremeIsoTime = (daysAgo: number, minuteOffset: number) => {
+  const date = new Date(EXTREME_EXAMPLE_BASE_DATE);
+  date.setDate(date.getDate() - daysAgo);
+  date.setMinutes(date.getMinutes() + minuteOffset);
+
+  return date.toISOString();
+};
+
+const createExtremeArchivedAccounts = (
+  groups: AssetGroup[],
+  existingAccounts: Account[]
+): Account[] => {
+  const assetGroup = groups.find((group) => group.nature === 'asset') ?? groups[0];
+  const liabilityGroup = groups.find((group) => group.nature === 'liability') ?? assetGroup;
+  const definitions = [
+    { group: assetGroup, name: '长期备用金归档', alias: '备用' },
+    { group: assetGroup, name: '旧银行卡归档', alias: '旧卡' },
+    { group: assetGroup, name: '历史投资账户归档', alias: '旧投' },
+    { group: liabilityGroup, name: '已结清负债归档', alias: '结清' }
+  ];
+  const existingIds = new Set(existingAccounts.map((account) => account.id));
+
+  return definitions.flatMap((definition, index): Account[] => {
+    if (!definition.group) {
+      return [];
+    }
+
+    const id = `a_extreme_archived_${index + 1}`;
+
+    if (existingIds.has(id)) {
+      return [];
+    }
+
+    return [
+      {
+        id,
+        groupId: definition.group.id,
+        name: definition.name,
+        amount: index === 3 ? -15000 : 12000 + index * 2300,
+        createdAt: getExtremeIsoTime(EXTREME_EXAMPLE_DAY_SPAN - index * 31, index),
+        alias: definition.alias,
+        archived: true,
+        archivedAt: getExtremeIsoTime(120 + index * 18, index)
+      }
+    ];
+  });
+};
+
+export const createExtremeExampleData = (): ExampleGeneratedData => {
+  const base = withSeededRandom(0x4e465f99, () => createExampleData('advanced'));
+  const groups = cloneJson(base.appData.groups).map((group, index) => ({
+    ...group,
+    id: `g_extreme_${String(index + 1).padStart(3, '0')}`
+  }));
+  const groupIdMap = new Map(
+    base.appData.groups.map((group, index) => [group.id, groups[index]?.id ?? group.id])
+  );
+  const baseAccounts = cloneJson(base.appData.accounts).map((account, index) => ({
+    ...account,
+    id: `a_extreme_${String(index + 1).padStart(3, '0')}`,
+    groupId: groupIdMap.get(account.groupId) ?? account.groupId
+  }));
+  const accounts = [
+    ...baseAccounts,
+    ...createExtremeArchivedAccounts(groups, baseAccounts)
+  ].map((account, index) => ({
+    ...account,
+    createdAt: getExtremeIsoTime(
+      Math.max(1, EXTREME_EXAMPLE_DAY_SPAN - (index % 180)),
+      index % 720
+    ),
+    ...(account.archived
+      ? {
+          archived: true,
+          archivedAt:
+            account.archivedAt ??
+            getExtremeIsoTime(90 + (index % 120), index % 720)
+        }
+      : { archived: false, archivedAt: undefined })
+  }));
+  const groupById = new Map(groups.map((group) => [group.id, group]));
+  const amountByAccountId = new Map(accounts.map((account) => [account.id, account.amount]));
+  const creationRecords: HistoryRecord[] = accounts.map((account, index) => {
+    const group = groupById.get(account.groupId);
+
+    return {
+      id: `extreme-history-create-${index + 1}`,
+      accountId: account.id,
+      type: '创建',
+      groupName: group?.name ?? '',
+      accountName: account.name,
+      beforeAmount: null,
+      afterAmount: account.amount,
+      time: account.createdAt,
+      note: index % 3 === 0 ? '极端测试账户创建' : undefined,
+      source: index % 2 === 0 ? 'rollup' : undefined
+    };
+  });
+  const archivedRecords: HistoryRecord[] = accounts
+    .filter((account) => account.archived && account.archivedAt)
+    .map((account, index) => {
+      const group = groupById.get(account.groupId);
+
+      return {
+        id: `extreme-history-archive-${index + 1}`,
+        accountId: account.id,
+        type: '归档',
+        groupName: group?.name ?? '',
+        accountName: account.name,
+        beforeAmount: amountByAccountId.get(account.id) ?? account.amount,
+        afterAmount: account.amount,
+        time: account.archivedAt ?? getExtremeIsoTime(30 + index, index),
+        note: '极端测试归档账户',
+        source: 'rollup'
+      };
+    });
+  const activeAccounts = accounts.filter((account) => !account.archived);
+  const modifiableAccounts = accounts.filter((account) => account.archived !== true);
+  const history: HistoryRecord[] = [...creationRecords];
+  const modificationTarget = EXTREME_EXAMPLE_HISTORY_COUNT - creationRecords.length - archivedRecords.length;
+
+  for (let index = 0; index < modificationTarget; index += 1) {
+    const account = modifiableAccounts[index % modifiableAccounts.length] ?? activeAccounts[0];
+    const group = account ? groupById.get(account.groupId) : undefined;
+
+    if (!account) {
+      break;
+    }
+
+    const previousAmount = amountByAccountId.get(account.id) ?? account.amount;
+    const direction = group?.nature === 'liability' ? -1 : 1;
+    const delta = direction * (((index % 17) - 8) * 50 + ((index % 11) - 5) * 20);
+    const nextAmount = Math.round((previousAmount + delta) / 10) * 10;
+    const daysAgo =
+      EXTREME_EXAMPLE_DAY_SPAN -
+      Math.floor((index / Math.max(1, modificationTarget - 1)) * (EXTREME_EXAMPLE_DAY_SPAN - 1));
+    const noteVariant = index % 9;
+    const note =
+      noteVariant === 0
+        ? '极端测试：较长备注用于验证列表和搜索在大数据量下的表现，包含多种账户来源与批量导入场景。'
+        : noteVariant === 3
+          ? '极端测试备注'
+          : noteVariant === 6
+            ? ''
+            : undefined;
+
+    amountByAccountId.set(account.id, nextAmount);
+    history.push({
+      id: `extreme-history-change-${String(index + 1).padStart(5, '0')}`,
+      accountId: account.id,
+      type: '修改',
+      groupName: group?.name ?? '',
+      accountName: account.name,
+      beforeAmount: previousAmount,
+      afterAmount: nextAmount,
+      time: getExtremeIsoTime(daysAgo, index % 720),
+      relatedTime: index % 5 === 0 ? getExtremeIsoTime(daysAgo, 0).slice(0, 10) : undefined,
+      note: note === '' ? undefined : note,
+      source: index % 4 === 0 ? 'flash-note' : index % 4 === 1 ? 'rollup' : undefined
+    });
+  }
+
+  accounts.forEach((account) => {
+    if (!account.archived) {
+      account.amount = amountByAccountId.get(account.id) ?? account.amount;
+    }
+  });
+
+  const sortedHistory = [...history, ...archivedRecords]
+    .slice(0, EXTREME_EXAMPLE_HISTORY_COUNT)
+    .sort((left, right) => Date.parse(right.time) - Date.parse(left.time));
+  const backupRecords = createExampleBackupRecords(
+    EXAMPLE_TEMPLATES.find((template) => template.id === 'advanced') ?? EXAMPLE_TEMPLATES[2]!,
+    sortedHistory.length
+  );
+
+  return {
+    appData: {
+      groups,
+      accounts,
+      history: sortedHistory
+    },
+    backupRecords,
+    lastBackupAt: backupRecords[0]?.backedUpAt ?? '',
+    lastBackupHistoryCount: backupRecords[0]?.historyCount ?? sortedHistory.length
+  };
+};

@@ -42,6 +42,10 @@ export const createTestDataInRealAppData = (
   createExampleData(TEST_DATA_TEMPLATE_ID)
 ).appData;
 
+export const createExtremeTestDataInRealAppData = (
+  createExtremeExampleData: () => ExampleGeneratedData
+): AppData => createExampleDataApplyResult(createExtremeExampleData()).appData;
+
 export const createRestoredRealDataState = ({
   savedSnapshot,
   loadFallbackSnapshot

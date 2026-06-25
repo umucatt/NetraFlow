@@ -25,7 +25,6 @@ import {
   normalizeBackupRecords,
   normalizeSnapshotImportRecords
 } from '../../features/backup/snapshotBackupLogic';
-import { isPasswordHash } from '../../security/passwordHash';
 import type {
   CoreDocument,
   NonSecurityGlobalSettings,
@@ -136,8 +135,53 @@ export const createDefaultStateDocument = (): StateDocument => ({
   },
   rollupImportHashes: [],
   firstWelcome: { ...DEFAULT_FIRST_WELCOME_STATE },
-  personalization: {}
+  personalization: {},
+  coreProtection: {
+    schemaVersion: PERSISTENCE_SCHEMA_VERSION
+  }
 });
+
+const normalizeCoreFileFingerprint = (value: unknown) => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  if (
+    value.algorithm !== 'SHA-256' ||
+    typeof value.value !== 'string' ||
+    !/^[a-f0-9]{64}$/i.test(value.value) ||
+    typeof value.size !== 'number' ||
+    !Number.isInteger(value.size) ||
+    value.size < 0
+  ) {
+    return undefined;
+  }
+
+  return {
+    algorithm: 'SHA-256' as const,
+    value: value.value.toLowerCase(),
+    size: value.size
+  };
+};
+
+const normalizeCoreProtectionState = (value: unknown): StateDocument['coreProtection'] => {
+  if (!isRecord(value)) {
+    return createDefaultStateDocument().coreProtection;
+  }
+
+  const lastConfirmedFingerprint = normalizeCoreFileFingerprint(value.lastConfirmedFingerprint);
+  const acknowledgedInternalIntegrityFailureFingerprint = normalizeCoreFileFingerprint(
+    value.acknowledgedInternalIntegrityFailureFingerprint
+  );
+
+  return {
+    schemaVersion: PERSISTENCE_SCHEMA_VERSION,
+    ...(lastConfirmedFingerprint ? { lastConfirmedFingerprint } : {}),
+    ...(acknowledgedInternalIntegrityFailureFingerprint
+      ? { acknowledgedInternalIntegrityFailureFingerprint }
+      : {})
+  };
+};
 
 export const normalizeStateDocument = (value: unknown): StateDocument => {
   if (!isRecord(value)) {
@@ -165,20 +209,19 @@ export const normalizeStateDocument = (value: unknown): StateDocument => {
     firstWelcome,
     personalization: {
       ...(personalization.nyaaThemeUnlocked === true ? { nyaaThemeUnlocked: true } : {})
-    }
+    },
+    coreProtection: normalizeCoreProtectionState(value.coreProtection)
   };
 };
 
 export const createDefaultSecurityDocument = (): SecurityDocument => ({
   schemaVersion: PERSISTENCE_SCHEMA_VERSION,
   appAccess: {
-    enabled: false,
-    autoLockMinutes: DEFAULT_GLOBAL_SETTINGS.autoLockMinutes,
-    passwordHash: null
+    autoLockMinutes: DEFAULT_GLOBAL_SETTINGS.autoLockMinutes
   },
   snapshotEncryption: {
     enabled: false,
-    passwordHash: null
+    forceEnabled: true
   }
 });
 
@@ -191,23 +234,18 @@ export const normalizeSecurityDocument = (value: unknown): SecurityDocument => {
   const rawSnapshotEncryption = isRecord(value.snapshotEncryption)
     ? value.snapshotEncryption
     : {};
-  const appPasswordHash = isPasswordHash(rawAppAccess.passwordHash)
-    ? rawAppAccess.passwordHash
-    : null;
-  const snapshotPasswordHash = isPasswordHash(rawSnapshotEncryption.passwordHash)
-    ? rawSnapshotEncryption.passwordHash
-    : null;
 
   return {
     schemaVersion: PERSISTENCE_SCHEMA_VERSION,
     appAccess: {
-      enabled: rawAppAccess.enabled === true && appPasswordHash !== null,
-      autoLockMinutes: normalizeAutoLockMinutes(rawAppAccess.autoLockMinutes),
-      passwordHash: appPasswordHash
+      autoLockMinutes: normalizeAutoLockMinutes(rawAppAccess.autoLockMinutes)
     },
     snapshotEncryption: {
-      enabled: rawSnapshotEncryption.enabled === true && snapshotPasswordHash !== null,
-      passwordHash: snapshotPasswordHash
+      enabled: rawSnapshotEncryption.enabled === true,
+      forceEnabled:
+        typeof rawSnapshotEncryption.forceEnabled === 'boolean'
+          ? rawSnapshotEncryption.forceEnabled
+          : true
     }
   };
 };

@@ -24,9 +24,21 @@ import {
 import {
   getExampleModeBadgeSettingsNavigation
 } from './app/exampleModeNavigation';
-import { createTestDataInRealAppData } from './app/appDataLifecycleLogic';
+import {
+  createExtremeTestDataInRealAppData,
+  createTestDataInRealAppData
+} from './app/appDataLifecycleLogic';
 import { useAppDataLifecycleController } from './app/useAppDataLifecycleController';
 import { useAppDialogController } from './app/useAppDialogController';
+import { FatalErrorPage } from './app/fatalError';
+import { CoreIntegrityDialog } from './app/coreIntegrity';
+import { createCloseBeforeController } from './app/closeBeforeController';
+import {
+  createCoreSaveCoordinator,
+  type CoreSaveCoordinator,
+  type CoreSaveRequest,
+  type CoreSaveScheduleOptions
+} from './app/coreSaveCoordinator';
 import {
   isPositiveNature,
   toStoredAmountByNature
@@ -47,12 +59,19 @@ import {
   createRuntimeGlobalSettings,
   createSecurityDocumentFromRuntime,
   createSettingsDocumentFromRuntime,
+  acknowledgeCoreIntegrityIssue,
+  disableCoreProtection,
+  enableCoreProtection,
   enterDemoPersistenceEnvironment,
   exitDemoPersistenceEnvironment,
   getRuntimeBackupState,
+  isExternalCoreModificationError,
+  lockCoreDocument,
   promoteDemoCoreToRealPersistenceEnvironment,
   readCoreDocument,
   readRuntimePersistenceSnapshot,
+  unlockCoreDocument,
+  changeCorePassword,
   writeCoreDocument,
   writeSecurityDocument,
   writeSettingsDocument,
@@ -232,7 +251,11 @@ import {
   normalizeGlobalChartControlMode,
   syncCategoryChartSettingsFromGlobal
 } from './chartLogic';
-import { EXAMPLE_TEMPLATES, createExampleData } from './exampleData';
+import {
+  EXAMPLE_TEMPLATES,
+  createExampleData,
+  createExtremeExampleData
+} from './exampleData';
 import {
   isHomeAssetStatLabelMode,
   isHomeAssetStatMetric
@@ -439,6 +462,8 @@ const SECRET_CONSOLE_DEFAULT_PLACEHOLDER = '嘘...轻一点';
 
 const SECRET_CONSOLE_TEST_DATA_SUCCESS = '示例数据已写入真实数据';
 
+const SECRET_CONSOLE_EXTREME_TEST_DATA_SUCCESS = '极端测试数据已写入真实数据';
+
 const SECRET_CONSOLE_AUTO_BACKUP_DUE_ONCE_SUCCESS = '已设置下次启动自动备份检测命中';
 
 const SECRET_CONSOLE_NYAA_SUCCESS = '已解锁nyaa主题';
@@ -477,7 +502,11 @@ const startupPersistenceState = (() => {
         core: createDefaultCoreDocument(),
         settings: createDefaultSettingsDocument(),
         state: createDefaultStateDocument(),
-        security: createDefaultSecurityDocument()
+        security: createDefaultSecurityDocument(),
+        coreProtection: {
+          enabled: false,
+          locked: false
+        }
       },
       error
     };
@@ -493,7 +522,8 @@ const startupFirstWelcomeState = normalizeFirstWelcomeState(
 const startupGlobalSettings = createRuntimeGlobalSettings(
   startupPersistenceSnapshot.settings,
   startupPersistenceSnapshot.state,
-  startupPersistenceSnapshot.security
+  startupPersistenceSnapshot.security,
+  startupPersistenceSnapshot.coreProtection
 );
 const startupBackupState = getRuntimeBackupState(
   startupPersistenceSnapshot.state,
@@ -1012,10 +1042,18 @@ const saveAppData = (
 
   { groups, accounts, history }: AppData,
 
-  _options: { allowEmptyHistoryOverwrite?: boolean } = {}
+  options: {
+    allowEmptyHistoryOverwrite?: boolean;
+    allowExternalCoreOverwrite?: boolean;
+  } = {}
 
 ) => {
-  writeCoreDocument(createCoreDocumentFromAppData({ groups, accounts, history }));
+  writeCoreDocument(
+    createCoreDocumentFromAppData({ groups, accounts, history }),
+    {
+      allowExternalCoreOverwrite: options.allowExternalCoreOverwrite
+    }
+  );
 
 };
 
@@ -1095,39 +1133,47 @@ const getAccountDetailTitle = (groupName: string | undefined, accountName: strin
 
 };
 
+const getStartupPersistenceErrorCode = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  const matches = message.match(/[A-Z][A-Z0-9_]+/g);
+
+  return matches?.[matches.length - 1] ?? 'PERSISTENCE_READ_FAILED';
+};
+
+type AppCoreSaveRequest = CoreSaveRequest<AppData>;
+
+type CoreIntegrityPromptState = {
+  pendingSave: AppCoreSaveRequest | null;
+  onAcknowledge?: () => void;
+  onContinueSave?: () => void;
+};
+
 function StartupPersistenceErrorScreen({ error }: { error: unknown }) {
-  const message = error instanceof Error ? error.message : 'Unknown persistence startup error.';
+  const errorCode = getStartupPersistenceErrorCode(error);
 
   return (
-    <main
-      style={{
-        minHeight: '100vh',
-        display: 'grid',
-        placeItems: 'center',
-        padding: 24,
-        background: 'var(--app-bg)',
-        color: 'var(--text-primary)'
+    <FatalErrorPage
+      title="核心数据无法读取"
+      description="核心数据异常，NetraFlow 无法正常读取"
+      suggestion="检查 core.json 后重启"
+      technicalInfo={`错误代码 ${errorCode}`}
+      primaryAction={{
+        label: '打开数据目录',
+        onClick: () => {
+          void window.electronAPI?.openUserDataDirectory?.();
+        }
       }}
-    >
-      <section
-        role="alert"
-        aria-labelledby="startup-persistence-error-title"
-        style={{
-          width: 'min(560px, 100%)',
-          border: '1px solid var(--border)',
-          borderRadius: 8,
-          padding: 24,
-          background: 'var(--surface)',
-          boxShadow: 'var(--shadow-soft)'
-        }}
-      >
-        <h1 id="startup-persistence-error-title" style={{ marginTop: 0 }}>
-          核心数据读取失败
-        </h1>
-        <p>NetraFlow 未修改现有核心数据文件。请检查或恢复测试目录中的 core.json 后重启。</p>
-        <p style={{ color: 'var(--text-muted)', wordBreak: 'break-word' }}>{message}</p>
-      </section>
-    </main>
+      secondaryAction={{
+        label: '退出 NetraFlow',
+        onClick: () => {
+          if (window.electronAPI?.forceClose) {
+            window.electronAPI.forceClose();
+          } else {
+            window.close();
+          }
+        }
+      }}
+    />
   );
 }
 
@@ -1203,9 +1249,22 @@ function App() {
 
   const persistenceGenerationRef = useRef(0);
 
+  const coreSaveCoordinatorRef = useRef<CoreSaveCoordinator<AppData> | null>(null);
+
+  const closeBeforeControllerRef = useRef(createCloseBeforeController());
+
   const latestRealAppDataRef = useRef<AppData>(cloneAppData(startupAppData));
 
   const [appData, setAppData] = useState<AppData>(() => cloneAppData(startupAppData));
+  const [runtimePersistenceError, setRuntimePersistenceError] = useState<unknown | null>(null);
+  const [coreIntegrityPrompt, setCoreIntegrityPrompt] =
+    useState<CoreIntegrityPromptState | null>(() =>
+      'integrityWarning' in startupPersistenceSnapshot.coreProtection &&
+      startupPersistenceSnapshot.coreProtection.integrityWarning &&
+      !startupPersistenceSnapshot.coreProtection.locked
+        ? { pendingSave: null }
+        : null
+    );
 
   const [, setFirstWelcomeState] = useState<FirstWelcomeState>(startupFirstWelcomeState);
 
@@ -1337,6 +1396,230 @@ function App() {
     useState<GlobalSettingsSection>('appearance');
 
   const { toastMessages, showToast, dismissToast } = useToastController();
+
+  const showCoreIntegrityPrompt = (pendingSave: AppCoreSaveRequest | null) => {
+    closeConfirmationDialog();
+    setCoreIntegrityPrompt((currentPrompt) =>
+      currentPrompt
+        ? {
+            ...currentPrompt,
+            pendingSave: pendingSave ?? currentPrompt.pendingSave
+          }
+        : { pendingSave }
+    );
+  };
+
+  const showCoreIntegrityActionPrompt = ({
+    pendingSave = null,
+    onAcknowledge,
+    onContinueSave
+  }: {
+    pendingSave?: AppCoreSaveRequest | null;
+    onAcknowledge?: () => void;
+    onContinueSave?: () => void;
+  }) => {
+    closeConfirmationDialog();
+    setCoreIntegrityPrompt({
+      pendingSave,
+      onAcknowledge,
+      onContinueSave
+    });
+  };
+
+  const acknowledgeCurrentCoreIntegrity = () => {
+    acknowledgeCoreIntegrityIssue();
+  };
+
+  const coreSaveCoordinator =
+    coreSaveCoordinatorRef.current ??
+    createCoreSaveCoordinator<AppData>({
+      timerApi: {
+        setTimeout: (handler, delayMs) => window.setTimeout(handler, delayMs),
+        clearTimeout: (timerId) => window.clearTimeout(timerId as number)
+      },
+      cloneAppData,
+      saveAppData,
+      isExternalCoreModificationError,
+      showCoreIntegrityPrompt,
+      onCoalescedSaveError: (error) => {
+        console.error('[NetraFlow persistence] Failed to save coalesced core data.', error);
+        setRuntimePersistenceError(error);
+      }
+    });
+  coreSaveCoordinatorRef.current = coreSaveCoordinator;
+  coreSaveCoordinator.setHandlers({
+    timerApi: {
+      setTimeout: (handler, delayMs) => window.setTimeout(handler, delayMs),
+      clearTimeout: (timerId) => window.clearTimeout(timerId as number)
+    },
+    cloneAppData,
+    saveAppData,
+    isExternalCoreModificationError,
+    showCoreIntegrityPrompt,
+    onCoalescedSaveError: (error) => {
+      console.error('[NetraFlow persistence] Failed to save coalesced core data.', error);
+      setRuntimePersistenceError(error);
+    }
+  });
+
+  const clearCoreAutoSaveTimer = coreSaveCoordinator.clearAutoSaveTimer;
+
+  const getLatestPendingCoreSaveRequest =
+    coreSaveCoordinator.getLatestPendingSaveRequest;
+
+  const hasPendingCoreSaveData = coreSaveCoordinator.hasPendingSaveData;
+
+  const flushLatestCoreSave = coreSaveCoordinator.flushLatestSave;
+
+  const saveAppDataWithExternalModificationCheck = (
+    nextAppData: AppData,
+    options: { allowEmptyHistoryOverwrite?: boolean } = {},
+    onSaved: () => void,
+    scheduleOptions: CoreSaveScheduleOptions = {}
+  ) => {
+    return coreSaveCoordinator.saveWithExternalModificationCheck(
+      nextAppData,
+      options,
+      onSaved,
+      scheduleOptions
+    );
+  };
+
+  const acknowledgeCoreIntegrityPrompt = () => {
+    if (closeBeforeControllerRef.current.handleAcknowledgePrompt()) {
+      return;
+    }
+
+    const prompt = coreIntegrityPrompt;
+
+    try {
+      acknowledgeCurrentCoreIntegrity();
+    } catch (error) {
+      console.error('[NetraFlow persistence] Failed to acknowledge core integrity issue.', error);
+      return;
+    }
+
+    if (prompt?.pendingSave) {
+      coreSaveCoordinator.acknowledgePendingSaveWithoutPersisting(
+        prompt.pendingSave.revision
+      );
+    }
+
+    prompt?.onAcknowledge?.();
+    setCoreIntegrityPrompt(null);
+  };
+
+  const continueCoreIntegritySave = () => {
+    if (closeBeforeControllerRef.current.handleContinueSavePrompt()) {
+      return;
+    }
+
+    const pendingSave = coreIntegrityPrompt?.pendingSave;
+
+    if (coreIntegrityPrompt?.onContinueSave) {
+      try {
+        acknowledgeCurrentCoreIntegrity();
+      } catch (error) {
+        console.error('[NetraFlow persistence] Failed to acknowledge core integrity issue.', error);
+        return;
+      }
+
+      const continueSave = coreIntegrityPrompt.onContinueSave;
+      setCoreIntegrityPrompt(null);
+      continueSave();
+      return;
+    }
+
+    if (!pendingSave) {
+      acknowledgeCoreIntegrityPrompt();
+      return;
+    }
+
+    try {
+      acknowledgeCurrentCoreIntegrity();
+    } catch (error) {
+      console.error('[NetraFlow persistence] Failed to acknowledge core integrity issue.', error);
+      return;
+    }
+
+    setCoreIntegrityPrompt(null);
+    clearCoreAutoSaveTimer();
+    void flushLatestCoreSave(true);
+  };
+
+  const forceCloseApp = () => {
+    if (window.electronAPI?.forceClose) {
+      window.electronAPI.forceClose();
+      return;
+    }
+
+    window.close();
+  };
+
+  const allowControlledAppClose = () => {
+    if (window.electronAPI?.allowClose) {
+      window.electronAPI.allowClose();
+      return;
+    }
+
+    forceCloseApp();
+  };
+
+  const cancelControlledAppCloseRequest = () => {
+    window.electronAPI?.cancelCloseRequest?.();
+  };
+
+  const acknowledgePendingSaveWithoutPersisting = () => {
+    coreSaveCoordinator.acknowledgePendingSaveWithoutPersisting();
+  };
+
+  closeBeforeControllerRef.current.setHandlers({
+    hasRuntimePersistenceError: () => runtimePersistenceError !== null,
+    hasVisibleIntegrityPrompt: () => coreIntegrityPrompt !== null,
+    upgradeVisibleIntegrityPromptForClose: () => {
+      closeConfirmationDialog();
+      const pendingSave = getLatestPendingCoreSaveRequest();
+
+      setCoreIntegrityPrompt((currentPrompt) =>
+        currentPrompt
+          ? {
+              ...currentPrompt,
+              pendingSave: pendingSave ?? currentPrompt.pendingSave
+            }
+          : { pendingSave }
+      );
+    },
+    readHasIntegrityWarning: () =>
+      Boolean(readRuntimePersistenceSnapshot().coreProtection.integrityWarning),
+    hasPendingSave: hasPendingCoreSaveData,
+    showIntegrityPromptForClose: () => {
+      showCoreIntegrityPrompt(getLatestPendingCoreSaveRequest());
+    },
+    acknowledgeCoreIntegrity: acknowledgeCurrentCoreIntegrity,
+    acknowledgePendingSaveWithoutPersisting,
+    flushPendingSaveForClose: flushLatestCoreSave,
+    reportRuntimePersistenceError: (error) => {
+      console.error('[NetraFlow persistence] Failed to complete close-before flow.', error);
+      setRuntimePersistenceError(error);
+    },
+    clearIntegrityPrompt: () => {
+      setCoreIntegrityPrompt(null);
+    },
+    allowClose: allowControlledAppClose,
+    cancelCloseRequest: cancelControlledAppCloseRequest
+  });
+
+  const requestControlledAppClose = () => {
+    closeBeforeControllerRef.current.requestClose();
+  };
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI?.onCloseRequest?.(requestControlledAppClose);
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [coreIntegrityPrompt, runtimePersistenceError]);
 
   const persistSettingsDocument = (document: SettingsDocument) => {
     if (!isCurrentPersistenceGeneration()) {
@@ -2046,7 +2329,7 @@ function App() {
 
 
 
-  const updateAppData = (nextData: AppData) => {
+  const updateAppData = (nextData: AppData, scheduleOptions: CoreSaveScheduleOptions = {}) => {
     if (!isCurrentPersistenceGeneration()) {
       return;
     }
@@ -2057,23 +2340,24 @@ function App() {
       history: nextData.history
     };
 
-    saveAppData(normalizedData);
+    saveAppDataWithExternalModificationCheck(
+      normalizedData,
+      {},
+      () => {
+        if (!isExampleMode) {
+          latestRealAppDataRef.current = cloneAppData(normalizedData);
+        }
 
-    if (!isExampleMode) {
-      latestRealAppDataRef.current = cloneAppData(normalizedData);
-    }
+        globalSearch.clearNavigation();
 
-    globalSearch.clearNavigation();
+        setAppData(normalizedData);
 
-    setAppData(normalizedData);
-
-
-
-    if (!isExampleMode) {
-
-      cancelPendingFirstWelcomeForRealChange();
-
-    }
+        if (!isExampleMode) {
+          cancelPendingFirstWelcomeForRealChange();
+        }
+      },
+      scheduleOptions
+    );
 
   };
 
@@ -2082,7 +2366,11 @@ function App() {
       return { ok: false };
     }
 
-    const latestData = createAppDataFromCoreDocument(readCoreDocument());
+    const coordinator = coreSaveCoordinator.getState();
+    const latestData =
+      coordinator.dirtyRevision > coordinator.persistedRevision
+        ? cloneAppData(latestRealAppDataRef.current)
+        : createAppDataFromCoreDocument(readCoreDocument());
     const outcome = apply(latestData);
 
     if (!outcome.ok) {
@@ -2095,17 +2383,21 @@ function App() {
       history: outcome.nextData.history
     };
 
-    saveAppData(normalizedData);
+    const saved = saveAppDataWithExternalModificationCheck(normalizedData, {}, () => {
+      if (!isExampleMode) {
+        latestRealAppDataRef.current = cloneAppData(normalizedData);
+      }
 
-    if (!isExampleMode) {
-      latestRealAppDataRef.current = cloneAppData(normalizedData);
-    }
+      globalSearch.clearNavigation();
+      setAppData(normalizedData);
 
-    globalSearch.clearNavigation();
-    setAppData(normalizedData);
+      if (!isExampleMode) {
+        cancelPendingFirstWelcomeForRealChange();
+      }
+    });
 
-    if (!isExampleMode) {
-      cancelPendingFirstWelcomeForRealChange();
+    if (!saved) {
+      return { ok: false };
     }
 
     return {
@@ -2310,17 +2602,6 @@ function App() {
     passwordDisableError,
     setPasswordDisableError,
     isDisablingPasswordProtection,
-    snapshotPasswordEditorMode,
-    oldSnapshotPasswordInput,
-    setOldSnapshotPasswordInput,
-    newSnapshotPasswordInput,
-    setNewSnapshotPasswordInput,
-    confirmSnapshotPasswordInput,
-    setConfirmSnapshotPasswordInput,
-    snapshotPasswordEditorError,
-    setSnapshotPasswordEditorError,
-    isSavingSnapshotPassword,
-    visibleSnapshotPasswordField,
     isSnapshotEncryptionDisableConfirmOpen,
     snapshotEncryptionDisableInput,
     setSnapshotEncryptionDisableInput,
@@ -2334,22 +2615,30 @@ function App() {
     confirmDisablePasswordProtection,
     saveLoginPassword,
     closeSnapshotEncryptionDisableConfirm,
-    resetSnapshotPasswordEditor,
-    requestOpenSnapshotPasswordEditor,
     updateSnapshotEncryption,
+    updateForceSnapshotEncryption,
     confirmDisableSnapshotEncryption,
-    toggleSnapshotPasswordVisibility,
-    saveSnapshotPassword,
     updateAutoLockMinutesInput,
     resetInvalidAutoLockMinutesInput,
     unlockApp,
     resetSecurityState
   } = useSecuritySettingsController({
     globalSettings,
+    initialCoreProtectionLocked: startupPersistenceSnapshot.coreProtection.locked,
     autoBackupEnabled: autoBackupSettings.enabled,
+    getCurrentCoreDocument: () =>
+      createCoreDocumentFromAppData({ groups: assetGroups, accounts, history }),
+    unlockCoreDocument: (password) => {
+      unlockCoreDocument(password);
+    },
+    enableCoreProtection,
+    changeCorePassword,
+    disableCoreProtection,
+    lockCoreDocument,
     updateGlobalSettings,
     isPersistenceCurrent: isCurrentPersistenceGeneration,
     showConfirmationDialog,
+    showCoreIntegrityDialog: showCoreIntegrityActionPrompt,
     showToast
   });
 
@@ -2880,7 +3169,11 @@ function App() {
       core: createCoreDocumentFromAppData(generatedData.appData),
       settings,
       state,
-      security
+      security,
+      coreProtection: {
+        enabled: false,
+        locked: false
+      }
     };
   };
 
@@ -2893,7 +3186,8 @@ function App() {
     const nextGlobalSettings = createRuntimeGlobalSettings(
       snapshot.settings,
       snapshot.state,
-      snapshot.security
+      snapshot.security,
+      snapshot.coreProtection
     );
     const nextBackupState = getRuntimeBackupState(snapshot.state, nextAppData.history.length);
 
@@ -3009,12 +3303,35 @@ function App() {
 
     const nextAppData = createTestDataInRealAppData(createExampleData);
 
-    saveAppData(nextAppData, { allowEmptyHistoryOverwrite: true });
-    latestRealAppDataRef.current = cloneAppData(nextAppData);
-    setAppData(nextAppData);
-    setIsExampleMode(false);
+    return saveAppDataWithExternalModificationCheck(
+      nextAppData,
+      { allowEmptyHistoryOverwrite: true },
+      () => {
+        latestRealAppDataRef.current = cloneAppData(nextAppData);
+        setAppData(nextAppData);
+        setIsExampleMode(false);
+      },
+      { flush: true }
+    );
+  };
 
-    return true;
+  const writeExtremeTestDataToRealData = () => {
+    if (isExampleMode) {
+      return promoteCurrentDemoCoreToRealData();
+    }
+
+    const nextAppData = createExtremeTestDataInRealAppData(createExtremeExampleData);
+
+    return saveAppDataWithExternalModificationCheck(
+      nextAppData,
+      { allowEmptyHistoryOverwrite: true },
+      () => {
+        latestRealAppDataRef.current = cloneAppData(nextAppData);
+        setAppData(nextAppData);
+        setIsExampleMode(false);
+      },
+      { flush: true }
+    );
   };
 
 
@@ -3053,8 +3370,14 @@ function App() {
     persistEmptyAssetData: () => {
       const emptyData: AppData = { groups: [], accounts: [], history: [] };
 
-      saveAppData(emptyData, { allowEmptyHistoryOverwrite: true });
-      latestRealAppDataRef.current = cloneAppData(emptyData);
+      saveAppDataWithExternalModificationCheck(
+        emptyData,
+        { allowEmptyHistoryOverwrite: true },
+        () => {
+          latestRealAppDataRef.current = cloneAppData(emptyData);
+        },
+        { flush: true }
+      );
     },
     startExampleModeSession,
     switchExampleModeSession,
@@ -3075,6 +3398,14 @@ function App() {
     if (command === 'testdatain') {
 
       return writeExampleDataToRealData() ? SECRET_CONSOLE_TEST_DATA_SUCCESS : null;
+
+    }
+
+    if (command === 'testexpdatain') {
+
+      return writeExtremeTestDataToRealData()
+        ? SECRET_CONSOLE_EXTREME_TEST_DATA_SUCCESS
+        : null;
 
     }
 
@@ -4710,8 +5041,6 @@ function App() {
 
     resetPasswordEditor();
 
-    resetSnapshotPasswordEditor();
-
     closePasswordDisableConfirm();
 
     closeSnapshotEncryptionDisableConfirm();
@@ -4782,8 +5111,6 @@ function App() {
     resetPasswordEditor();
 
     closePasswordDisableConfirm();
-
-    resetSnapshotPasswordEditor();
 
     closeSnapshotEncryptionDisableConfirm();
 
@@ -6271,14 +6598,6 @@ function App() {
 
 
 
-    if (snapshotPasswordEditorMode) {
-
-      return resetSnapshotPasswordEditor;
-
-    }
-
-
-
     if (isAccountTypeEditorVisible) {
 
       return requestCloseAccountTypeEditor;
@@ -6759,30 +7078,6 @@ function App() {
         onSubmit: saveLoginPassword,
         onCancel: resetPasswordEditor
       },
-      snapshotPasswordEditor: {
-        mode: snapshotPasswordEditorMode,
-        oldPassword: oldSnapshotPasswordInput,
-        newPassword: newSnapshotPasswordInput,
-        confirmPassword: confirmSnapshotPasswordInput,
-        visibleField: visibleSnapshotPasswordField,
-        error: snapshotPasswordEditorError,
-        isSaving: isSavingSnapshotPassword,
-        onOldPasswordChange: (value) => {
-          setOldSnapshotPasswordInput(value);
-          setSnapshotPasswordEditorError('');
-        },
-        onNewPasswordChange: (value) => {
-          setNewSnapshotPasswordInput(value);
-          setSnapshotPasswordEditorError('');
-        },
-        onConfirmPasswordChange: (value) => {
-          setConfirmSnapshotPasswordInput(value);
-          setSnapshotPasswordEditorError('');
-        },
-        onToggleVisibility: toggleSnapshotPasswordVisibility,
-        onSubmit: saveSnapshotPassword,
-        onCancel: resetSnapshotPasswordEditor
-      },
       passwordProtectionDisable: {
         isOpen: isPasswordDisableConfirmOpen,
         password: passwordDisableInput,
@@ -6852,8 +7147,8 @@ function App() {
     onOpenPasswordEditor: requestOpenPasswordEditor,
     onAutoLockMinutesInputChange: updateAutoLockMinutesInput,
     onResetInvalidAutoLockMinutesInput: resetInvalidAutoLockMinutesInput,
+    onForceSnapshotEncryptionChange: updateForceSnapshotEncryption,
     onSnapshotEncryptionChange: updateSnapshotEncryption,
-    onOpenSnapshotPasswordEditor: requestOpenSnapshotPasswordEditor,
     onImportUserSettings: importUserSettings,
     onExportUserSettings: exportUserSettings,
     onOpenUserSettingsFile: () => {
@@ -7225,6 +7520,12 @@ function App() {
 
 
 
+  if (runtimePersistenceError) {
+    return <StartupPersistenceErrorScreen error={runtimePersistenceError} />;
+  }
+
+
+
 
   return (
 
@@ -7317,6 +7618,16 @@ function App() {
 
       <AppDialogLayer {...appDialogLayerProps} />
 
+
+      {coreIntegrityPrompt ? (
+        <CoreIntegrityDialog
+          hasPendingSave={
+            !!coreIntegrityPrompt.pendingSave || !!coreIntegrityPrompt.onContinueSave
+          }
+          onAcknowledge={acknowledgeCoreIntegrityPrompt}
+          onContinueSave={continueCoreIntegritySave}
+        />
+      ) : null}
 
 
       <ResetDangerDialogLayer {...resetDangerDialogLayerProps} />

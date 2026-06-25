@@ -441,12 +441,12 @@ const settingsItems: SettingsSearchItem[] = [
     description: '加密手动导出和自动生成的快照文件',
     sectionTitle: '安全',
     blockTitle: '快照加密',
-    summary: '控制是否启用快照文件加密，并管理用于快照加密的密码。',
-    previewItems: ['启用或关闭快照加密', '设置或修改快照密码', '仅加密快照文件'],
+    summary: '控制是否启用快照文件加密，加密快照使用创建时的登录密码。',
+    previewItems: ['启用或关闭快照加密', '使用创建时的登录密码加密', '仅加密快照文件'],
     section: 'security',
-    keywords: ['快照加密', '设置快照密码', '修改快照密码', '快照密码'],
-    pinyinKeywords: ['kuai zhao jia mi', 'kuai zhao mi ma'],
-    pinyinInitials: ['kzjm', 'kzmm']
+    keywords: ['快照加密', '登录密码加密快照', '创建时登录密码'],
+    pinyinKeywords: ['kuai zhao jia mi', 'deng lu mi ma jia mi kuai zhao'],
+    pinyinInitials: ['kzjm', 'dlmmjmkz']
   }
 ];
 

@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { Account, AssetGroup, HistoryRecord } from '../types';
-import { PASSWORD_HASH_ALGORITHM, PASSWORD_HASH_ITERATIONS } from '../../security/passwordHash';
+import {
+  ENCRYPTION_KDF_ITERATIONS,
+  PASSWORD_KDF_ALGORITHM
+} from '../../../electron/cryptoEnvelopeShared';
 import {
   createDefaultCoreDocument,
   createDefaultSettingsDocument,
@@ -65,8 +68,8 @@ const createHistoryRecord = (
 });
 
 const passwordHash = {
-  algorithm: PASSWORD_HASH_ALGORITHM,
-  iterations: PASSWORD_HASH_ITERATIONS,
+  algorithm: PASSWORD_KDF_ALGORITHM,
+  iterations: ENCRYPTION_KDF_ITERATIONS,
   salt: 'salt-base64',
   hash: 'hash-base64'
 } as const;
@@ -190,11 +193,38 @@ test('state contract keeps backup state rollup hashes welcome state and personal
     },
     rollupImportHashes: ['a', 'b'],
     firstWelcome: { completed: true, pendingAfterClearAll: false },
-    personalization: { nyaaThemeUnlocked: true }
+    personalization: { nyaaThemeUnlocked: true },
+    coreProtection: {
+      schemaVersion: 1,
+      lastConfirmedFingerprint: {
+        algorithm: 'SHA-256',
+        value: 'a'.repeat(64),
+        size: 128
+      },
+      acknowledgedInternalIntegrityFailureFingerprint: {
+        algorithm: 'SHA-256',
+        value: 'b'.repeat(64),
+        size: 128
+      }
+    }
   };
 
   assert.equal(isStateDocument(createDefaultStateDocument()), true);
   assert.equal(isStateDocument(state), true);
+  assert.equal(
+    isStateDocument({
+      ...state,
+      coreProtection: {
+        ...state.coreProtection!,
+        lastConfirmedFingerprint: {
+          algorithm: 'SHA-256',
+          value: 'not-a-sha',
+          size: 128
+        }
+      }
+    }),
+    false
+  );
 });
 
 test('state normalizer applies rollup de-duplication count limit and force marker boundary', () => {
@@ -224,6 +254,38 @@ test('state normalizer applies rollup de-duplication count limit and force marke
   );
   assert.deepEqual(normalizeRollupImportHashes(['a', 'a', 'b']), ['a', 'b']);
   assert.equal(normalized.personalization.nyaaThemeUnlocked, true);
+  assert.deepEqual(
+    normalizeStateDocument({
+      ...createDefaultStateDocument(),
+      coreProtection: {
+        schemaVersion: 1,
+        lastConfirmedFingerprint: {
+          algorithm: 'SHA-256',
+          value: 'ABCDEF'.padEnd(64, '0'),
+          size: 64
+        },
+        acknowledgedInternalIntegrityFailureFingerprint: {
+          algorithm: 'SHA-256',
+          value: '123456'.padEnd(64, '0'),
+          size: 64
+        },
+        payload: []
+      }
+    }).coreProtection,
+    {
+      schemaVersion: 1,
+      lastConfirmedFingerprint: {
+        algorithm: 'SHA-256',
+        value: 'abcdef'.padEnd(64, '0'),
+        size: 64
+      },
+      acknowledgedInternalIntegrityFailureFingerprint: {
+        algorithm: 'SHA-256',
+        value: '123456'.padEnd(64, '0'),
+        size: 64
+      }
+    }
+  );
 });
 
 test('state contract rejects core and password fields', () => {
@@ -243,43 +305,39 @@ test('state contract rejects core and password fields', () => {
   );
 });
 
-test('security defaults mean disabled and valid PBKDF2 credentials are accepted', () => {
+test('security defaults keep only rebuildable behavior settings', () => {
   const disabled = createDefaultSecurityDocument();
   const enabled: SecurityDocument = {
     schemaVersion: 1,
     appAccess: {
-      enabled: true,
-      autoLockMinutes: 15,
-      passwordHash
+      autoLockMinutes: 15
     },
     snapshotEncryption: {
       enabled: true,
-      passwordHash
+      forceEnabled: true
     }
   };
 
   assert.deepEqual(disabled, {
     schemaVersion: 1,
     appAccess: {
-      enabled: false,
-      autoLockMinutes: 10,
-      passwordHash: null
+      autoLockMinutes: 10
     },
     snapshotEncryption: {
       enabled: false,
-      passwordHash: null
+      forceEnabled: true
     }
   });
   assert.equal(isSecurityDocument(disabled), true);
   assert.equal(isSecurityDocument(enabled), true);
 });
 
-test('security normalizer disables enabled protections without valid hashes', () => {
+test('security normalizer discards password hashes and restores behavior defaults', () => {
   const normalized = normalizeSecurityDocument({
     appAccess: {
       enabled: true,
       autoLockMinutes: 0,
-      passwordHash: { algorithm: PASSWORD_HASH_ALGORITHM, iterations: 1 }
+      passwordHash: { algorithm: PASSWORD_KDF_ALGORITHM, iterations: 1 }
     },
     snapshotEncryption: {
       enabled: true,
@@ -287,11 +345,12 @@ test('security normalizer disables enabled protections without valid hashes', ()
     }
   });
 
-  assert.equal(normalized.appAccess.enabled, false);
   assert.equal(normalized.appAccess.autoLockMinutes, 10);
-  assert.equal(normalized.appAccess.passwordHash, null);
-  assert.equal(normalized.snapshotEncryption.enabled, false);
-  assert.equal(normalized.snapshotEncryption.passwordHash, null);
+  assert.equal('enabled' in normalized.appAccess, false);
+  assert.equal('passwordHash' in normalized.appAccess, false);
+  assert.equal(normalized.snapshotEncryption.enabled, true);
+  assert.equal(normalized.snapshotEncryption.forceEnabled, true);
+  assert.equal('passwordHash' in normalized.snapshotEncryption, false);
 });
 
 test('security contract rejects ordinary UI settings and export-style fields', () => {

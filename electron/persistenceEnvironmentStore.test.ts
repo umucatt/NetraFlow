@@ -101,8 +101,8 @@ test('environment store promotes current demo core to real core only', (t) => {
   });
   assert.deepEqual(
     realStore.writeSecurityDocument({
-      appAccess: { enabled: true, passwordHash: null },
-      snapshotEncryption: { enabled: false, passwordHash: null }
+      appAccess: { autoLockMinutes: 30 },
+      snapshotEncryption: { enabled: false, forceEnabled: true }
     }),
     { ok: true }
   );
@@ -115,8 +115,8 @@ test('environment store promotes current demo core to real core only', (t) => {
   });
   assert.deepEqual(
     demoStore.writeSecurityDocument({
-      appAccess: { enabled: false, passwordHash: null },
-      snapshotEncryption: { enabled: true, passwordHash: null }
+      appAccess: { autoLockMinutes: 10 },
+      snapshotEncryption: { enabled: true, forceEnabled: false }
     }),
     { ok: true }
   );
@@ -140,8 +140,29 @@ test('environment store promotes current demo core to real core only', (t) => {
     exists: true,
     document: demoCore
   });
+  const realStateAfter = JSON.parse(
+    readFileSync(path.join(realRoot, 'state.json'), 'utf8')
+  ) as Record<string, unknown>;
+  const realStateBusinessBefore = JSON.parse(realStateBefore) as Record<string, unknown>;
+  const {
+    coreProtection: _coreProtectionBefore,
+    ...realStateBusinessBeforeWithoutCoreProtection
+  } = realStateBusinessBefore;
+  const {
+    coreProtection: realCoreProtectionAfter,
+    ...realStateBusinessAfterWithoutCoreProtection
+  } = realStateAfter;
+
   assert.equal(readFileSync(path.join(realRoot, 'settings.json'), 'utf8'), realSettingsBefore);
-  assert.equal(readFileSync(path.join(realRoot, 'state.json'), 'utf8'), realStateBefore);
+  assert.deepEqual(
+    realStateBusinessAfterWithoutCoreProtection,
+    realStateBusinessBeforeWithoutCoreProtection
+  );
+  assert.equal(
+    typeof (realCoreProtectionAfter as { lastConfirmedFingerprint?: unknown })
+      .lastConfirmedFingerprint,
+    'object'
+  );
   assert.equal(readFileSync(path.join(realRoot, 'security.json'), 'utf8'), realSecurityBefore);
 });
 

@@ -19,6 +19,12 @@ const { contextBridge, ipcRenderer } = require('electron') as {
 };
 
 type PersistenceErrorCode =
+  | 'PERSISTENCE_CORE_LOCKED'
+  | 'PERSISTENCE_CORE_UNLOCK_FAILED'
+  | 'PERSISTENCE_CRYPTO_SESSION_UNAVAILABLE'
+  | 'PERSISTENCE_SNAPSHOT_ENCRYPT_FAILED'
+  | 'PERSISTENCE_SNAPSHOT_DECRYPT_FAILED'
+  | 'PERSISTENCE_CORE_EXTERNAL_MODIFIED'
   | 'PERSISTENCE_READ_FAILED'
   | 'PERSISTENCE_READ_INVALID'
   | 'PERSISTENCE_SCHEMA_INVALID'
@@ -36,7 +42,8 @@ type PersistenceErrorCode =
   | 'DEMO_DIRECTORY_NOT_WRITABLE'
   | 'DEMO_DOCUMENT_SCHEMA_INVALID'
   | 'DEMO_NOT_ACTIVE'
-  | 'DEMO_CORE_MISSING';
+  | 'DEMO_CORE_MISSING'
+  | 'DEMO_CORE_LOCKED';
 
 type PersistenceErrorResponse = {
   ok: false;
@@ -45,6 +52,10 @@ type PersistenceErrorResponse = {
 };
 
 type PersistenceWriteResponse = { ok: true } | PersistenceErrorResponse;
+
+type CoreWriteOptions = {
+  allowExternalCoreOverwrite?: boolean;
+};
 
 const isPersistenceErrorResponse = (value: unknown): value is PersistenceErrorResponse =>
   typeof value === 'object' &&
@@ -85,9 +96,14 @@ const electronAPI = {
   maximize: () => ipcRenderer.invoke('window:maximize') as Promise<boolean>,
   unmaximize: () => ipcRenderer.invoke('window:unmaximize') as Promise<boolean>,
   close: () => ipcRenderer.send('window:close'),
+  allowClose: () => ipcRenderer.send('window:allow-close'),
+  cancelCloseRequest: () => ipcRenderer.send('window:cancel-close-request'),
+  forceClose: () => ipcRenderer.send('window:force-close'),
   isMaximized: () => ipcRenderer.invoke('window:is-maximized') as Promise<boolean>,
   openExternalUrl: (url: string) =>
     ipcRenderer.invoke('app:open-external-url', url) as Promise<void>,
+  openUserDataDirectory: () =>
+    ipcRenderer.invoke('app:open-userdata-directory') as Promise<void>,
   selectDirectory: () => ipcRenderer.invoke('dialog:select-directory') as Promise<string>,
   writeSnapshotFile: (payload: { directory: string; fileName: string; content: string }) =>
     ipcRenderer.invoke('json:write-file', payload) as Promise<{ filePath: string }>,
@@ -106,6 +122,17 @@ const electronAPI = {
       ipcRenderer.removeListener('netraflow-lock', handleNetraFlowLock);
     };
   },
+  onCloseRequest: (listener: () => void) => {
+    const handleCloseRequest = () => {
+      listener();
+    };
+
+    ipcRenderer.on('app:close-request', handleCloseRequest);
+
+    return () => {
+      ipcRenderer.removeListener('app:close-request', handleCloseRequest);
+    };
+  },
   onMaximizedChange: (listener: (isMaximized: boolean) => void) => {
     const handleMaximizedChange = (_event: IpcRendererEvent, isMaximized: boolean) => {
       listener(isMaximized);
@@ -122,9 +149,71 @@ const electronAPI = {
 const netraflowPersistence = {
   readCoreDocument: () =>
     unwrapPersistenceResponse(ipcRenderer.sendSync('persistence:read-core') as unknown),
-  writeCoreDocument: (document: unknown) =>
+  writeCoreDocument: (document: unknown, options?: CoreWriteOptions) =>
     unwrapPersistenceWriteResponse(
-      ipcRenderer.sendSync('persistence:write-core', document) as PersistenceWriteResponse
+      ipcRenderer.sendSync('persistence:write-core', {
+        document,
+        options
+      }) as PersistenceWriteResponse
+    ),
+  unlockCoreDocument: (password: string) =>
+    unwrapPersistenceResponse(
+      ipcRenderer.sendSync('persistence:unlock-core', password) as unknown
+    ),
+  enableCoreProtection: (document: unknown, password: string, options?: CoreWriteOptions) =>
+    unwrapPersistenceWriteResponse(
+      ipcRenderer.sendSync('persistence:enable-core-protection', {
+        document,
+        password,
+        options
+      }) as PersistenceWriteResponse
+    ),
+  changeCorePassword: (
+    document: unknown,
+    currentPassword: string,
+    nextPassword: string,
+    options?: CoreWriteOptions
+  ) =>
+    unwrapPersistenceWriteResponse(
+      ipcRenderer.sendSync('persistence:change-core-password', {
+        document,
+        currentPassword,
+        nextPassword,
+        options
+      }) as PersistenceWriteResponse
+    ),
+  disableCoreProtection: (document: unknown, password: string, options?: CoreWriteOptions) =>
+    unwrapPersistenceWriteResponse(
+      ipcRenderer.sendSync('persistence:disable-core-protection', {
+        document,
+        password,
+        options
+      }) as PersistenceWriteResponse
+    ),
+  lockCoreDocument: () =>
+    unwrapPersistenceWriteResponse(
+      ipcRenderer.sendSync('persistence:lock-core') as PersistenceWriteResponse
+    ),
+  acknowledgeCoreIntegrityIssue: () =>
+    unwrapPersistenceWriteResponse(
+      ipcRenderer.sendSync(
+        'persistence:acknowledge-core-integrity'
+      ) as PersistenceWriteResponse
+    ),
+  encryptSnapshotDocument: (document: unknown) =>
+    unwrapPersistenceResponse(
+      ipcRenderer.sendSync('persistence:encrypt-snapshot', document) as unknown
+    ),
+  decryptSnapshotDocument: (encrypted: unknown) =>
+    unwrapPersistenceResponse(
+      ipcRenderer.sendSync('persistence:decrypt-snapshot', encrypted) as unknown
+    ),
+  decryptSnapshotDocumentWithPassword: (encrypted: unknown, password: string) =>
+    unwrapPersistenceResponse(
+      ipcRenderer.sendSync('persistence:decrypt-snapshot-with-password', {
+        encrypted,
+        password
+      }) as unknown
     ),
   readSettingsDocument: () =>
     unwrapPersistenceResponse(ipcRenderer.sendSync('persistence:read-settings') as unknown),

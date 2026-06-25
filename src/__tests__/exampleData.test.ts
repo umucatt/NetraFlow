@@ -4,7 +4,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   EXAMPLE_TEMPLATES,
+  EXTREME_EXAMPLE_DAY_SPAN,
+  EXTREME_EXAMPLE_HISTORY_COUNT,
   createExampleData,
+  createExtremeExampleData,
   isExampleAccountNameAllowed,
   isExampleHistoryNoteAllowed,
   validateExampleHistoryConsistency,
@@ -181,4 +184,42 @@ test('advanced example tier includes at least one valid restored account lifecyc
   });
 
   assert.ok(restoredRecords.length > 0);
+});
+
+test('extreme example data is deterministic and covers large valid history', () => {
+  const first = createExtremeExampleData();
+  const second = createExtremeExampleData();
+  const template = EXAMPLE_TEMPLATES.find((item) => item.id === 'advanced');
+  const accountIds = new Set(first.appData.accounts.map((account) => account.id));
+  const groupIds = new Set(first.appData.groups.map((group) => group.id));
+  const archivedAccounts = first.appData.accounts.filter((account) => account.archived);
+  const activeAccounts = first.appData.accounts.filter((account) => !account.archived);
+  const times = first.appData.history.map((record) => Date.parse(record.time));
+  const minTime = Math.min(...times);
+  const maxTime = Math.max(...times);
+  const spanDays = (maxTime - minTime) / (24 * 60 * 60 * 1000);
+  const sources = new Set(first.appData.history.map((record) => record.source));
+
+  assert.ok(template);
+  assert.deepEqual(first.appData.groups, second.appData.groups);
+  assert.deepEqual(first.appData.accounts, second.appData.accounts);
+  assert.deepEqual(first.appData.history.slice(0, 40), second.appData.history.slice(0, 40));
+  assert.deepEqual(first.appData.history.slice(-40), second.appData.history.slice(-40));
+  assert.equal(first.appData.history.length, EXTREME_EXAMPLE_HISTORY_COUNT);
+  assert.ok(spanDays >= EXTREME_EXAMPLE_DAY_SPAN - 2);
+  assert.ok(spanDays <= EXTREME_EXAMPLE_DAY_SPAN + 1);
+  assert.ok(activeAccounts.length >= template.accountRange[0]);
+  assert.ok(activeAccounts.length <= template.accountRange[1]);
+  assert.ok(archivedAccounts.length >= 4);
+  assert.equal(
+    first.appData.accounts.every((account) => groupIds.has(account.groupId)),
+    true
+  );
+  assert.equal(
+    first.appData.history.every((record) => accountIds.has(record.accountId)),
+    true
+  );
+  assert.equal(sources.has('flash-note'), true);
+  assert.equal(sources.has('rollup'), true);
+  assert.equal(first.appData.history.some((record) => (record.note?.length ?? 0) > 40), true);
 });

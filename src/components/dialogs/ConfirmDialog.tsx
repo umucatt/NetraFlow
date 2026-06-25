@@ -22,6 +22,11 @@ function ConfirmDialog({
   onConfirm,
   onCancel
 }: ConfirmDialogProps) {
+  const resolvedMessage =
+    typeof message === 'string'
+      ? message.split('\n').map((line, index) => <p key={`${line}-${index}`}>{line}</p>)
+      : message;
+
   return (
     <DialogShell
       title={title}
@@ -49,7 +54,7 @@ function ConfirmDialog({
         </>
       )}
     >
-      <div className="modal-message">{message}</div>
+      <div className="modal-message">{resolvedMessage}</div>
     </DialogShell>
   );
 }

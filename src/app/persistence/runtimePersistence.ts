@@ -36,18 +36,39 @@ type PersistenceReadResult =
       ok: true;
       exists: boolean;
       document: unknown;
+      encrypted?: boolean;
+      integrityWarning?: string;
+      integrityFailure?: 'internal' | 'continuity';
       degraded?: boolean;
       code?: string;
+    }
+  | {
+      ok: true;
+      exists: boolean;
+      locked: true;
+      encrypted: true;
+      integrityWarning?: string;
+      integrityFailure?: 'internal';
     }
   | { ok: false; code: string; message: string };
 
 type PersistenceBridge = NonNullable<Window['netraflowPersistence']>;
+
+export type CoreWriteOptions = {
+  allowExternalCoreOverwrite?: boolean;
+};
 
 export type RuntimePersistenceSnapshot = {
   core: CoreDocument;
   settings: SettingsDocument;
   state: StateDocument;
   security: SecurityDocument;
+  coreProtection: {
+    enabled: boolean;
+    locked: boolean;
+    integrityWarning?: string;
+    integrityFailure?: 'internal' | 'continuity';
+  };
 };
 
 export type RuntimePersistenceEnvironmentTransition = {
@@ -98,6 +119,10 @@ const readDocument = <T>({
 
   if (!result.ok) {
     throw new Error(`Failed to read ${kind} document: ${result.code}`);
+  }
+
+  if ('locked' in result) {
+    throw new Error(`Failed to read ${kind} document: PERSISTENCE_CORE_LOCKED`);
   }
 
   if (!isDocument(result.document)) {
@@ -151,8 +176,34 @@ const ensurePersistenceSnapshot = (value: unknown): RuntimePersistenceSnapshot =
     core: snapshot.core,
     settings: snapshot.settings,
     state: snapshot.state,
-    security: snapshot.security
+    security: snapshot.security,
+    coreProtection:
+      typeof snapshot.coreProtection === 'object' && snapshot.coreProtection !== null
+        ? snapshot.coreProtection as RuntimePersistenceSnapshot['coreProtection']
+        : { enabled: false, locked: false }
   };
+};
+
+export const isExternalCoreModificationError = (error: unknown) => {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  if (
+    'code' in error &&
+    (error as { code?: unknown }).code === 'PERSISTENCE_CORE_EXTERNAL_MODIFIED'
+  ) {
+    return true;
+  }
+
+  const message =
+    error instanceof Error
+      ? error.message
+      : 'message' in error
+        ? String((error as { message?: unknown }).message)
+        : '';
+
+  return message.includes('Core document was modified outside NetraFlow');
 };
 
 const ensureEnvironmentTransition = (
@@ -176,14 +227,49 @@ const ensureEnvironmentTransition = (
 
 export const readRuntimePersistenceSnapshot = (): RuntimePersistenceSnapshot => {
   const bridge = getBridge();
+  const coreResult = bridge?.readCoreDocument
+    ? ensureReadResult(bridge.readCoreDocument())
+    : {
+        ok: true as const,
+        exists: false,
+        document: createDefaultCoreDocument()
+      };
+
+  if (!coreResult.ok) {
+    throw new Error(`Failed to read core document: ${coreResult.code}`);
+  }
+
+  const coreProtection =
+    'locked' in coreResult
+      ? {
+          enabled: true,
+          locked: true,
+          ...(coreResult.integrityWarning
+            ? { integrityWarning: coreResult.integrityWarning }
+            : {}),
+          ...(coreResult.integrityFailure
+            ? { integrityFailure: coreResult.integrityFailure }
+            : {})
+        }
+      : {
+          enabled: coreResult.encrypted === true,
+          locked: false,
+          ...(coreResult.integrityWarning
+            ? { integrityWarning: coreResult.integrityWarning }
+            : {}),
+          ...(coreResult.integrityFailure
+            ? { integrityFailure: coreResult.integrityFailure }
+            : {})
+        };
+
+  const core = 'locked' in coreResult ? createDefaultCoreDocument() : coreResult.document;
+
+  if (!isCoreDocument(core)) {
+    throw new Error('Invalid core document returned by persistence bridge.');
+  }
 
   return {
-    core: readDocument({
-      kind: 'core',
-      fallback: createDefaultCoreDocument,
-      read: bridge?.readCoreDocument,
-      isDocument: isCoreDocument
-    }),
+    core,
     settings: readDocument({
       kind: 'settings',
       fallback: createDefaultSettingsDocument,
@@ -201,7 +287,8 @@ export const readRuntimePersistenceSnapshot = (): RuntimePersistenceSnapshot => 
       fallback: createDefaultSecurityDocument,
       read: bridge?.readSecurityDocument,
       isDocument: isSecurityDocument
-    })
+    }),
+    coreProtection
   };
 };
 
@@ -240,16 +327,21 @@ export const createAppDataFromCoreDocument = ({
 export const createRuntimeGlobalSettings = (
   settings: SettingsDocument,
   state: StateDocument,
-  security: SecurityDocument
+  security: SecurityDocument,
+  coreProtection: RuntimePersistenceSnapshot['coreProtection'] = {
+    enabled: false,
+    locked: false
+  }
 ): GlobalSettings =>
   normalizeGlobalSettings({
     ...settings.global,
     nyaaThemeUnlocked: state.personalization.nyaaThemeUnlocked === true,
-    passwordProtectionEnabled: security.appAccess.enabled,
-    passwordHash: security.appAccess.passwordHash,
+    passwordProtectionEnabled: coreProtection.enabled,
+    passwordHash: null,
     autoLockMinutes: security.appAccess.autoLockMinutes,
+    forceSnapshotEncryption: security.snapshotEncryption.forceEnabled,
     snapshotEncryptionEnabled: security.snapshotEncryption.enabled,
-    snapshotPasswordHash: security.snapshotEncryption.passwordHash
+    snapshotPasswordHash: null
   });
 
 export const createSettingsDocumentFromRuntime = ({
@@ -285,13 +377,11 @@ export const createSecurityDocumentFromRuntime = (
   normalizeSecurityDocument({
     schemaVersion: PERSISTENCE_SCHEMA_VERSION,
     appAccess: {
-      enabled: globalSettings.passwordProtectionEnabled,
-      autoLockMinutes: globalSettings.autoLockMinutes,
-      passwordHash: globalSettings.passwordHash
+      autoLockMinutes: globalSettings.autoLockMinutes
     },
     snapshotEncryption: {
       enabled: globalSettings.snapshotEncryptionEnabled,
-      passwordHash: globalSettings.snapshotPasswordHash
+      forceEnabled: globalSettings.forceSnapshotEncryption
     }
   });
 
@@ -315,12 +405,183 @@ export const getRuntimeBackupState = (
   };
 };
 
-export const writeCoreDocument = (document: CoreDocument) => {
+export const writeCoreDocument = (document: CoreDocument, options: CoreWriteOptions = {}) => {
   if (!isCoreDocument(document)) {
     throw new Error('Core document failed renderer validation.');
   }
 
-  requireBridge().writeCoreDocument(document);
+  requireBridge().writeCoreDocument(document, options);
+};
+
+export const unlockCoreDocument = (password: string): RuntimePersistenceSnapshot => {
+  const result = ensureReadResult(requireBridge().unlockCoreDocument(password));
+
+  if (!result.ok) {
+    throw new Error(`Failed to unlock core document: ${result.code}`);
+  }
+
+  if ('locked' in result || !isCoreDocument(result.document)) {
+    throw new Error('Failed to unlock core document: PERSISTENCE_CORE_LOCKED');
+  }
+
+  const current = readRuntimePersistenceSnapshot();
+
+  return {
+    ...current,
+    core: result.document,
+    coreProtection: {
+      enabled: true,
+      locked: false,
+      ...(result.integrityWarning ? { integrityWarning: result.integrityWarning } : {}),
+      ...(result.integrityFailure ? { integrityFailure: result.integrityFailure } : {})
+    }
+  };
+};
+
+export const enableCoreProtection = (
+  document: CoreDocument,
+  password: string,
+  options: CoreWriteOptions = {}
+) => {
+  if (!isCoreDocument(document)) {
+    throw new Error('Core document failed renderer validation.');
+  }
+
+  requireBridge().enableCoreProtection(document, password, options);
+};
+
+export const changeCorePassword = (
+  document: CoreDocument,
+  currentPassword: string,
+  nextPassword: string,
+  options: CoreWriteOptions = {}
+) => {
+  if (!isCoreDocument(document)) {
+    throw new Error('Core document failed renderer validation.');
+  }
+
+  requireBridge().changeCorePassword(document, currentPassword, nextPassword, options);
+};
+
+export const disableCoreProtection = (
+  document: CoreDocument,
+  password: string,
+  options: CoreWriteOptions = {}
+) => {
+  if (!isCoreDocument(document)) {
+    throw new Error('Core document failed renderer validation.');
+  }
+
+  requireBridge().disableCoreProtection(document, password, options);
+};
+
+export const lockCoreDocument = () => {
+  requireBridge().lockCoreDocument();
+};
+
+export const acknowledgeCoreIntegrityIssue = () => {
+  requireBridge().acknowledgeCoreIntegrityIssue?.();
+};
+
+const throwPersistenceBridgeError = (
+  result: unknown,
+  fallbackCode: string,
+  fallbackMessage: string
+): never => {
+  const code =
+    typeof result === 'object' && result !== null && 'code' in result
+      ? String((result as { code?: unknown }).code)
+      : fallbackCode;
+  const message =
+    typeof result === 'object' && result !== null && 'message' in result &&
+    typeof (result as { message?: unknown }).message === 'string'
+      ? (result as { message: string }).message
+      : fallbackMessage;
+  const error = new Error(message) as Error & { code: string };
+
+  error.code = code;
+  throw error;
+};
+
+export const encryptSnapshotDocumentWithCurrentSession = (document: unknown) => {
+  const bridge = requireBridge();
+
+  if (!bridge.encryptSnapshotDocument) {
+    throw new Error('NetraFlow snapshot encryption bridge is not available.');
+  }
+
+  const result = bridge.encryptSnapshotDocument(document);
+
+  if (
+    typeof result !== 'object' ||
+    result === null ||
+    !('ok' in result) ||
+    (result as { ok?: unknown }).ok !== true ||
+    !('encrypted' in result)
+  ) {
+    throwPersistenceBridgeError(
+      result,
+      'PERSISTENCE_SNAPSHOT_ENCRYPT_FAILED',
+      'Snapshot encryption failed.'
+    );
+  }
+
+  return (result as { encrypted: unknown }).encrypted;
+};
+
+export const decryptSnapshotDocumentWithCurrentSession = (encrypted: unknown) => {
+  const bridge = requireBridge();
+
+  if (!bridge.decryptSnapshotDocument) {
+    throw new Error('NetraFlow snapshot decryption bridge is not available.');
+  }
+
+  const result = bridge.decryptSnapshotDocument(encrypted);
+
+  if (
+    typeof result !== 'object' ||
+    result === null ||
+    !('ok' in result) ||
+    (result as { ok?: unknown }).ok !== true ||
+    !('document' in result)
+  ) {
+    throwPersistenceBridgeError(
+      result,
+      'PERSISTENCE_SNAPSHOT_DECRYPT_FAILED',
+      'Unable to decrypt snapshot document.'
+    );
+  }
+
+  return (result as { document: unknown }).document;
+};
+
+export const decryptSnapshotDocumentWithPassword = (
+  encrypted: unknown,
+  password: string
+) => {
+  const bridge = requireBridge();
+
+  if (!bridge.decryptSnapshotDocumentWithPassword) {
+    throw new Error('NetraFlow snapshot password decryption bridge is not available.');
+  }
+
+  const result = bridge.decryptSnapshotDocumentWithPassword(encrypted, password);
+
+  if (
+    typeof result !== 'object' ||
+    result === null ||
+    !('ok' in result) ||
+    (result as { ok?: unknown }).ok !== true ||
+    !('document' in result)
+  ) {
+    throwPersistenceBridgeError(
+      result,
+      'PERSISTENCE_SNAPSHOT_DECRYPT_FAILED',
+      'Unable to decrypt snapshot document.'
+    );
+  }
+
+  return (result as { document: unknown }).document;
 };
 
 export const writeSettingsDocument = (document: SettingsDocument) => {

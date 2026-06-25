@@ -7,7 +7,6 @@ import type {
   SnapshotImportRecord
 } from '../types';
 import type { AssetChartSettings } from '../../features/charts';
-import type { PasswordHash } from '../../security/passwordHash';
 import type {
   ChartColorAssignmentMode,
   HomeAssetStatLabelMode,
@@ -28,6 +27,18 @@ export type CoreDocument = {
   groups: AssetGroup[];
   accounts: Account[];
   history: HistoryRecord[];
+};
+
+export type CoreFileFingerprint = {
+  algorithm: 'SHA-256';
+  value: string;
+  size: number;
+};
+
+export type CoreProtectionState = {
+  schemaVersion: typeof PERSISTENCE_SCHEMA_VERSION;
+  lastConfirmedFingerprint?: CoreFileFingerprint;
+  acknowledgedInternalIntegrityFailureFingerprint?: CoreFileFingerprint;
 };
 
 export type NonSecurityGlobalSettings = {
@@ -68,18 +79,17 @@ export type StateDocument = {
   personalization: {
     nyaaThemeUnlocked?: boolean;
   };
+  coreProtection?: CoreProtectionState;
 };
 
 export type SecurityDocument = {
   schemaVersion: typeof PERSISTENCE_SCHEMA_VERSION;
   appAccess: {
-    enabled: boolean;
     autoLockMinutes: number;
-    passwordHash: PasswordHash | null;
   };
   snapshotEncryption: {
     enabled: boolean;
-    passwordHash: PasswordHash | null;
+    forceEnabled: boolean;
   };
 };
 
@@ -110,7 +120,8 @@ export const STATE_DOCUMENT_KEYS = [
   'backup',
   'rollupImportHashes',
   'firstWelcome',
-  'personalization'
+  'personalization',
+  'coreProtection'
 ] as const;
 
 export const SECURITY_DOCUMENT_KEYS = [
@@ -141,5 +152,6 @@ export const EXCLUDED_PERSISTENCE_FIELDS = [
   'passwordHash',
   'autoLockMinutes',
   'snapshotEncryptionEnabled',
+  'forceSnapshotEncryption',
   'snapshotPasswordHash'
 ] as const;

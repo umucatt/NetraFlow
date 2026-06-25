@@ -1,6 +1,7 @@
 import {
   type CSSProperties,
   type FormEvent,
+  type KeyboardEventHandler,
   type MouseEvent,
   type ReactNode,
   useId,
@@ -24,6 +25,7 @@ type DialogShellProps = {
   backdropStyle?: CSSProperties;
   as?: 'section' | 'form';
   role?: 'dialog' | 'alertdialog';
+  onKeyDown?: KeyboardEventHandler<HTMLElement>;
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
 };
 
@@ -44,6 +46,7 @@ function DialogShell({
   backdropStyle,
   as = 'section',
   role = 'dialog',
+  onKeyDown,
   onSubmit
 }: DialogShellProps) {
   const generatedTitleId = useId();
@@ -110,6 +113,7 @@ function DialogShell({
           aria-modal="true"
           aria-labelledby={resolvedTitleId}
           onClick={(event) => event.stopPropagation()}
+          onKeyDown={onKeyDown as KeyboardEventHandler<HTMLFormElement> | undefined}
           onSubmit={onSubmit}
           className={resolvedClassName}
           style={cardStyle}
@@ -122,6 +126,7 @@ function DialogShell({
           aria-modal="true"
           aria-labelledby={resolvedTitleId}
           onClick={(event) => event.stopPropagation()}
+          onKeyDown={onKeyDown as KeyboardEventHandler<HTMLElement> | undefined}
           className={resolvedClassName}
           style={cardStyle}
         >

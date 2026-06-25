@@ -931,13 +931,13 @@ export const GLOBAL_SETTINGS_SEARCH_ITEMS = [
 
     blockTitle: '快照加密',
 
-    summary: '控制是否启用快照文件加密，并管理用于快照加密的密码。',
+    summary: '控制是否启用快照文件加密，加密快照使用创建时的登录密码。',
 
     previewItems: [
 
       '可启用或关闭快照加密',
 
-      '可设置或修改快照密码',
+      '使用创建时的登录密码加密',
 
       '仅加密快照文件，不加密本地当前数据'
 
@@ -945,11 +945,11 @@ export const GLOBAL_SETTINGS_SEARCH_ITEMS = [
 
     section: 'security',
 
-    keywords: ['快照加密', '是否启用快照加密', '设置快照密码', '修改快照密码', '快照密码'],
+    keywords: ['快照加密', '是否启用快照加密', '登录密码加密快照', '创建时登录密码'],
 
-    pinyinKeywords: ['kuai zhao jia mi', 'she zhi kuai zhao mi ma', 'xiu gai kuai zhao mi ma'],
+    pinyinKeywords: ['kuai zhao jia mi', 'deng lu mi ma jia mi kuai zhao'],
 
-    pinyinInitials: ['kzjm', 'szkzmm', 'xgkzmm']
+    pinyinInitials: ['kzjm', 'dlmmjmkz']
 
   },
 
@@ -973,7 +973,7 @@ export const GLOBAL_SETTINGS_SEARCH_ITEMS = [
 
       '可设置登录密码保护和自动锁定',
 
-      '可设置快照加密和快照密码',
+      '可管理快照加密和强制加密',
 
       '安全设置会影响应用进入和快照文件恢复'
 
@@ -1004,10 +1004,6 @@ export const GLOBAL_SETTINGS_SEARCH_ITEMS = [
       '快照加密',
 
       '是否启用快照加密',
-
-      '设置快照密码',
-
-      '修改快照密码',
 
       '密码',
 

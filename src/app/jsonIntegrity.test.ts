@@ -10,10 +10,9 @@ import {
   wrapEncryptedJson,
   wrapJsonPayload
 } from './jsonIntegrity';
+import { ENCRYPTION_KDF_ITERATIONS } from '../../electron/cryptoEnvelopeShared';
 import { sha256Hex } from '../security/jsonHash';
 import {
-  decryptSnapshotPayload,
-  encryptSnapshotPayload,
   isEncryptedSnapshotFile
 } from '../security/snapshotCrypto';
 
@@ -202,16 +201,30 @@ test('integrity wrapper without payload or encrypted content is invalid', async 
   assert.equal(result.reason, 'missing-content');
 });
 
-test('encrypted snapshots still decrypt when extracted from integrity wrapper', async () => {
-  const snapshot = {
-    groups: [{ id: 'g1', name: '现金' }],
-    accounts: [],
-    history: []
+test('encrypted snapshots are recognized when extracted from integrity wrapper', async () => {
+  const encrypted = {
+    type: 'netraflow-encrypted-snapshot',
+    version: 1,
+    createdAt: '2026-06-02T00:00:00.000Z',
+    encryption: {
+      algorithm: 'AES-256-GCM',
+      passwordKdf: {
+        algorithm: 'PBKDF2-HMAC-SHA-256',
+        iterations: ENCRYPTION_KDF_ITERATIONS,
+        salt: 'cGFzc3dvcmQtc2FsdA=='
+      },
+      fileKeyKdf: {
+        algorithm: 'HKDF-SHA-256',
+        salt: 'ZmlsZS1rZXktc2FsdA==',
+        purpose: 'netraflow-snapshot-v1'
+      },
+      iv: 'aW52YWxpZC1pdi0xMg=='
+    },
+    payload: 'Y2lwaGVydGV4dA=='
   };
-  const encrypted = await encryptSnapshotPayload(snapshot, 'correct horse battery staple');
 
-  assert.equal('type' in encrypted, false);
-  assert.equal('version' in encrypted, false);
+  assert.equal(encrypted.type, 'netraflow-encrypted-snapshot');
+  assert.equal(encrypted.version, 1);
 
   const wrapped = await wrapEncryptedJson(encrypted);
   const result = await verifyParsedJsonIntegrity(wrapped);
@@ -220,15 +233,4 @@ test('encrypted snapshots still decrypt when extracted from integrity wrapper', 
   if (!isEncryptedSnapshotFile(result.content)) {
     assert.fail('Expected verified content to be an encrypted snapshot file.');
   }
-
-  const decrypted = await decryptSnapshotPayload(
-    result.content,
-    'correct horse battery staple'
-  );
-
-  assert.deepEqual(decrypted, snapshot);
-  assert.equal(
-    typeof decrypted === 'object' && decrypted !== null && 'integrity' in decrypted,
-    false
-  );
 });

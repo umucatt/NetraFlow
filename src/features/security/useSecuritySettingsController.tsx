@@ -6,13 +6,12 @@ import {
   useState
 } from 'react';
 
-import { createPasswordHash, verifyPassword } from '../../security/passwordHash';
+import type { CoreDocument } from '../../app/persistence/persistenceDocuments';
 import type {
   GlobalSettings,
-  PasswordEditorMode,
-  SnapshotPasswordEditorMode,
-  SnapshotPasswordField
+  PasswordEditorMode
 } from './securitySettingsTypes';
+import { SECURITY_ERROR_MESSAGES } from './securityErrorMessages';
 
 type ConfirmationRequest = {
   title: string;
@@ -27,28 +26,173 @@ type ConfirmationRequest = {
 
 type SecuritySettingsControllerOptions = {
   globalSettings: GlobalSettings;
+  initialCoreProtectionLocked: boolean;
   autoBackupEnabled: boolean;
+  getCurrentCoreDocument: () => CoreDocument;
+  unlockCoreDocument: (password: string) => void;
+  enableCoreProtection: (
+    document: CoreDocument,
+    password: string,
+    options?: { allowExternalCoreOverwrite?: boolean }
+  ) => void;
+  changeCorePassword: (
+    document: CoreDocument,
+    currentPassword: string,
+    nextPassword: string,
+    options?: { allowExternalCoreOverwrite?: boolean }
+  ) => void;
+  disableCoreProtection: (
+    document: CoreDocument,
+    password: string,
+    options?: { allowExternalCoreOverwrite?: boolean }
+  ) => void;
+  lockCoreDocument: () => void;
   updateGlobalSettings: (
     createNextSettings: (currentSettings: GlobalSettings) => GlobalSettings
   ) => void;
   isPersistenceCurrent: () => boolean;
   showConfirmationDialog: (request: ConfirmationRequest) => void;
+  showCoreIntegrityDialog: (request: {
+    onAcknowledge?: () => void;
+    onContinueSave: () => void;
+  }) => void;
   showToast: (message: string, tone?: 'info' | 'success' | 'error') => string;
+};
+
+const PASSWORD_TRY_LEVELS = [
+  '密码强度：很弱',
+  '密码强度：较弱',
+  '密码强度：一般',
+  '密码强度：较强',
+  '密码强度：强',
+  '密码强度：很强'
+] as const;
+
+const isExternalCoreModificationError = (error: unknown) => {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  if (
+    'code' in error &&
+    (error as { code?: unknown }).code === 'PERSISTENCE_CORE_EXTERNAL_MODIFIED'
+  ) {
+    return true;
+  }
+
+  const message =
+    error instanceof Error
+      ? error.message
+      : 'message' in error
+        ? String((error as { message?: unknown }).message)
+        : '';
+
+  return message.includes('Core document was modified outside NetraFlow');
+};
+
+export const shouldInitializeSecurityLocked = ({
+  passwordProtectionEnabled,
+  coreProtectionLocked
+}: {
+  passwordProtectionEnabled: boolean;
+  coreProtectionLocked: boolean;
+}) => passwordProtectionEnabled && coreProtectionLocked;
+
+export type SnapshotEncryptionChangeAction =
+  | 'require-login-protection'
+  | 'blocked-by-force-encryption'
+  | 'enable-directly'
+  | 'open-disable-confirm'
+  | 'noop';
+
+export const resolveSnapshotEncryptionChangeAction = ({
+  passwordProtectionEnabled,
+  forceSnapshotEncryption,
+  snapshotEncryptionEnabled,
+  requestedValue
+}: {
+  passwordProtectionEnabled: boolean;
+  forceSnapshotEncryption: boolean;
+  snapshotEncryptionEnabled: boolean;
+  requestedValue: string;
+}): SnapshotEncryptionChangeAction => {
+  if (!passwordProtectionEnabled) {
+    return 'require-login-protection';
+  }
+
+  if (forceSnapshotEncryption) {
+    return 'blocked-by-force-encryption';
+  }
+
+  if (requestedValue === 'yes') {
+    return snapshotEncryptionEnabled ? 'noop' : 'enable-directly';
+  }
+
+  if (requestedValue === 'no') {
+    return snapshotEncryptionEnabled ? 'open-disable-confirm' : 'noop';
+  }
+
+  return 'noop';
+};
+
+const estimatePasswordTryLevel = (password: string) => {
+  const length = password.length;
+  const classes = [
+    /[a-z]/.test(password),
+    /[A-Z]/.test(password),
+    /\d/.test(password),
+    /[^A-Za-z0-9]/.test(password)
+  ].filter(Boolean).length;
+  const repeated = /^(.{1,4})\1+$/.test(password);
+  const sequential = 'abcdefghijklmnopqrstuvwxyz0123456789'.includes(password.toLowerCase());
+  const score = length + classes * 4 - (repeated ? 8 : 0) - (sequential ? 6 : 0);
+
+  if (score < 10) {
+    return PASSWORD_TRY_LEVELS[0];
+  }
+
+  if (score < 16) {
+    return PASSWORD_TRY_LEVELS[1];
+  }
+
+  if (score < 22) {
+    return PASSWORD_TRY_LEVELS[2];
+  }
+
+  if (score < 30) {
+    return PASSWORD_TRY_LEVELS[3];
+  }
+
+  if (score < 38) {
+    return PASSWORD_TRY_LEVELS[4];
+  }
+
+  return PASSWORD_TRY_LEVELS[5];
 };
 
 export function useSecuritySettingsController({
   globalSettings,
-  autoBackupEnabled,
+  initialCoreProtectionLocked,
+  autoBackupEnabled: _autoBackupEnabled,
+  getCurrentCoreDocument,
+  unlockCoreDocument,
+  enableCoreProtection,
+  changeCorePassword,
+  disableCoreProtection,
+  lockCoreDocument,
   updateGlobalSettings,
   isPersistenceCurrent,
   showConfirmationDialog,
+  showCoreIntegrityDialog,
   showToast
 }: SecuritySettingsControllerOptions) {
   const autoLockTimerRef = useRef<number | null>(null);
-  const snapshotPasswordRevealTimerRef = useRef<number | null>(null);
-
   const [isLocked, setIsLocked] = useState(
-    () => globalSettings.passwordProtectionEnabled
+    () =>
+      shouldInitializeSecurityLocked({
+        passwordProtectionEnabled: globalSettings.passwordProtectionEnabled,
+        coreProtectionLocked: initialCoreProtectionLocked
+      })
   );
   const [unlockPasswordInput, setUnlockPasswordInput] = useState('');
   const [unlockError, setUnlockError] = useState('');
@@ -69,22 +213,7 @@ export function useSecuritySettingsController({
   const [passwordDisableError, setPasswordDisableError] = useState('');
   const [isDisablingPasswordProtection, setIsDisablingPasswordProtection] =
     useState(false);
-  const [snapshotPasswordEditorMode, setSnapshotPasswordEditorMode] =
-    useState<SnapshotPasswordEditorMode>(null);
-  const [
-    shouldEnableSnapshotEncryptionAfterPasswordSave,
-    setShouldEnableSnapshotEncryptionAfterPasswordSave
-  ] = useState(false);
-  const [oldSnapshotPasswordInput, setOldSnapshotPasswordInput] = useState('');
-  const [newSnapshotPasswordInput, setNewSnapshotPasswordInput] = useState('');
-  const [confirmSnapshotPasswordInput, setConfirmSnapshotPasswordInput] =
-    useState('');
-  const [snapshotPasswordEditorError, setSnapshotPasswordEditorError] =
-    useState('');
-  const [isSavingSnapshotPassword, setIsSavingSnapshotPassword] =
-    useState(false);
-  const [visibleSnapshotPasswordField, setVisibleSnapshotPasswordField] =
-    useState<SnapshotPasswordField | null>(null);
+
   const [
     isSnapshotEncryptionDisableConfirmOpen,
     setIsSnapshotEncryptionDisableConfirmOpen
@@ -101,11 +230,13 @@ export function useSecuritySettingsController({
   }, [globalSettings.autoLockMinutes]);
 
   useEffect(() => {
-    if (!globalSettings.passwordProtectionEnabled) {
-      setIsLocked(false);
-      setUnlockPasswordInput('');
-      setUnlockError('');
+    if (globalSettings.passwordProtectionEnabled) {
+      return;
     }
+
+    setIsLocked(false);
+    setUnlockPasswordInput('');
+    setUnlockError('');
   }, [globalSettings.passwordProtectionEnabled]);
 
   useEffect(() => {
@@ -116,23 +247,20 @@ export function useSecuritySettingsController({
     }
 
     return api.onNetraFlowLock(() => {
-      if (!globalSettings.passwordProtectionEnabled || !globalSettings.passwordHash) {
-        showToast('请先开启登陆密码保护', 'info');
+      if (!globalSettings.passwordProtectionEnabled) {
+        showToast('请先启用登录密码保护', 'info');
         return;
       }
 
+      lockCoreDocument();
       setUnlockPasswordInput('');
       setUnlockError('');
       setIsLocked(true);
     });
-  }, [globalSettings.passwordHash, globalSettings.passwordProtectionEnabled, showToast]);
+  }, [globalSettings.passwordProtectionEnabled, lockCoreDocument, showToast]);
 
   useEffect(() => {
-    if (
-      !globalSettings.passwordProtectionEnabled ||
-      !globalSettings.passwordHash ||
-      isLocked
-    ) {
+    if (!globalSettings.passwordProtectionEnabled || isLocked) {
       if (autoLockTimerRef.current !== null) {
         window.clearTimeout(autoLockTimerRef.current);
         autoLockTimerRef.current = null;
@@ -148,6 +276,7 @@ export function useSecuritySettingsController({
       }
 
       autoLockTimerRef.current = window.setTimeout(() => {
+        lockCoreDocument();
         setUnlockPasswordInput('');
         setUnlockError('');
         setIsLocked(true);
@@ -182,9 +311,9 @@ export function useSecuritySettingsController({
     };
   }, [
     globalSettings.autoLockMinutes,
-    globalSettings.passwordHash,
     globalSettings.passwordProtectionEnabled,
-    isLocked
+    isLocked,
+    lockCoreDocument
   ]);
 
   useEffect(
@@ -192,11 +321,6 @@ export function useSecuritySettingsController({
       if (autoLockTimerRef.current !== null) {
         window.clearTimeout(autoLockTimerRef.current);
         autoLockTimerRef.current = null;
-      }
-
-      if (snapshotPasswordRevealTimerRef.current !== null) {
-        window.clearTimeout(snapshotPasswordRevealTimerRef.current);
-        snapshotPasswordRevealTimerRef.current = null;
       }
     },
     []
@@ -225,8 +349,9 @@ export function useSecuritySettingsController({
       title: '设置登录密码',
       message: (
         <>
-          <p>忘记登录密码将无法进入净流</p>
-          <p>请妥善保存</p>
+          <p>登录密码将用于加密核心数据和之后创建的加密快照。</p>
+          <p>忘记密码将无法恢复受保护的数据。</p>
+          <p>不限制输入次数，输入错误后可立即重试。</p>
         </>
       ),
       confirmLabel: '继续设置',
@@ -235,12 +360,7 @@ export function useSecuritySettingsController({
   };
 
   const requestOpenPasswordEditor = () => {
-    if (globalSettings.passwordHash) {
-      openPasswordEditor('edit');
-      return;
-    }
-
-    requestFirstPasswordSetup();
+    openPasswordEditor(globalSettings.passwordProtectionEnabled ? 'edit' : 'setup');
   };
 
   const closePasswordDisableConfirm = () => {
@@ -251,224 +371,10 @@ export function useSecuritySettingsController({
   };
 
   const requestDisablePasswordProtection = () => {
-    if (!globalSettings.passwordHash) {
-      updateGlobalSettings((currentSettings) => ({
-        ...currentSettings,
-        passwordProtectionEnabled: false
-      }));
-      return;
-    }
-
     setIsPasswordDisableConfirmOpen(true);
     setPasswordDisableInput('');
     setPasswordDisableError('');
     setIsDisablingPasswordProtection(false);
-  };
-
-  const updatePasswordProtection = (value: string) => {
-    if (value === 'yes') {
-      if (globalSettings.passwordProtectionEnabled) {
-        return;
-      }
-
-      if (!globalSettings.passwordHash) {
-        requestFirstPasswordSetup();
-        return;
-      }
-
-      updateGlobalSettings((currentSettings) => ({
-        ...currentSettings,
-        passwordProtectionEnabled: true
-      }));
-      return;
-    }
-
-    if (value === 'no' && globalSettings.passwordProtectionEnabled) {
-      requestDisablePasswordProtection();
-    }
-  };
-
-  const confirmDisablePasswordProtection = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    if (!globalSettings.passwordHash) {
-      updateGlobalSettings((currentSettings) => ({
-        ...currentSettings,
-        passwordProtectionEnabled: false
-      }));
-      closePasswordDisableConfirm();
-      return;
-    }
-
-    setIsDisablingPasswordProtection(true);
-    setPasswordDisableError('');
-
-    const isPasswordValid = await verifyPassword(
-      passwordDisableInput,
-      globalSettings.passwordHash
-    );
-
-    if (!isPersistenceCurrent()) {
-      setIsDisablingPasswordProtection(false);
-      return;
-    }
-
-    if (!isPasswordValid) {
-      setPasswordDisableError('密码错误');
-      setIsDisablingPasswordProtection(false);
-      return;
-    }
-
-    updateGlobalSettings((currentSettings) => ({
-      ...currentSettings,
-      passwordProtectionEnabled: false
-    }));
-    setIsLocked(false);
-    closePasswordDisableConfirm();
-  };
-
-  const saveLoginPassword = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    if (newPasswordInput.trim() === '') {
-      setPasswordEditorError('请输入新密码');
-      return;
-    }
-
-    if (newPasswordInput !== confirmPasswordInput) {
-      setPasswordEditorError('两次输入的新密码不一致');
-      return;
-    }
-
-    const savedPasswordHash = globalSettings.passwordHash;
-
-    setIsSavingPassword(true);
-    setPasswordEditorError('');
-
-    if (passwordEditorMode === 'edit') {
-      if (!savedPasswordHash) {
-        setPasswordEditorError('旧密码不正确');
-        setIsSavingPassword(false);
-        return;
-      }
-
-      const isOldPasswordValid = await verifyPassword(oldPasswordInput, savedPasswordHash);
-
-      if (!isPersistenceCurrent()) {
-        setIsSavingPassword(false);
-        return;
-      }
-
-      if (!isOldPasswordValid) {
-        setPasswordEditorError('旧密码不正确');
-        setIsSavingPassword(false);
-        return;
-      }
-    }
-
-    try {
-      const nextPasswordHash = await createPasswordHash(newPasswordInput);
-
-      if (!isPersistenceCurrent()) {
-        setIsSavingPassword(false);
-        return;
-      }
-
-      updateGlobalSettings((currentSettings) => ({
-        ...currentSettings,
-        passwordHash: nextPasswordHash,
-        passwordProtectionEnabled:
-          passwordEditorMode === 'setup' ? true : currentSettings.passwordProtectionEnabled
-      }));
-      resetPasswordEditor();
-    } catch (error) {
-      console.error('[NetraFlow security] Failed to save login password.', error);
-      setPasswordEditorError('密码保存失败');
-      setIsSavingPassword(false);
-    }
-  };
-
-  const getSnapshotEncryptionEnableMessage = () =>
-    autoBackupEnabled ? (
-      <>
-        <p>手动导出的快照文件和当前已开启的自动快照文件都将使用快照密码加密</p>
-        <p>忘记快照密码将无法恢复这些加密快照</p>
-        <strong>是否继续？</strong>
-      </>
-    ) : (
-      <>
-        <p>手动导出的快照文件将使用快照密码加密</p>
-        <p>忘记快照密码将无法恢复这些加密快照</p>
-        <strong>是否继续？</strong>
-      </>
-    );
-
-  const resetSnapshotPasswordEditor = () => {
-    setSnapshotPasswordEditorMode(null);
-    setShouldEnableSnapshotEncryptionAfterPasswordSave(false);
-    setOldSnapshotPasswordInput('');
-    setNewSnapshotPasswordInput('');
-    setConfirmSnapshotPasswordInput('');
-    setSnapshotPasswordEditorError('');
-    setIsSavingSnapshotPassword(false);
-    setVisibleSnapshotPasswordField(null);
-
-    if (snapshotPasswordRevealTimerRef.current !== null) {
-      window.clearTimeout(snapshotPasswordRevealTimerRef.current);
-      snapshotPasswordRevealTimerRef.current = null;
-    }
-  };
-
-  const openSnapshotPasswordEditor = (
-    mode: Exclude<SnapshotPasswordEditorMode, null>,
-    enableAfterSave = false
-  ) => {
-    setSnapshotPasswordEditorMode(mode);
-    setShouldEnableSnapshotEncryptionAfterPasswordSave(enableAfterSave);
-    setOldSnapshotPasswordInput('');
-    setNewSnapshotPasswordInput('');
-    setConfirmSnapshotPasswordInput('');
-    setSnapshotPasswordEditorError('');
-    setIsSavingSnapshotPassword(false);
-    setVisibleSnapshotPasswordField(null);
-
-    if (snapshotPasswordRevealTimerRef.current !== null) {
-      window.clearTimeout(snapshotPasswordRevealTimerRef.current);
-      snapshotPasswordRevealTimerRef.current = null;
-    }
-  };
-
-  const requestFirstSnapshotPasswordSetup = (enableAfterSave = false) => {
-    showConfirmationDialog({
-      title: '设置快照密码',
-      message: (
-        <>
-          <p>忘记快照密码将无法恢复已加密的快照</p>
-          <p>请妥善保存</p>
-        </>
-      ),
-      confirmLabel: '继续设置',
-      onConfirm: () => openSnapshotPasswordEditor('setup', enableAfterSave)
-    });
-  };
-
-  const requestOpenSnapshotPasswordEditor = () => {
-    if (!globalSettings.snapshotPasswordHash) {
-      requestFirstSnapshotPasswordSetup();
-      return;
-    }
-
-    showConfirmationDialog({
-      title: '修改快照密码',
-      message: (
-        <>
-          <p>之后生成的加密快照将使用新密码</p>
-          <p>此前已经使用旧快照密码加密的文件，仍需要使用原密码解密</p>
-        </>
-      ),
-      confirmLabel: '继续修改',
-      onConfirm: () => openSnapshotPasswordEditor('edit')
-    });
   };
 
   const closeSnapshotEncryptionDisableConfirm = () => {
@@ -479,71 +385,264 @@ export function useSecuritySettingsController({
   };
 
   const requestDisableSnapshotEncryption = () => {
-    if (!globalSettings.snapshotPasswordHash) {
-      updateGlobalSettings((currentSettings) => ({
-        ...currentSettings,
-        snapshotEncryptionEnabled: false
-      }));
-      return;
-    }
-
     setIsSnapshotEncryptionDisableConfirmOpen(true);
     setSnapshotEncryptionDisableInput('');
     setSnapshotEncryptionDisableError('');
     setIsDisablingSnapshotEncryption(false);
   };
 
-  const updateSnapshotEncryption = (value: string) => {
+  const updatePasswordProtection = (value: string) => {
     if (value === 'yes') {
-      if (globalSettings.snapshotEncryptionEnabled) {
+      if (!globalSettings.passwordProtectionEnabled) {
+        requestFirstPasswordSetup();
+      }
+
+      return;
+    }
+
+    if (value === 'no' && globalSettings.passwordProtectionEnabled) {
+      requestDisablePasswordProtection();
+    }
+  };
+
+  const confirmDisablePasswordProtection = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsDisablingPasswordProtection(true);
+    setPasswordDisableError('');
+
+    const document = getCurrentCoreDocument();
+    const applyDisableSuccess = () => {
+      if (!isPersistenceCurrent()) {
+        setIsDisablingPasswordProtection(false);
         return;
       }
 
-      if (!globalSettings.snapshotPasswordHash) {
-        showConfirmationDialog({
-          title: '启用快照加密',
-          message: getSnapshotEncryptionEnableMessage(),
-          confirmLabel: '继续',
-          onConfirm: () => {
-            if (isPersistenceCurrent()) {
-              requestFirstSnapshotPasswordSetup(true);
+      updateGlobalSettings((currentSettings) => ({
+        ...currentSettings,
+        passwordProtectionEnabled: false,
+        snapshotEncryptionEnabled: false
+      }));
+      setIsLocked(false);
+      closePasswordDisableConfirm();
+    };
+
+    try {
+      disableCoreProtection(document, passwordDisableInput);
+
+      if (!isPersistenceCurrent()) {
+        setIsDisablingPasswordProtection(false);
+        return;
+      }
+
+      updateGlobalSettings((currentSettings) => ({
+        ...currentSettings,
+        passwordProtectionEnabled: false,
+        snapshotEncryptionEnabled: false
+      }));
+      setIsLocked(false);
+      closePasswordDisableConfirm();
+    } catch (error) {
+      if (isExternalCoreModificationError(error)) {
+        setIsDisablingPasswordProtection(false);
+        showCoreIntegrityDialog({
+          onContinueSave: () => {
+            try {
+              disableCoreProtection(document, passwordDisableInput, {
+                allowExternalCoreOverwrite: true
+              });
+              applyDisableSuccess();
+            } catch (retryError) {
+              if (isExternalCoreModificationError(retryError)) {
+                showCoreIntegrityDialog({
+                  onContinueSave: () => {
+                    disableCoreProtection(document, passwordDisableInput, {
+                      allowExternalCoreOverwrite: true
+                    });
+                    applyDisableSuccess();
+                  }
+                });
+                return;
+              }
+
+              console.error(
+                '[NetraFlow security] Failed to overwrite externally modified core.',
+                retryError
+              );
+              setPasswordDisableError(SECURITY_ERROR_MESSAGES.passwordProtectionDisableFailed);
+              setIsDisablingPasswordProtection(false);
             }
           }
         });
         return;
       }
 
-      showConfirmationDialog({
-        title: '启用快照加密',
-        message: getSnapshotEncryptionEnableMessage(),
-        confirmLabel: '确认启用',
-        onConfirm: () => {
-          if (!isPersistenceCurrent()) {
-            return;
-          }
+      console.error('[NetraFlow security] Failed to disable core protection.', error);
+      setPasswordDisableError(SECURITY_ERROR_MESSAGES.loginPasswordIncorrect);
+      setIsDisablingPasswordProtection(false);
+    }
+  };
 
-          updateGlobalSettings((currentSettings) => ({
-            ...currentSettings,
-            snapshotEncryptionEnabled: true
-          }));
-        }
-      });
+  const saveLoginPassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (newPasswordInput.trim() === '') {
+      setPasswordEditorError(SECURITY_ERROR_MESSAGES.newPasswordRequired);
       return;
     }
 
-    if (value === 'no' && globalSettings.snapshotEncryptionEnabled) {
+    if (newPasswordInput !== confirmPasswordInput) {
+      setPasswordEditorError(SECURITY_ERROR_MESSAGES.passwordMismatch);
+      return;
+    }
+
+    setIsSavingPassword(true);
+    setPasswordEditorError('');
+
+    const document = getCurrentCoreDocument();
+    const writePasswordChange = (options?: { allowExternalCoreOverwrite?: boolean }) => {
+      if (passwordEditorMode === 'edit') {
+        changeCorePassword(document, oldPasswordInput, newPasswordInput, options);
+      } else {
+        enableCoreProtection(document, newPasswordInput, options);
+      }
+    };
+
+    try {
+      writePasswordChange();
+
+      if (!isPersistenceCurrent()) {
+        setIsSavingPassword(false);
+        return;
+      }
+
+      updateGlobalSettings((currentSettings) => ({
+        ...currentSettings,
+        passwordProtectionEnabled: true,
+        forceSnapshotEncryption:
+          passwordEditorMode === 'setup' ? true : currentSettings.forceSnapshotEncryption,
+        snapshotEncryptionEnabled:
+          passwordEditorMode === 'setup' || currentSettings.forceSnapshotEncryption
+            ? true
+            : currentSettings.snapshotEncryptionEnabled
+      }));
+      resetPasswordEditor();
+      showToast(estimatePasswordTryLevel(newPasswordInput), 'info');
+    } catch (error) {
+      if (isExternalCoreModificationError(error)) {
+        setIsSavingPassword(false);
+        showCoreIntegrityDialog({
+          onContinueSave: () => {
+            try {
+              writePasswordChange({ allowExternalCoreOverwrite: true });
+
+              if (!isPersistenceCurrent()) {
+                setIsSavingPassword(false);
+                return;
+              }
+
+              updateGlobalSettings((currentSettings) => ({
+                ...currentSettings,
+                passwordProtectionEnabled: true,
+                forceSnapshotEncryption:
+                  passwordEditorMode === 'setup'
+                    ? true
+                    : currentSettings.forceSnapshotEncryption,
+                snapshotEncryptionEnabled:
+                  passwordEditorMode === 'setup' || currentSettings.forceSnapshotEncryption
+                    ? true
+                    : currentSettings.snapshotEncryptionEnabled
+              }));
+              resetPasswordEditor();
+              showToast(estimatePasswordTryLevel(newPasswordInput), 'info');
+            } catch (retryError) {
+              if (isExternalCoreModificationError(retryError)) {
+                showCoreIntegrityDialog({
+                  onContinueSave: () => {
+                    writePasswordChange({ allowExternalCoreOverwrite: true });
+                    if (!isPersistenceCurrent()) {
+                      setIsSavingPassword(false);
+                      return;
+                    }
+                    updateGlobalSettings((currentSettings) => ({
+                      ...currentSettings,
+                      passwordProtectionEnabled: true,
+                      forceSnapshotEncryption:
+                        passwordEditorMode === 'setup'
+                          ? true
+                          : currentSettings.forceSnapshotEncryption,
+                      snapshotEncryptionEnabled:
+                        passwordEditorMode === 'setup' || currentSettings.forceSnapshotEncryption
+                          ? true
+                          : currentSettings.snapshotEncryptionEnabled
+                    }));
+                    resetPasswordEditor();
+                    showToast(estimatePasswordTryLevel(newPasswordInput), 'info');
+                  }
+                });
+                return;
+              }
+
+              console.error(
+                '[NetraFlow security] Failed to overwrite externally modified core.',
+                retryError
+              );
+              setPasswordEditorError(SECURITY_ERROR_MESSAGES.loginPasswordChangeFailed);
+              setIsSavingPassword(false);
+            }
+          }
+        });
+        return;
+      }
+
+      console.error('[NetraFlow security] Failed to save login password.', error);
+      setPasswordEditorError(
+        passwordEditorMode === 'edit'
+          ? SECURITY_ERROR_MESSAGES.loginPasswordIncorrect
+          : SECURITY_ERROR_MESSAGES.loginPasswordChangeFailed
+      );
+      setIsSavingPassword(false);
+    }
+  };
+
+  const updateSnapshotEncryption = (value: string) => {
+    const action = resolveSnapshotEncryptionChangeAction({
+      passwordProtectionEnabled: globalSettings.passwordProtectionEnabled,
+      forceSnapshotEncryption: globalSettings.forceSnapshotEncryption,
+      snapshotEncryptionEnabled: globalSettings.snapshotEncryptionEnabled,
+      requestedValue: value
+    });
+
+    if (action === 'require-login-protection') {
+      showToast('请先启用登录密码保护', 'info');
+      return;
+    }
+
+    if (action === 'blocked-by-force-encryption') {
+      showToast('由“强制启用快照加密”设置管理。', 'info');
+      return;
+    }
+
+    if (action === 'enable-directly') {
+      updateGlobalSettings((currentSettings) => ({
+        ...currentSettings,
+        snapshotEncryptionEnabled: true
+      }));
+      return;
+    }
+
+    if (action === 'open-disable-confirm') {
       requestDisableSnapshotEncryption();
     }
   };
 
-  const confirmDisableSnapshotEncryption = async (event: FormEvent<HTMLFormElement>) => {
+  const confirmDisableSnapshotEncryption = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!globalSettings.snapshotPasswordHash) {
-      updateGlobalSettings((currentSettings) => ({
-        ...currentSettings,
-        snapshotEncryptionEnabled: false
-      }));
+    if (
+      !globalSettings.passwordProtectionEnabled ||
+      globalSettings.forceSnapshotEncryption ||
+      !globalSettings.snapshotEncryptionEnabled
+    ) {
       closeSnapshotEncryptionDisableConfirm();
       return;
     }
@@ -551,110 +650,40 @@ export function useSecuritySettingsController({
     setIsDisablingSnapshotEncryption(true);
     setSnapshotEncryptionDisableError('');
 
-    const isPasswordValid = await verifyPassword(
-      snapshotEncryptionDisableInput,
-      globalSettings.snapshotPasswordHash
-    );
-
-    if (!isPersistenceCurrent()) {
-      setIsDisablingSnapshotEncryption(false);
-      return;
-    }
-
-    if (!isPasswordValid) {
-      setSnapshotEncryptionDisableError('快照密码不正确');
-      setIsDisablingSnapshotEncryption(false);
-      return;
-    }
-
-    updateGlobalSettings((currentSettings) => ({
-      ...currentSettings,
-      snapshotEncryptionEnabled: false
-    }));
-    closeSnapshotEncryptionDisableConfirm();
-  };
-
-  const toggleSnapshotPasswordVisibility = (field: SnapshotPasswordField) => {
-    if (snapshotPasswordRevealTimerRef.current !== null) {
-      window.clearTimeout(snapshotPasswordRevealTimerRef.current);
-      snapshotPasswordRevealTimerRef.current = null;
-    }
-
-    if (visibleSnapshotPasswordField === field) {
-      setVisibleSnapshotPasswordField(null);
-      return;
-    }
-
-    setVisibleSnapshotPasswordField(field);
-    snapshotPasswordRevealTimerRef.current = window.setTimeout(() => {
-      setVisibleSnapshotPasswordField(null);
-      snapshotPasswordRevealTimerRef.current = null;
-    }, 2400);
-  };
-
-  const saveSnapshotPassword = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    if (newSnapshotPasswordInput.trim() === '') {
-      setSnapshotPasswordEditorError('请输入新快照密码');
-      return;
-    }
-
-    if (newSnapshotPasswordInput !== confirmSnapshotPasswordInput) {
-      setSnapshotPasswordEditorError('两次输入的新快照密码不一致');
-      return;
-    }
-
-    const savedSnapshotPasswordHash = globalSettings.snapshotPasswordHash;
-
-    setIsSavingSnapshotPassword(true);
-    setSnapshotPasswordEditorError('');
-
-    if (snapshotPasswordEditorMode === 'edit') {
-      if (!savedSnapshotPasswordHash) {
-        setSnapshotPasswordEditorError('旧快照密码不正确');
-        setIsSavingSnapshotPassword(false);
-        return;
-      }
-
-      const isOldSnapshotPasswordValid = await verifyPassword(
-        oldSnapshotPasswordInput,
-        savedSnapshotPasswordHash
-      );
-
-      if (!isPersistenceCurrent()) {
-        setIsSavingSnapshotPassword(false);
-        return;
-      }
-
-      if (!isOldSnapshotPasswordValid) {
-        setSnapshotPasswordEditorError('旧快照密码不正确');
-        setIsSavingSnapshotPassword(false);
-        return;
-      }
-    }
-
     try {
-      const nextSnapshotPasswordHash = await createPasswordHash(newSnapshotPasswordInput);
+      unlockCoreDocument(snapshotEncryptionDisableInput);
 
       if (!isPersistenceCurrent()) {
-        setIsSavingSnapshotPassword(false);
+        setIsDisablingSnapshotEncryption(false);
         return;
       }
 
       updateGlobalSettings((currentSettings) => ({
         ...currentSettings,
-        snapshotPasswordHash: nextSnapshotPasswordHash,
-        snapshotEncryptionEnabled:
-          shouldEnableSnapshotEncryptionAfterPasswordSave ||
-          currentSettings.snapshotEncryptionEnabled
+        snapshotEncryptionEnabled: false
       }));
-      resetSnapshotPasswordEditor();
+      closeSnapshotEncryptionDisableConfirm();
     } catch (error) {
-      console.error('[NetraFlow security] Failed to save snapshot password.', error);
-      setSnapshotPasswordEditorError('快照密码保存失败');
-      setIsSavingSnapshotPassword(false);
+      console.error('[NetraFlow security] Failed to disable snapshot encryption.', error);
+      setSnapshotEncryptionDisableError(
+        SECURITY_ERROR_MESSAGES.snapshotEncryptionDisableFailed
+      );
+      setIsDisablingSnapshotEncryption(false);
     }
+  };
+
+  const updateForceSnapshotEncryption = (value: string) => {
+    if (!globalSettings.passwordProtectionEnabled) {
+      return;
+    }
+
+    const enabled = value === 'yes';
+
+    updateGlobalSettings((currentSettings) => ({
+      ...currentSettings,
+      forceSnapshotEncryption: enabled,
+      snapshotEncryptionEnabled: enabled ? true : false
+    }));
   };
 
   const updateAutoLockMinutesInput = (value: string) => {
@@ -691,7 +720,7 @@ export function useSecuritySettingsController({
   const unlockApp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!globalSettings.passwordProtectionEnabled || !globalSettings.passwordHash) {
+    if (!globalSettings.passwordProtectionEnabled) {
       setIsLocked(false);
       setUnlockPasswordInput('');
       setUnlockError('');
@@ -701,21 +730,14 @@ export function useSecuritySettingsController({
     setIsUnlocking(true);
     setUnlockError('');
 
-    const isPasswordValid = await verifyPassword(
-      unlockPasswordInput,
-      globalSettings.passwordHash
-    );
-
-    if (!isPasswordValid) {
-      setUnlockError('密码错误');
+    try {
+      unlockCoreDocument(unlockPasswordInput);
+      window.location.reload();
+    } catch (error) {
+      console.error('[NetraFlow security] Failed to unlock core.', error);
+      setUnlockError(SECURITY_ERROR_MESSAGES.coreDecryptFailed);
       setIsUnlocking(false);
-      return;
     }
-
-    setIsLocked(false);
-    setUnlockPasswordInput('');
-    setUnlockError('');
-    setIsUnlocking(false);
   };
 
   const resetSecurityState = () => {
@@ -724,7 +746,6 @@ export function useSecuritySettingsController({
     setUnlockError('');
     setIsUnlocking(false);
     resetPasswordEditor();
-    resetSnapshotPasswordEditor();
     closePasswordDisableConfirm();
     closeSnapshotEncryptionDisableConfirm();
   };
@@ -753,17 +774,6 @@ export function useSecuritySettingsController({
     passwordDisableError,
     setPasswordDisableError,
     isDisablingPasswordProtection,
-    snapshotPasswordEditorMode,
-    oldSnapshotPasswordInput,
-    setOldSnapshotPasswordInput,
-    newSnapshotPasswordInput,
-    setNewSnapshotPasswordInput,
-    confirmSnapshotPasswordInput,
-    setConfirmSnapshotPasswordInput,
-    snapshotPasswordEditorError,
-    setSnapshotPasswordEditorError,
-    isSavingSnapshotPassword,
-    visibleSnapshotPasswordField,
     isSnapshotEncryptionDisableConfirmOpen,
     snapshotEncryptionDisableInput,
     setSnapshotEncryptionDisableInput,
@@ -777,12 +787,9 @@ export function useSecuritySettingsController({
     confirmDisablePasswordProtection,
     saveLoginPassword,
     closeSnapshotEncryptionDisableConfirm,
-    resetSnapshotPasswordEditor,
-    requestOpenSnapshotPasswordEditor,
     updateSnapshotEncryption,
+    updateForceSnapshotEncryption,
     confirmDisableSnapshotEncryption,
-    toggleSnapshotPasswordVisibility,
-    saveSnapshotPassword,
     updateAutoLockMinutesInput,
     resetInvalidAutoLockMinutesInput,
     unlockApp,

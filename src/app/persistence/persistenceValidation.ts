@@ -6,11 +6,9 @@ import type {
   BackupMethod,
   HistoryRecord
 } from '../types';
-import { isPasswordHash } from '../../security/passwordHash';
 import {
   normalizeSettingsDocument,
   normalizeRollupImportHashes,
-  normalizeStateDocument,
   normalizeSecurityDocument
 } from './persistenceDefaults';
 import { normalizeAssetChartSettings } from '../../features/charts/assetChartSettingsLogic';
@@ -41,6 +39,12 @@ const hasOnlyKeys = (value: Record<string, unknown>, keys: readonly string[]) =>
     keys.every((key) => hasOwn(value, key));
 };
 
+const hasOnlyAllowedKeys = (value: Record<string, unknown>, keys: readonly string[]) => {
+  const allowedKeys = new Set(keys);
+
+  return Object.keys(value).every((key) => allowedKeys.has(key));
+};
+
 const hasNoExcludedFields = (value: Record<string, unknown>) =>
   EXCLUDED_PERSISTENCE_FIELDS.every((field) => !hasOwn(value, field));
 
@@ -63,6 +67,29 @@ const isAccountTypeNature = (value: unknown): value is AccountTypeNature =>
 
 const isBackupMethod = (value: unknown): value is BackupMethod =>
   value === 'manual' || value === 'auto';
+
+const isCoreFileFingerprint = (value: unknown) =>
+  isRecord(value) &&
+  value.algorithm === 'SHA-256' &&
+  typeof value.value === 'string' &&
+  /^[a-f0-9]{64}$/i.test(value.value) &&
+  typeof value.size === 'number' &&
+  Number.isInteger(value.size) &&
+  value.size >= 0 &&
+  hasOnlyKeys(value, ['algorithm', 'value', 'size']);
+
+const isCoreProtectionState = (value: unknown) =>
+  isRecord(value) &&
+  value.schemaVersion === PERSISTENCE_SCHEMA_VERSION &&
+  (value.lastConfirmedFingerprint === undefined ||
+    isCoreFileFingerprint(value.lastConfirmedFingerprint)) &&
+  (value.acknowledgedInternalIntegrityFailureFingerprint === undefined ||
+    isCoreFileFingerprint(value.acknowledgedInternalIntegrityFailureFingerprint)) &&
+  hasOnlyAllowedKeys(value, [
+    'schemaVersion',
+    'lastConfirmedFingerprint',
+    'acknowledgedInternalIntegrityFailureFingerprint'
+  ]);
 
 const isCoreGroup = (value: unknown): value is AssetGroup => {
   if (!isRecord(value)) {
@@ -190,6 +217,7 @@ export const isSettingsDocument = (value: unknown): value is SettingsDocument =>
     !hasOwn(rawGlobal, 'passwordProtectionEnabled') &&
     !hasOwn(rawGlobal, 'passwordHash') &&
     !hasOwn(rawGlobal, 'autoLockMinutes') &&
+    !hasOwn(rawGlobal, 'forceSnapshotEncryption') &&
     !hasOwn(rawGlobal, 'snapshotEncryptionEnabled') &&
     !hasOwn(rawGlobal, 'snapshotPasswordHash') &&
     !hasOwn(rawGlobal, 'nyaaThemeUnlocked') &&
@@ -199,7 +227,14 @@ export const isSettingsDocument = (value: unknown): value is SettingsDocument =>
 };
 
 export const isStateDocument = (value: unknown): value is StateDocument => {
-  if (!isRecord(value) || !hasOnlyKeys(value, STATE_DOCUMENT_KEYS) || !hasNoExcludedFields(value)) {
+  if (
+    !isRecord(value) ||
+    !hasOnlyAllowedKeys(value, STATE_DOCUMENT_KEYS) ||
+    !['schemaVersion', 'backup', 'rollupImportHashes', 'firstWelcome', 'personalization'].every((key) =>
+      hasOwn(value, key)
+    ) ||
+    !hasNoExcludedFields(value)
+  ) {
     return false;
   }
 
@@ -227,6 +262,7 @@ export const isStateDocument = (value: unknown): value is StateDocument => {
     isOptionalBoolean(value.firstWelcome.pendingAfterClearAll) &&
     isRecord(value.personalization) &&
     isOptionalBoolean(value.personalization.nyaaThemeUnlocked) &&
+    (value.coreProtection === undefined || isCoreProtectionState(value.coreProtection)) &&
     !hasOwn(value, 'groups') &&
     !hasOwn(value, 'accounts') &&
     !hasOwn(value, 'history') &&
@@ -247,17 +283,15 @@ export const isSecurityDocument = (value: unknown): value is SecurityDocument =>
   return (
     value.schemaVersion === PERSISTENCE_SCHEMA_VERSION &&
     appAccess !== null &&
-    typeof appAccess.enabled === 'boolean' &&
     typeof appAccess.autoLockMinutes === 'number' &&
     Number.isInteger(appAccess.autoLockMinutes) &&
     appAccess.autoLockMinutes >= 1 &&
-    (appAccess.passwordHash === null || isPasswordHash(appAccess.passwordHash)) &&
-    (!appAccess.enabled || appAccess.passwordHash !== null) &&
+    !hasOwn(appAccess, 'enabled') &&
+    !hasOwn(appAccess, 'passwordHash') &&
     snapshotEncryption !== null &&
     typeof snapshotEncryption.enabled === 'boolean' &&
-    (snapshotEncryption.passwordHash === null ||
-      isPasswordHash(snapshotEncryption.passwordHash)) &&
-    (!snapshotEncryption.enabled || snapshotEncryption.passwordHash !== null) &&
+    typeof snapshotEncryption.forceEnabled === 'boolean' &&
+    !hasOwn(snapshotEncryption, 'passwordHash') &&
     !hasOwn(value, 'themeMode') &&
     !hasOwn(value, 'assetChart') &&
     matchesNormalized(value, normalizeSecurityDocument)

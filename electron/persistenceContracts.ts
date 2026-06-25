@@ -1,10 +1,15 @@
+import {
+  ENCRYPTION_KDF_ITERATIONS,
+  PASSWORD_KDF_ALGORITHM
+} from './cryptoEnvelopeShared.js';
+
 export const PERSISTENCE_SCHEMA_VERSION = 1 as const;
 
 export type PersistenceDocumentKind = 'core' | 'settings' | 'state' | 'security';
 
 export type PasswordHash = {
-  algorithm: 'PBKDF2-HMAC-SHA-256';
-  iterations: 600000;
+  algorithm: typeof PASSWORD_KDF_ALGORITHM;
+  iterations: typeof ENCRYPTION_KDF_ITERATIONS;
   salt: string;
   hash: string;
 };
@@ -14,6 +19,18 @@ export type CoreDocument = {
   groups: unknown[];
   accounts: unknown[];
   history: unknown[];
+};
+
+export type CoreFileFingerprint = {
+  algorithm: 'SHA-256';
+  value: string;
+  size: number;
+};
+
+export type CoreProtectionState = {
+  schemaVersion: typeof PERSISTENCE_SCHEMA_VERSION;
+  lastConfirmedFingerprint?: CoreFileFingerprint;
+  acknowledgedInternalIntegrityFailureFingerprint?: CoreFileFingerprint;
 };
 
 export type SettingsDocument = {
@@ -58,18 +75,17 @@ export type StateDocument = {
   personalization: {
     nyaaThemeUnlocked?: boolean;
   };
+  coreProtection?: CoreProtectionState;
 };
 
 export type SecurityDocument = {
   schemaVersion: typeof PERSISTENCE_SCHEMA_VERSION;
   appAccess: {
-    enabled: boolean;
     autoLockMinutes: number;
-    passwordHash: PasswordHash | null;
   };
   snapshotEncryption: {
     enabled: boolean;
-    passwordHash: PasswordHash | null;
+    forceEnabled: boolean;
   };
 };
 
@@ -101,14 +117,37 @@ const isPasswordHash = (value: unknown): value is PasswordHash => {
   }
 
   return (
-    value.algorithm === 'PBKDF2-HMAC-SHA-256' &&
-    value.iterations === 600000 &&
+    value.algorithm === PASSWORD_KDF_ALGORITHM &&
+    value.iterations === ENCRYPTION_KDF_ITERATIONS &&
     typeof value.salt === 'string' &&
     value.salt.length > 0 &&
     typeof value.hash === 'string' &&
     value.hash.length > 0
   );
 };
+
+const isCoreFileFingerprint = (value: unknown): value is CoreFileFingerprint =>
+  isRecord(value) &&
+  value.algorithm === 'SHA-256' &&
+  typeof value.value === 'string' &&
+  /^[a-f0-9]{64}$/i.test(value.value) &&
+  typeof value.size === 'number' &&
+  Number.isInteger(value.size) &&
+  value.size >= 0 &&
+  Object.keys(value).every((key) => key === 'algorithm' || key === 'value' || key === 'size');
+
+const isCoreProtectionState = (value: unknown): value is CoreProtectionState =>
+  isRecord(value) &&
+  value.schemaVersion === PERSISTENCE_SCHEMA_VERSION &&
+  (value.lastConfirmedFingerprint === undefined ||
+    isCoreFileFingerprint(value.lastConfirmedFingerprint)) &&
+  (value.acknowledgedInternalIntegrityFailureFingerprint === undefined ||
+    isCoreFileFingerprint(value.acknowledgedInternalIntegrityFailureFingerprint)) &&
+  Object.keys(value).every((key) =>
+    key === 'schemaVersion' ||
+    key === 'lastConfirmedFingerprint' ||
+    key === 'acknowledgedInternalIntegrityFailureFingerprint'
+  );
 
 const isCoreGroup = (value: unknown) => {
   if (!isRecord(value)) {
@@ -216,19 +255,20 @@ export const createDefaultStateDocument = (): StateDocument => ({
   },
   rollupImportHashes: [],
   firstWelcome: {},
-  personalization: {}
+  personalization: {},
+  coreProtection: {
+    schemaVersion: PERSISTENCE_SCHEMA_VERSION
+  }
 });
 
 export const createDefaultSecurityDocument = (): SecurityDocument => ({
   schemaVersion: PERSISTENCE_SCHEMA_VERSION,
   appAccess: {
-    enabled: false,
-    autoLockMinutes: 10,
-    passwordHash: null
+    autoLockMinutes: 10
   },
   snapshotEncryption: {
     enabled: false,
-    passwordHash: null
+    forceEnabled: true
   }
 });
 
@@ -318,6 +358,9 @@ export const normalizeStateDocument = (value: unknown): StateDocument => {
   const backup = isRecord(value.backup) ? value.backup : {};
   const firstWelcome = isRecord(value.firstWelcome) ? value.firstWelcome : {};
   const personalization = isRecord(value.personalization) ? value.personalization : {};
+  const coreProtection = isCoreProtectionState(value.coreProtection)
+    ? value.coreProtection
+    : createDefaultStateDocument().coreProtection;
   const lastBackupAt = backup.lastBackupAt;
   const hashes = Array.isArray(value.rollupImportHashes)
     ? Array.from(new Set(value.rollupImportHashes.filter((item) => typeof item === 'string'))).slice(-80)
@@ -348,7 +391,8 @@ export const normalizeStateDocument = (value: unknown): StateDocument => {
     },
     personalization: {
       ...(personalization.nyaaThemeUnlocked === true ? { nyaaThemeUnlocked: true } : {})
-    }
+    },
+    coreProtection
   };
 };
 
@@ -359,10 +403,6 @@ export const normalizeSecurityDocument = (value: unknown): SecurityDocument => {
 
   const appAccess = isRecord(value.appAccess) ? value.appAccess : {};
   const snapshotEncryption = isRecord(value.snapshotEncryption) ? value.snapshotEncryption : {};
-  const appHash = isPasswordHash(appAccess.passwordHash) ? appAccess.passwordHash : null;
-  const snapshotHash = isPasswordHash(snapshotEncryption.passwordHash)
-    ? snapshotEncryption.passwordHash
-    : null;
   const rawAutoLockMinutes = appAccess.autoLockMinutes;
   const autoLockMinutes =
     typeof rawAutoLockMinutes === 'number' && Number.isFinite(rawAutoLockMinutes) && rawAutoLockMinutes >= 1
@@ -372,13 +412,14 @@ export const normalizeSecurityDocument = (value: unknown): SecurityDocument => {
   return {
     schemaVersion: PERSISTENCE_SCHEMA_VERSION,
     appAccess: {
-      enabled: appAccess.enabled === true && appHash !== null,
-      autoLockMinutes,
-      passwordHash: appHash
+      autoLockMinutes
     },
     snapshotEncryption: {
-      enabled: snapshotEncryption.enabled === true && snapshotHash !== null,
-      passwordHash: snapshotHash
+      enabled: snapshotEncryption.enabled === true,
+      forceEnabled:
+        typeof snapshotEncryption.forceEnabled === 'boolean'
+          ? snapshotEncryption.forceEnabled
+          : true
     }
   };
 };
@@ -419,11 +460,11 @@ export const isStateDocument = (value: unknown): value is StateDocument =>
   value.rollupImportHashes.every((item) => typeof item === 'string') &&
   isRecord(value.firstWelcome) &&
   isRecord(value.personalization) &&
+  (value.coreProtection === undefined || isCoreProtectionState(value.coreProtection)) &&
   !Object.hasOwn(value, 'groups') &&
   !Object.hasOwn(value, 'accounts') &&
   !Object.hasOwn(value, 'history') &&
-  !Object.hasOwn(value, 'passwordHash') &&
-  matchesNormalized(value, normalizeStateDocument);
+  !Object.hasOwn(value, 'passwordHash');
 
 export const isSecurityDocument = (value: unknown): value is SecurityDocument =>
   isRecord(value) &&

@@ -5,7 +5,8 @@ import type { PersistenceEnvironment } from './persistencePaths.js';
 type PersistenceEnvironmentPromotionErrorCode =
   | PersistenceErrorCode
   | 'DEMO_NOT_ACTIVE'
-  | 'DEMO_CORE_MISSING';
+  | 'DEMO_CORE_MISSING'
+  | 'DEMO_CORE_LOCKED';
 
 export type PersistenceEnvironmentPromotionResult =
   | { ok: true; core: CoreDocument }
@@ -45,7 +46,24 @@ export const createPersistenceEnvironmentStoreController = ({
       return getCurrentStore().paths;
     },
     readCoreDocument: () => getCurrentStore().readCoreDocument(),
-    writeCoreDocument: (document) => getCurrentStore().writeCoreDocument(document),
+    writeCoreDocument: (document, options) =>
+      getCurrentStore().writeCoreDocument(document, options),
+    unlockCoreDocument: (password) => getCurrentStore().unlockCoreDocument(password),
+    enableCoreProtection: (document, password, options) =>
+      getCurrentStore().enableCoreProtection(document, password, options),
+    changeCorePassword: (document, currentPassword, nextPassword, options) =>
+      getCurrentStore().changeCorePassword(document, currentPassword, nextPassword, options),
+    disableCoreProtection: (document, password, options) =>
+      getCurrentStore().disableCoreProtection(document, password, options),
+    lockCoreDocument: () => getCurrentStore().lockCoreDocument(),
+    acknowledgeCoreIntegrityIssue: () =>
+      getCurrentStore().acknowledgeCoreIntegrityIssue(),
+    encryptSnapshotDocument: (document) =>
+      getCurrentStore().encryptSnapshotDocument(document),
+    decryptSnapshotDocument: (encrypted) =>
+      getCurrentStore().decryptSnapshotDocument(encrypted),
+    decryptSnapshotDocumentWithPassword: (encrypted, password) =>
+      getCurrentStore().decryptSnapshotDocumentWithPassword(encrypted, password),
     readSettingsDocument: () => getCurrentStore().readSettingsDocument(),
     writeSettingsDocument: (document) =>
       getCurrentStore().writeSettingsDocument(document),
@@ -83,8 +101,18 @@ export const createPersistenceEnvironmentStoreController = ({
       };
     }
 
+    if ('locked' in demoCore) {
+      return {
+        ok: false,
+        code: 'DEMO_CORE_LOCKED',
+        message: 'Demo core document is locked.'
+      };
+    }
+
     const currentDemoCore = demoCore.document as CoreDocument;
 
+    demoStore.lockCoreDocument();
+    realStore.lockCoreDocument();
     currentEnvironment = 'real';
     const writeResult = realStore.writeCoreDocument(currentDemoCore);
 
@@ -104,6 +132,8 @@ export const createPersistenceEnvironmentStoreController = ({
     store,
     getEnvironment: () => currentEnvironment,
     setEnvironment: (environment) => {
+      realStore.lockCoreDocument();
+      demoStore.lockCoreDocument();
       currentEnvironment = environment;
     },
     getStoreForEnvironment,

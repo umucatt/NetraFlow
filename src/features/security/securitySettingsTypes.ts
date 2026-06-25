@@ -4,8 +4,6 @@ import type {
   HomeAssetStatMetric
 } from '../../homeAssetStats';
 import type { SearchLogicMode } from '../../search/searchTypes';
-import type { PasswordHash } from '../../security/passwordHash';
-
 export type PositiveNegativeColorMode = 'red-positive' | 'green-positive';
 export type ThemeMode = 'light' | 'dark' | 'system';
 export type ThemeStyle = 'default' | 'nyaa';
@@ -26,12 +24,11 @@ export type GlobalSettings = {
   homeAssetStatLabelMode: HomeAssetStatLabelMode;
   homeAssetStatCompact: boolean;
   passwordProtectionEnabled: boolean;
-  passwordHash: PasswordHash | null;
+  passwordHash: null;
   autoLockMinutes: number;
+  forceSnapshotEncryption: boolean;
   snapshotEncryptionEnabled: boolean;
-  snapshotPasswordHash: PasswordHash | null;
+  snapshotPasswordHash: null;
 };
 
 export type PasswordEditorMode = 'setup' | 'edit' | null;
-export type SnapshotPasswordEditorMode = 'setup' | 'edit' | null;
-export type SnapshotPasswordField = 'new' | 'confirm';

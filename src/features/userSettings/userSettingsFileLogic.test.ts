@@ -30,6 +30,7 @@ const currentGlobalSettings: GlobalSettings = {
   passwordProtectionEnabled: false,
   passwordHash: null,
   autoLockMinutes: 10,
+  forceSnapshotEncryption: true,
   snapshotEncryptionEnabled: false,
   snapshotPasswordHash: null
 };
@@ -47,6 +48,7 @@ test('user settings export excludes security and sensitive fields', () => {
       ...currentGlobalSettings,
       passwordProtectionEnabled: true,
       autoLockMinutes: 1,
+      forceSnapshotEncryption: false,
       snapshotEncryptionEnabled: true
     },
     effectiveThemeStyle: 'default',
@@ -58,6 +60,7 @@ test('user settings export excludes security and sensitive fields', () => {
   assert.equal('passwordProtectionEnabled' in payload.settings, false);
   assert.equal('passwordHash' in payload.settings, false);
   assert.equal('autoLockMinutes' in payload.settings, false);
+  assert.equal('forceSnapshotEncryption' in payload.settings, false);
   assert.equal('snapshotEncryptionEnabled' in payload.settings, false);
   assert.equal('snapshotPasswordHash' in payload.settings, false);
   assert.equal(payload.settings.mainContentPosition, 'left');
@@ -74,6 +77,7 @@ test('imported user settings do not overwrite security fields', () => {
         passwordProtectionEnabled: true,
         passwordHash: { algorithm: 'fake' },
         autoLockMinutes: 1,
+        forceSnapshotEncryption: false,
         snapshotEncryptionEnabled: true,
         snapshotPasswordHash: { algorithm: 'fake' },
         assetChartSettings: { imported: true }
@@ -88,6 +92,7 @@ test('imported user settings do not overwrite security fields', () => {
   assert.equal(imported.globalSettings.passwordProtectionEnabled, false);
   assert.equal(imported.globalSettings.passwordHash, null);
   assert.equal(imported.globalSettings.autoLockMinutes, 10);
+  assert.equal(imported.globalSettings.forceSnapshotEncryption, true);
   assert.equal(imported.globalSettings.snapshotEncryptionEnabled, false);
   assert.equal(imported.globalSettings.snapshotPasswordHash, null);
   assert.deepEqual(imported.assetChartSettings, {

@@ -182,11 +182,11 @@ export const createAppDialogControllerModel = (
 
   const requestJsonIntegrityWarningConfirmation = () =>
     requestConfirmationDialog({
-      title: '文件完整性无法确认',
-      message:
-        '该文件可能被修改、损坏，或不是由当前版本 NetraFlow 完整导出的文件，继续导入可能带来数据异常',
+      title: '快照完整性验证失败',
+      message: '快照已发生非 NetraFlow 写入的异常修改\n无法确认数据仍完整可信',
       confirmLabel: '继续导入',
-      cancelLabel: '取消导入'
+      cancelLabel: '取消导入',
+      tone: 'danger'
     });
 
   const showConfirmationDialog = (

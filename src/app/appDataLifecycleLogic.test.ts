@@ -197,7 +197,8 @@ test('testdatain promotes current demo core or generates real asset data only', 
   assert.equal(handlerSource.includes('return promoteCurrentDemoCoreToRealData();'), true);
   assert.equal(handlerSource.includes('exitExampleModeSession()'), false);
   assert.equal(handlerSource.includes('createTestDataInRealAppData(createExampleData)'), true);
-  assert.equal(handlerSource.includes('saveAppData(nextAppData, { allowEmptyHistoryOverwrite: true })'), true);
+  assert.equal(handlerSource.includes('saveAppDataWithExternalModificationCheck('), true);
+  assert.equal(handlerSource.includes('allowEmptyHistoryOverwrite: true'), true);
   assert.equal(handlerSource.includes('setAppData(nextAppData)'), true);
   assert.equal(handlerSource.includes('setIsExampleMode(false)'), true);
   assert.equal(handlerSource.includes('applyLifecycleSnapshot'), false);

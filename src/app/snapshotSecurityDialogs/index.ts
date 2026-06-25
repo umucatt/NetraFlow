@@ -4,6 +4,5 @@ export type {
   PasswordEditorDialogGroup,
   PasswordProtectionDisableDialogGroup,
   SnapshotEncryptionDisableDialogGroup,
-  SnapshotPasswordEditorDialogGroup,
   SnapshotSecurityDialogLayerProps
 } from './snapshotSecurityDialogTypes';

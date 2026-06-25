@@ -8,4 +8,3 @@ export {
   SettingsNavigationPanel
 } from './SettingsPage';
 export { default as SnapshotEncryptionDisableDialog } from './SnapshotEncryptionDisableDialog';
-export { default as SnapshotPasswordEditorDialog } from './SnapshotPasswordEditorDialog';

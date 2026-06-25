@@ -103,13 +103,15 @@ export type SettingsControlRowProps = {
   options: SettingsOption[];
   currentValue: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
 };
 
 export function SettingsControlRow({
   label,
   options,
   currentValue,
-  onChange
+  onChange,
+  disabled = false
 }: SettingsControlRowProps) {
   return (
     <div className="global-settings-control-row">
@@ -118,11 +120,13 @@ export function SettingsControlRow({
         className="segmented-control global-settings-segmented"
         style={getSegmentedControlStyle(options.length)}
         aria-label={label}
+        aria-disabled={disabled ? 'true' : undefined}
       >
         {options.map((option) => (
           <button
             key={option.value}
             type="button"
+            disabled={disabled}
             className={currentValue === option.value ? 'is-selected' : undefined}
             onClick={() => onChange(option.value)}
           >

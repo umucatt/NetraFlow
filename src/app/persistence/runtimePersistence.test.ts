@@ -185,7 +185,8 @@ test('runtime persistence validates demo environment transitions', () => {
       core: coreDocument,
       settings: createDefaultSettingsDocument(),
       state: createDefaultStateDocument(),
-      security: createDefaultSecurityDocument()
+      security: createDefaultSecurityDocument(),
+      coreProtection: { enabled: false, locked: false }
     };
     const entered = enterDemoPersistenceEnvironment(demoSnapshot);
     const exited = exitDemoPersistenceEnvironment();

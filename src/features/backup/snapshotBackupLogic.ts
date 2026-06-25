@@ -15,7 +15,6 @@ import {
   createEncryptedJsonExportText,
   createJsonPayloadExportText
 } from '../../app/jsonIntegrity';
-import { encryptSnapshotPayload } from '../../security/snapshotCrypto';
 
 export const DEFAULT_AUTO_BACKUP_SETTINGS: AutoBackupSettings = {
   enabled: false,
@@ -483,7 +482,8 @@ export const createBackupFileContent = async (
     return createJsonPayloadExportText(backupPayload);
   }
 
-  const encryptedSnapshot = await encryptSnapshotPayload(backupPayload, snapshotPassword);
-
-  return createEncryptedJsonExportText(encryptedSnapshot);
+  throw new Error('Snapshot encryption must use the main-process crypto session.');
 };
+
+export const createEncryptedBackupFileContent = async (encryptedSnapshot: unknown) =>
+  createEncryptedJsonExportText(encryptedSnapshot);

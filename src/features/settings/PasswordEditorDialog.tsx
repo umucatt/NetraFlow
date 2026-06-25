@@ -1,5 +1,6 @@
-import { type CSSProperties, type FormEvent } from 'react';
+import { type CSSProperties, type FormEvent, type KeyboardEvent } from 'react';
 import DialogShell from '../../components/dialogs/DialogShell';
+import InlineErrorSlot from '../../components/InlineErrorSlot';
 
 type PasswordEditorMode = 'setup' | 'edit';
 
@@ -37,6 +38,50 @@ type PasswordEditorDialogProps = {
   onCancel: () => void;
 };
 
+const PASSWORD_TRY_LEVELS = [
+  '密码强度：很弱',
+  '密码强度：较弱',
+  '密码强度：一般',
+  '密码强度：较强',
+  '密码强度：强',
+  '密码强度：很强'
+] as const;
+
+const estimatePasswordTryLevel = (password: string) => {
+  const length = password.length;
+  const classes = [
+    /[a-z]/.test(password),
+    /[A-Z]/.test(password),
+    /\d/.test(password),
+    /[^A-Za-z0-9]/.test(password)
+  ].filter(Boolean).length;
+  const repeated = /^(.{1,4})\1+$/.test(password);
+  const sequential = 'abcdefghijklmnopqrstuvwxyz0123456789'.includes(password.toLowerCase());
+  const score = length + classes * 4 - (repeated ? 8 : 0) - (sequential ? 6 : 0);
+
+  if (score < 10) {
+    return PASSWORD_TRY_LEVELS[0];
+  }
+
+  if (score < 16) {
+    return PASSWORD_TRY_LEVELS[1];
+  }
+
+  if (score < 22) {
+    return PASSWORD_TRY_LEVELS[2];
+  }
+
+  if (score < 30) {
+    return PASSWORD_TRY_LEVELS[3];
+  }
+
+  if (score < 38) {
+    return PASSWORD_TRY_LEVELS[4];
+  }
+
+  return PASSWORD_TRY_LEVELS[5];
+};
+
 function PasswordEditorDialog({
   mode,
   oldPassword,
@@ -51,6 +96,20 @@ function PasswordEditorDialog({
   onCancel
 }: PasswordEditorDialogProps) {
   const isEditingExistingPassword = mode === 'edit';
+  const handleDialogKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== 'Escape') {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    onCancel();
+  };
+  const oldPasswordError = isEditingExistingPassword && error === '登录密码错误' ? error : '';
+  const confirmPasswordError = error === '两次输入的新密码不一致' ? error : '';
+  const newPasswordError = error === '请输入新密码' ? error : '';
+  const formError =
+    error && !oldPasswordError && !confirmPasswordError && !newPasswordError ? error : '';
 
   return (
     <DialogShell
@@ -61,6 +120,7 @@ function PasswordEditorDialog({
       backdropStyle={backdropStyle}
       cardStyle={cardStyle}
       onClose={onCancel}
+      onKeyDown={handleDialogKeyDown}
       onSubmit={onSubmit}
       actions={(
         <>
@@ -89,8 +149,12 @@ function PasswordEditorDialog({
             type="password"
             autoComplete="current-password"
             value={oldPassword}
+            className={oldPasswordError ? 'input--error' : undefined}
+            aria-invalid={oldPasswordError ? true : undefined}
+            aria-describedby="password-editor-old-error"
             onChange={(event) => onOldPasswordChange(event.target.value)}
           />
+          <InlineErrorSlot id="password-editor-old-error" message={oldPasswordError} />
         </label>
       ) : null}
 
@@ -101,9 +165,18 @@ function PasswordEditorDialog({
           type="password"
           autoComplete="new-password"
           value={newPassword}
+          className={newPasswordError ? 'input--error' : undefined}
+          aria-invalid={newPasswordError ? true : undefined}
+          aria-describedby="password-editor-new-error"
           onChange={(event) => onNewPasswordChange(event.target.value)}
         />
+        <InlineErrorSlot id="password-editor-new-error" message={newPasswordError} />
       </label>
+      {newPassword ? (
+        <p style={{ margin: '8px 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+          {estimatePasswordTryLevel(newPassword)}
+        </p>
+      ) : null}
 
       <label className="right-panel-label" style={{ marginTop: 14 }}>
         确认新密码
@@ -111,15 +184,15 @@ function PasswordEditorDialog({
           type="password"
           autoComplete="new-password"
           value={confirmPassword}
+          className={confirmPasswordError ? 'input--error' : undefined}
+          aria-invalid={confirmPasswordError ? true : undefined}
+          aria-describedby="password-editor-confirm-error"
           onChange={(event) => onConfirmPasswordChange(event.target.value)}
         />
+        <InlineErrorSlot id="password-editor-confirm-error" message={confirmPasswordError} />
       </label>
 
-      {error ? (
-        <p style={{ margin: '12px 0 0', color: '#b91c1c', fontSize: '0.92rem' }}>
-          {error}
-        </p>
-      ) : null}
+      <InlineErrorSlot id="password-editor-form-error" message={formError} />
     </DialogShell>
   );
 }
