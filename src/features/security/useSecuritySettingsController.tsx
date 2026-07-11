@@ -7,6 +7,10 @@ import {
 } from 'react';
 
 import type { CoreDocument } from '../../app/persistence/persistenceDocuments';
+import {
+  isAppContentInertForLockScreen,
+  type LockScreenState
+} from '../../app/lockScreen/lockScreenLogic';
 import type {
   GlobalSettings,
   PasswordEditorMode
@@ -187,13 +191,17 @@ export function useSecuritySettingsController({
   showToast
 }: SecuritySettingsControllerOptions) {
   const autoLockTimerRef = useRef<number | null>(null);
-  const [isLocked, setIsLocked] = useState(
+  const unlockExitAnimationFrameRef = useRef<number | null>(null);
+  const [lockScreenState, setLockScreenState] = useState<LockScreenState>(
     () =>
       shouldInitializeSecurityLocked({
         passwordProtectionEnabled: globalSettings.passwordProtectionEnabled,
         coreProtectionLocked: initialCoreProtectionLocked
       })
+        ? 'locked'
+        : 'unlocked'
   );
+  const isLocked = isAppContentInertForLockScreen(lockScreenState);
   const [unlockPasswordInput, setUnlockPasswordInput] = useState('');
   const [unlockError, setUnlockError] = useState('');
   const [isUnlocking, setIsUnlocking] = useState(false);
@@ -234,7 +242,7 @@ export function useSecuritySettingsController({
       return;
     }
 
-    setIsLocked(false);
+    setLockScreenState('unlocked');
     setUnlockPasswordInput('');
     setUnlockError('');
   }, [globalSettings.passwordProtectionEnabled]);
@@ -255,9 +263,31 @@ export function useSecuritySettingsController({
       lockCoreDocument();
       setUnlockPasswordInput('');
       setUnlockError('');
-      setIsLocked(true);
+      if (unlockExitAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(unlockExitAnimationFrameRef.current);
+        unlockExitAnimationFrameRef.current = null;
+      }
+      setIsUnlocking(false);
+      setLockScreenState('locked');
     });
   }, [globalSettings.passwordProtectionEnabled, lockCoreDocument, showToast]);
+
+  useEffect(() => {
+    const api = window.electronAPI ?? window.electronWindow;
+
+    if (!api?.setLockMenuState) {
+      return;
+    }
+
+    api.setLockMenuState({
+      canLock:
+        globalSettings.passwordProtectionEnabled && !isLocked && !isUnlocking
+    });
+
+    return () => {
+      api.setLockMenuState?.({ canLock: false });
+    };
+  }, [globalSettings.passwordProtectionEnabled, isLocked, isUnlocking]);
 
   useEffect(() => {
     if (!globalSettings.passwordProtectionEnabled || isLocked) {
@@ -279,7 +309,8 @@ export function useSecuritySettingsController({
         lockCoreDocument();
         setUnlockPasswordInput('');
         setUnlockError('');
-        setIsLocked(true);
+        setIsUnlocking(false);
+        setLockScreenState('locked');
       }, autoLockDelay);
     };
     const activityEvents: Array<keyof WindowEventMap> = [
@@ -321,6 +352,10 @@ export function useSecuritySettingsController({
       if (autoLockTimerRef.current !== null) {
         window.clearTimeout(autoLockTimerRef.current);
         autoLockTimerRef.current = null;
+      }
+
+      if (unlockExitAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(unlockExitAnimationFrameRef.current);
       }
     },
     []
@@ -422,7 +457,7 @@ export function useSecuritySettingsController({
         passwordProtectionEnabled: false,
         snapshotEncryptionEnabled: false
       }));
-      setIsLocked(false);
+      setLockScreenState('unlocked');
       closePasswordDisableConfirm();
     };
 
@@ -439,7 +474,7 @@ export function useSecuritySettingsController({
         passwordProtectionEnabled: false,
         snapshotEncryptionEnabled: false
       }));
-      setIsLocked(false);
+      setLockScreenState('unlocked');
       closePasswordDisableConfirm();
     } catch (error) {
       if (isExternalCoreModificationError(error)) {
@@ -721,7 +756,7 @@ export function useSecuritySettingsController({
     event.preventDefault();
 
     if (!globalSettings.passwordProtectionEnabled) {
-      setIsLocked(false);
+      setLockScreenState('unlocked');
       setUnlockPasswordInput('');
       setUnlockError('');
       return;
@@ -729,19 +764,36 @@ export function useSecuritySettingsController({
 
     setIsUnlocking(true);
     setUnlockError('');
+    setLockScreenState('authenticating');
 
     try {
       unlockCoreDocument(unlockPasswordInput);
-      window.location.reload();
+      setUnlockPasswordInput('');
+      setUnlockError('');
+      setIsUnlocking(false);
+
+      unlockExitAnimationFrameRef.current = window.requestAnimationFrame(() => {
+        unlockExitAnimationFrameRef.current = window.requestAnimationFrame(() => {
+          unlockExitAnimationFrameRef.current = null;
+          setLockScreenState('unlock-exiting');
+        });
+      });
     } catch (error) {
       console.error('[NetraFlow security] Failed to unlock core.', error);
       setUnlockError(SECURITY_ERROR_MESSAGES.coreDecryptFailed);
       setIsUnlocking(false);
+      setLockScreenState('locked');
     }
   };
 
+  const completeUnlockTransition = () => {
+    setLockScreenState((currentState) =>
+      currentState === 'unlock-exiting' ? 'unlocked' : currentState
+    );
+  };
+
   const resetSecurityState = () => {
-    setIsLocked(false);
+    setLockScreenState('unlocked');
     setUnlockPasswordInput('');
     setUnlockError('');
     setIsUnlocking(false);
@@ -752,6 +804,7 @@ export function useSecuritySettingsController({
 
   return {
     isLocked,
+    lockScreenState,
     unlockPasswordInput,
     setUnlockPasswordInput,
     unlockError,
@@ -793,6 +846,7 @@ export function useSecuritySettingsController({
     updateAutoLockMinutesInput,
     resetInvalidAutoLockMinutesInput,
     unlockApp,
+    completeUnlockTransition,
     resetSecurityState
   };
 }

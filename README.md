@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/netraflow-icon.png" alt="NetraFlow 图标" width="128" />
+  <img src="public/icons/netraflow.svg" alt="NetraFlow 图标" width="128" />
 </p>
 
 <h1 align="center">NetraFlow</h1>
@@ -179,7 +179,7 @@ npm run dist:portable
 | --- | --- |
 | `electron/` | Electron 主进程、预加载脚本、本地存储和窗口相关逻辑 |
 | `src/` | React 渲染进程、页面、功能模块、样式和测试 |
-| `public/icons/` | 应用图标源文件，Windows 打包继续使用 `netraflow.ico` |
+| `public/icons/` | 正式图标资源：`netraflow.svg` 为唯一源，Windows 使用 `netraflow.ico`、macOS 使用 `netraflow.icns`、Linux 使用 `linux/` PNG 图层 |
 | `docs/assets/` | README 和文档展示资源 |
 | `scripts/` | 开发启动、发布检查、打包、产物验证和发布说明脚本 |
 | `build/` | 安装器脚本和随包许可证资源 |
@@ -189,7 +189,8 @@ npm run dist:portable
 
 - 修改本地数据结构时，需要维护四文件边界、schema 版本、future schema 拒绝策略和无 `previous` 恢复路径。
 - 不要把开发 runtime、userdata、缓存、日志或用户数据打入发布产物。
-- Windows 应用图标源文件仍是 `public/icons/netraflow.ico`；`docs/assets/netraflow-icon.png` 只用于 README 和文档展示。
+- 生产图标唯一源文件为 `public/icons/netraflow.svg`；README 直接展示该 SVG，平台打包资源均由其生成。
+- 修改图标资源后运行 `npm run generate:icons`，以重新生成 Windows ICO、macOS ICNS、Linux PNG 图层和视觉预览。
 - 修改发布流程时，需要同步检查 `scripts/`、`.github/workflows/`、相关测试和 README 中的说明。
 - 导入、快照和安全相关功能应继续优先做格式校验、完整性校验和可恢复性测试。
 

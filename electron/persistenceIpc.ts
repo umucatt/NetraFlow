@@ -1,6 +1,7 @@
 import { ipcMain, type IpcMainEvent } from 'electron';
 
 import type { PersistenceStore } from './persistenceFileStore.js';
+import { runWithPersistenceShutdownGuard } from './persistenceShutdownGuard.js';
 
 export type PersistenceDemoLifecycleHandlers = {
   enterDemoEnvironment: (documents: unknown) => unknown;
@@ -21,136 +22,156 @@ const getCoreWriteOptions = (value: unknown) => ({
 
 export const registerPersistenceHandlers = (
   store: PersistenceStore,
-  demoLifecycle?: PersistenceDemoLifecycleHandlers
+  demoLifecycle?: PersistenceDemoLifecycleHandlers,
+  { isBlocked = () => false }: { isBlocked?: () => boolean } = {}
 ) => {
-  ipcMain.on('persistence:read-core', (event) => respond(event, store.readCoreDocument()));
+  const respondGuarded = (event: IpcMainEvent, action: () => unknown) =>
+    respond(event, runWithPersistenceShutdownGuard(isBlocked, action));
+
+  ipcMain.on('persistence:read-core', (event) =>
+    respondGuarded(event, () => store.readCoreDocument())
+  );
   ipcMain.on('persistence:write-core', (event, request: unknown) =>
-    respond(
+    respondGuarded(
       event,
-      typeof request === 'object' && request !== null && 'document' in request
-        ? store.writeCoreDocument(
-            (request as { document?: unknown }).document,
-            getCoreWriteOptions((request as { options?: unknown }).options)
-          )
-        : store.writeCoreDocument(request)
+      () =>
+        typeof request === 'object' && request !== null && 'document' in request
+          ? store.writeCoreDocument(
+              (request as { document?: unknown }).document,
+              getCoreWriteOptions((request as { options?: unknown }).options)
+            )
+          : store.writeCoreDocument(request)
     )
   );
   ipcMain.on('persistence:unlock-core', (event, password: unknown) =>
-    respond(event, store.unlockCoreDocument(typeof password === 'string' ? password : ''))
+    respondGuarded(event, () =>
+      store.unlockCoreDocument(typeof password === 'string' ? password : '')
+    )
   );
   ipcMain.on('persistence:enable-core-protection', (event, request: unknown) =>
-    respond(
+    respondGuarded(
       event,
-      typeof request === 'object' && request !== null
-        ? store.enableCoreProtection(
-            (request as { document?: unknown }).document,
-            typeof (request as { password?: unknown }).password === 'string'
-              ? (request as { password: string }).password
-              : '',
-            getCoreWriteOptions((request as { options?: unknown }).options)
-          )
-        : store.enableCoreProtection(undefined, '')
+      () =>
+        typeof request === 'object' && request !== null
+          ? store.enableCoreProtection(
+              (request as { document?: unknown }).document,
+              typeof (request as { password?: unknown }).password === 'string'
+                ? (request as { password: string }).password
+                : '',
+              getCoreWriteOptions((request as { options?: unknown }).options)
+            )
+          : store.enableCoreProtection(undefined, '')
     )
   );
   ipcMain.on('persistence:change-core-password', (event, request: unknown) =>
-    respond(
+    respondGuarded(
       event,
-      typeof request === 'object' && request !== null
-        ? store.changeCorePassword(
-            (request as { document?: unknown }).document,
-            typeof (request as { currentPassword?: unknown }).currentPassword === 'string'
-              ? (request as { currentPassword: string }).currentPassword
-              : '',
-            typeof (request as { nextPassword?: unknown }).nextPassword === 'string'
-              ? (request as { nextPassword: string }).nextPassword
-              : '',
-            getCoreWriteOptions((request as { options?: unknown }).options)
-          )
-        : store.changeCorePassword(undefined, '', '')
+      () =>
+        typeof request === 'object' && request !== null
+          ? store.changeCorePassword(
+              (request as { document?: unknown }).document,
+              typeof (request as { currentPassword?: unknown }).currentPassword === 'string'
+                ? (request as { currentPassword: string }).currentPassword
+                : '',
+              typeof (request as { nextPassword?: unknown }).nextPassword === 'string'
+                ? (request as { nextPassword: string }).nextPassword
+                : '',
+              getCoreWriteOptions((request as { options?: unknown }).options)
+            )
+          : store.changeCorePassword(undefined, '', '')
     )
   );
   ipcMain.on('persistence:disable-core-protection', (event, request: unknown) =>
-    respond(
+    respondGuarded(
       event,
-      typeof request === 'object' && request !== null
-        ? store.disableCoreProtection(
-            (request as { document?: unknown }).document,
-            typeof (request as { password?: unknown }).password === 'string'
-              ? (request as { password: string }).password
-              : '',
-            getCoreWriteOptions((request as { options?: unknown }).options)
-          )
-        : store.disableCoreProtection(undefined, '')
+      () =>
+        typeof request === 'object' && request !== null
+          ? store.disableCoreProtection(
+              (request as { document?: unknown }).document,
+              typeof (request as { password?: unknown }).password === 'string'
+                ? (request as { password: string }).password
+                : '',
+              getCoreWriteOptions((request as { options?: unknown }).options)
+            )
+          : store.disableCoreProtection(undefined, '')
     )
   );
-  ipcMain.on('persistence:lock-core', (event) => respond(event, store.lockCoreDocument()));
+  ipcMain.on('persistence:lock-core', (event) =>
+    respondGuarded(event, () => store.lockCoreDocument())
+  );
   ipcMain.on('persistence:acknowledge-core-integrity', (event) =>
-    respond(event, store.acknowledgeCoreIntegrityIssue())
+    respondGuarded(event, () => store.acknowledgeCoreIntegrityIssue())
   );
   ipcMain.on('persistence:encrypt-snapshot', (event, document: unknown) =>
-    respond(event, store.encryptSnapshotDocument(document))
+    respondGuarded(event, () => store.encryptSnapshotDocument(document))
   );
   ipcMain.on('persistence:decrypt-snapshot', (event, encrypted: unknown) =>
-    respond(event, store.decryptSnapshotDocument(encrypted))
+    respondGuarded(event, () => store.decryptSnapshotDocument(encrypted))
   );
   ipcMain.on('persistence:decrypt-snapshot-with-password', (event, request: unknown) =>
-    respond(
+    respondGuarded(
       event,
-      typeof request === 'object' && request !== null
-        ? store.decryptSnapshotDocumentWithPassword(
-            (request as { encrypted?: unknown }).encrypted,
-            typeof (request as { password?: unknown }).password === 'string'
-              ? (request as { password: string }).password
-              : ''
-          )
-        : store.decryptSnapshotDocumentWithPassword(undefined, '')
+      () =>
+        typeof request === 'object' && request !== null
+          ? store.decryptSnapshotDocumentWithPassword(
+              (request as { encrypted?: unknown }).encrypted,
+              typeof (request as { password?: unknown }).password === 'string'
+                ? (request as { password: string }).password
+                : ''
+            )
+          : store.decryptSnapshotDocumentWithPassword(undefined, '')
     )
   );
   ipcMain.on('persistence:read-settings', (event) =>
-    respond(event, store.readSettingsDocument())
+    respondGuarded(event, () => store.readSettingsDocument())
   );
   ipcMain.on('persistence:write-settings', (event, document: unknown) =>
-    respond(event, store.writeSettingsDocument(document))
+    respondGuarded(event, () => store.writeSettingsDocument(document))
   );
-  ipcMain.on('persistence:read-state', (event) => respond(event, store.readStateDocument()));
+  ipcMain.on('persistence:read-state', (event) =>
+    respondGuarded(event, () => store.readStateDocument())
+  );
   ipcMain.on('persistence:write-state', (event, document: unknown) =>
-    respond(event, store.writeStateDocument(document))
+    respondGuarded(event, () => store.writeStateDocument(document))
   );
   ipcMain.on('persistence:read-security', (event) =>
-    respond(event, store.readSecurityDocument())
+    respondGuarded(event, () => store.readSecurityDocument())
   );
   ipcMain.on('persistence:write-security', (event, document: unknown) =>
-    respond(event, store.writeSecurityDocument(document))
+    respondGuarded(event, () => store.writeSecurityDocument(document))
   );
 
   ipcMain.on('persistence:enter-demo', (event, documents: unknown) =>
-    respond(
+    respondGuarded(
       event,
-      demoLifecycle?.enterDemoEnvironment(documents) ?? {
-        ok: false,
-        code: 'DEMO_LIFECYCLE_UNAVAILABLE',
-        message: 'Demo persistence lifecycle is unavailable.'
-      }
+      () =>
+        demoLifecycle?.enterDemoEnvironment(documents) ?? {
+          ok: false,
+          code: 'DEMO_LIFECYCLE_UNAVAILABLE',
+          message: 'Demo persistence lifecycle is unavailable.'
+        }
     )
   );
   ipcMain.on('persistence:exit-demo', (event) =>
-    respond(
+    respondGuarded(
       event,
-      demoLifecycle?.exitDemoEnvironment() ?? {
-        ok: false,
-        code: 'DEMO_LIFECYCLE_UNAVAILABLE',
-        message: 'Demo persistence lifecycle is unavailable.'
-      }
+      () =>
+        demoLifecycle?.exitDemoEnvironment() ?? {
+          ok: false,
+          code: 'DEMO_LIFECYCLE_UNAVAILABLE',
+          message: 'Demo persistence lifecycle is unavailable.'
+        }
     )
   );
   ipcMain.on('persistence:promote-demo-core-to-real', (event) =>
-    respond(
+    respondGuarded(
       event,
-      demoLifecycle?.promoteDemoCoreToRealEnvironment() ?? {
-        ok: false,
-        code: 'DEMO_LIFECYCLE_UNAVAILABLE',
-        message: 'Demo persistence lifecycle is unavailable.'
-      }
+      () =>
+        demoLifecycle?.promoteDemoCoreToRealEnvironment() ?? {
+          ok: false,
+          code: 'DEMO_LIFECYCLE_UNAVAILABLE',
+          message: 'Demo persistence lifecycle is unavailable.'
+        }
     )
   );
 };

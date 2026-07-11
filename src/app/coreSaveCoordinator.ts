@@ -15,6 +15,7 @@ export type CoreSaveScheduleOptions = {
 };
 
 export type CoreSaveCoordinatorState<TAppData> = {
+  destructiveShutdown: boolean;
   saving: boolean;
   dirtyRevision: number;
   persistedRevision: number;
@@ -46,6 +47,7 @@ export type CoreSaveCoordinatorHandlers<TAppData> = {
 };
 
 const createInitialState = <TAppData>(): CoreSaveCoordinatorState<TAppData> => ({
+  destructiveShutdown: false,
   saving: false,
   dirtyRevision: 0,
   persistedRevision: 0,
@@ -85,17 +87,18 @@ export const createCoreSaveCoordinator = <TAppData>(
   const getLatestPendingSaveRequest = () => state.pendingSave;
 
   const hasPendingSaveData = () =>
-    state.dirtyRevision > state.persistedRevision ||
-    state.autoSaveTimer !== null ||
-    (state.pendingSave !== null && state.pendingSave.revision > state.persistedRevision) ||
-    (state.saving && state.dirtyRevision > state.persistedRevision) ||
-    (state.acknowledgedWithoutSaveRevision > state.persistedRevision &&
-      state.acknowledgedWithoutSaveRevision >= state.dirtyRevision);
+    !state.destructiveShutdown &&
+    (state.dirtyRevision > state.persistedRevision ||
+      state.autoSaveTimer !== null ||
+      (state.pendingSave !== null && state.pendingSave.revision > state.persistedRevision) ||
+      (state.saving && state.dirtyRevision > state.persistedRevision) ||
+      (state.acknowledgedWithoutSaveRevision > state.persistedRevision &&
+        state.acknowledgedWithoutSaveRevision >= state.dirtyRevision));
 
   const scheduleAutoSave = () => {
     clearAutoSaveTimer();
 
-    if (!state.pendingSave) {
+    if (state.destructiveShutdown || !state.pendingSave) {
       return;
     }
 
@@ -114,6 +117,10 @@ export const createCoreSaveCoordinator = <TAppData>(
     saveRequest: CoreSaveRequest<TAppData>,
     allowExternalCoreOverwrite = false
   ): boolean => {
+    if (state.destructiveShutdown) {
+      return false;
+    }
+
     const currentHandlers = getHandlers();
 
     if (
@@ -173,6 +180,11 @@ export const createCoreSaveCoordinator = <TAppData>(
 
   const flushLatestSave = (allowExternalCoreOverwrite = false) => {
     clearAutoSaveTimer();
+
+    if (state.destructiveShutdown) {
+      return false;
+    }
+
     const pendingSave = getLatestPendingSaveRequest();
 
     if (!pendingSave) {
@@ -194,6 +206,10 @@ export const createCoreSaveCoordinator = <TAppData>(
     onSaved: () => void,
     scheduleOptions: CoreSaveScheduleOptions = {}
   ) => {
+    if (state.destructiveShutdown) {
+      return false;
+    }
+
     const revision = state.dirtyRevision + 1;
     const saveRequest: CoreSaveRequest<TAppData> = {
       revision,
@@ -233,6 +249,22 @@ export const createCoreSaveCoordinator = <TAppData>(
     state.persistenceBlocked = false;
   };
 
+  const beginDestructiveShutdown = () => {
+    if (state.destructiveShutdown) {
+      return;
+    }
+
+    clearAutoSaveTimer();
+    state.destructiveShutdown = true;
+    state.acknowledgedWithoutSaveRevision = Math.max(
+      state.acknowledgedWithoutSaveRevision,
+      state.dirtyRevision
+    );
+    state.pendingSave = null;
+    state.changedDuringSave = false;
+    state.persistenceBlocked = true;
+  };
+
   return {
     setHandlers: (nextHandlers: CoreSaveCoordinatorHandlers<TAppData>) => {
       handlers = nextHandlers;
@@ -243,7 +275,8 @@ export const createCoreSaveCoordinator = <TAppData>(
     hasPendingSaveData,
     flushLatestSave,
     saveWithExternalModificationCheck,
-    acknowledgePendingSaveWithoutPersisting
+    acknowledgePendingSaveWithoutPersisting,
+    beginDestructiveShutdown
   };
 };
 

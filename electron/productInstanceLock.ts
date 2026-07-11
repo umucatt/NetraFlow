@@ -2,7 +2,39 @@ import net from 'node:net';
 
 export const PRODUCT_INSTANCE_PIPE_PATH =
   '\\\\.\\pipe\\netraflow-com-netraflow-app-single-instance';
+const PRODUCT_INSTANCE_SOCKET_DIRECTORY = '/tmp';
+const PRODUCT_INSTANCE_SOCKET_FILE_PREFIX = 'netraflow-';
+const PRODUCT_INSTANCE_SOCKET_FILE_SUFFIX = '.sock';
 const PRODUCT_INSTANCE_MESSAGE = 'activate';
+
+export type InstanceLockPathOptions = {
+  platform?: NodeJS.Platform;
+  getuid?: () => number | undefined;
+};
+
+const getPosixUserId = (getuid: (() => number | undefined) | undefined) => {
+  if (!getuid) {
+    throw new Error('Cannot determine the current POSIX user ID for the NetraFlow instance lock.');
+  }
+
+  const uid = getuid();
+
+  if (typeof uid !== 'number' || !Number.isSafeInteger(uid) || uid < 0) {
+    throw new Error('Cannot determine a valid POSIX user ID for the NetraFlow instance lock.');
+  }
+
+  return uid;
+};
+
+export const getInstanceLockPath = ({
+  platform = process.platform,
+  getuid = process.getuid
+}: InstanceLockPathOptions = {}) =>
+  platform === 'win32'
+    ? PRODUCT_INSTANCE_PIPE_PATH
+    : `${PRODUCT_INSTANCE_SOCKET_DIRECTORY}/${PRODUCT_INSTANCE_SOCKET_FILE_PREFIX}${getPosixUserId(
+        getuid
+      )}${PRODUCT_INSTANCE_SOCKET_FILE_SUFFIX}`;
 
 export type ProductInstanceCoordinatorOptions = {
   pipePath?: string;
@@ -17,7 +49,7 @@ export type ProductInstanceCoordinator = {
 };
 
 export const createProductInstanceCoordinator = ({
-  pipePath = PRODUCT_INSTANCE_PIPE_PATH,
+  pipePath = getInstanceLockPath(),
   onActivate,
   logger = console
 }: ProductInstanceCoordinatorOptions = {}): ProductInstanceCoordinator => {

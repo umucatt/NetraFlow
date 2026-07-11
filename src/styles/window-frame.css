@@ -62,6 +62,10 @@
   -webkit-app-region: drag;
 }
 
+.window-frame--darwin .window-frame__titlebar {
+  padding-left: 78px;
+}
+
 .window-frame__titlebar::before,
 .window-frame__titlebar::after,
 .window-titlebar::before,

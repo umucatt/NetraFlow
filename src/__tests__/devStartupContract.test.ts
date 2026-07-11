@@ -98,16 +98,23 @@ test('main exposes formal persistence IPC and removes old storage IPC', () => {
   });
 });
 
-test('main wires persistence roots from the same app root used by runtime paths', () => {
+test('main creates one StorageLayout before wiring persistence and runtime paths', () => {
   const mainSource = readProjectFile('electron/main.ts');
-  const rootDeclaration = mainSource.indexOf('const appRoot = getAppInstallRootPath();');
-  const persistenceRootCall = mainSource.indexOf('const persistenceRoots = createPersistenceEnvironmentRoots({');
+  const layoutDeclaration = mainSource.indexOf('const storageLayout = createStorageLayout({');
+  const persistenceRootCall = mainSource.indexOf(
+    'const persistenceRoots = createPersistenceEnvironmentRoots(storageLayout);'
+  );
+  const runtimePathConfiguration = mainSource.indexOf('configureRuntimeUserDataPath();');
+  const readyHandler = mainSource.indexOf('app.whenReady().then(() => {');
 
-  assert.ok(rootDeclaration >= 0);
-  assert.ok(persistenceRootCall > rootDeclaration);
-  assert.equal(mainSource.includes('root: process.env.NETRAFLOW_PERSISTENCE_EXE_DIR'), true);
-  assert.equal(mainSource.includes(': appRoot,'), true);
-  assert.equal(mainSource.includes('execDir: process.env.NETRAFLOW_PERSISTENCE_EXE_DIR'), false);
-  assert.equal(mainSource.includes("path.join(getAppInstallRootPath(), RUNTIME_DIR_NAME)"), true);
+  assert.ok(layoutDeclaration >= 0);
+  assert.ok(persistenceRootCall > layoutDeclaration);
+  assert.ok(runtimePathConfiguration > persistenceRootCall);
+  assert.ok(readyHandler > runtimePathConfiguration);
+  assert.equal(mainSource.match(/createStorageLayout\(\{/g)?.length, 1);
+  assert.equal(mainSource.includes('persistenceRoot: process.env.NETRAFLOW_PERSISTENCE_EXE_DIR'), true);
+  assert.equal(mainSource.includes('appPath: app.getAppPath()'), true);
+  assert.equal(mainSource.includes("defaultUserDataPath: app.getPath('userData')"), true);
+  assert.equal(mainSource.includes("app.setPath('userData', storageLayout.runtime)"), true);
   assert.equal(mainSource.includes("path.join(app.getPath('appData'), APP_NAME)"), false);
 });

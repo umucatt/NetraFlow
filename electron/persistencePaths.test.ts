@@ -6,10 +6,7 @@ import {
   createPersistencePaths,
   getPersistenceDocumentPath,
   getPersistenceDocumentTmpPath,
-  getPersistenceTmpPaths,
-  resolveDemoPersistenceRoot,
-  resolvePersistenceRoot,
-  resolveRealPersistenceRoot
+  getPersistenceTmpPaths
 } from './persistencePaths.js';
 
 test('persistence paths resolve the four formal files and tmp candidates only', () => {
@@ -32,26 +29,14 @@ test('persistence paths resolve the four formal files and tmp candidates only', 
   assert.equal(Object.values(paths).some((item) => item.includes('migration')), false);
 });
 
-test('real persistence root defaults to exe directory userdata', () => {
-  const exePath = path.join('C:', 'Program Files', 'NetraFlow', 'NetraFlow.exe');
+test('real and demo persistence documents use only their explicit StorageLayout roots', () => {
+  const storageRoot = path.join('D:', 'NetraFlow');
+  const realPaths = createPersistencePaths(path.join(storageRoot, 'userdata'));
+  const demoPaths = createPersistencePaths(path.join(storageRoot, '.demo'));
 
-  assert.equal(
-    resolveRealPersistenceRoot(exePath),
-    path.join(path.dirname(exePath), 'userdata')
-  );
-});
-
-test('demo persistence root defaults to exe directory hidden demo folder', () => {
-  const exePath = path.join('C:', 'Program Files', 'NetraFlow', 'NetraFlow.exe');
-
-  assert.equal(
-    resolveDemoPersistenceRoot(exePath),
-    path.join(path.dirname(exePath), '.demo')
-  );
-  assert.equal(resolvePersistenceRoot('real', exePath), resolveRealPersistenceRoot(exePath));
-  assert.equal(resolvePersistenceRoot('demo', exePath), resolveDemoPersistenceRoot(exePath));
-  assert.equal(
-    resolveDemoPersistenceRoot(exePath).startsWith(resolveRealPersistenceRoot(exePath)),
-    false
-  );
+  assert.equal(realPaths.root, path.resolve(storageRoot, 'userdata'));
+  assert.equal(demoPaths.root, path.resolve(storageRoot, '.demo'));
+  assert.equal(path.basename(realPaths.core), 'core.json');
+  assert.equal(path.basename(demoPaths.core), 'core.json');
+  assert.equal(demoPaths.root.startsWith(realPaths.root), false);
 });

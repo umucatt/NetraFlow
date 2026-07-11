@@ -170,7 +170,6 @@
   --cat-easter-bg: rgba(255, 255, 255, 0.36);
   --cat-easter-border: rgba(31, 41, 55, 0.08);
   --modal-backdrop: rgba(31, 41, 55, 0.3);
-  --lock-bg: linear-gradient(160deg, rgba(246, 243, 234, 0.98) 0%, rgba(235, 226, 211, 0.98) 100%);
   --chart-center-bg: rgba(255, 255, 255, 0.58);
   --chart-axis-line: rgba(31, 41, 55, 0.12);
   --chart-grid-line: rgba(31, 41, 55, 0.055);
@@ -263,7 +262,6 @@
   --cat-easter-bg: rgba(232, 226, 215, 0.08);
   --cat-easter-border: rgba(232, 226, 215, 0.12);
   --modal-backdrop: rgba(8, 10, 13, 0.56);
-  --lock-bg: linear-gradient(160deg, rgba(23, 26, 31, 0.98) 0%, rgba(34, 33, 31, 0.98) 100%);
   --chart-center-bg: rgba(232, 226, 215, 0.08);
   --chart-axis-line: rgba(232, 226, 215, 0.14);
   --chart-grid-line: rgba(232, 226, 215, 0.065);
@@ -351,7 +349,6 @@
   --modal-backdrop: rgba(42, 32, 40, 0.32);
   --chart-net-line: #D96F9F;
   --chart-compact-net-line: #D96F9F;
-  --lock-bg: linear-gradient(160deg, rgba(255, 246, 250, 0.98) 0%, rgba(255, 241, 232, 0.98) 100%);
 }
 
 [data-theme='dark'][data-theme-style='nyaa'] {
@@ -407,7 +404,6 @@
   --modal-backdrop: rgba(8, 6, 10, 0.58);
   --chart-net-line: #F0A6C7;
   --chart-compact-net-line: #F0A6C7;
-  --lock-bg: linear-gradient(160deg, rgba(24, 20, 27, 0.98) 0%, rgba(32, 26, 37, 0.98) 100%);
 }
 
 html {

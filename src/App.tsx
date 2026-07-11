@@ -234,6 +234,7 @@ import {
 import { useSnapshotBackupController } from './features/backup/useSnapshotBackupController';
 import { useSecuritySettingsController } from './features/security/useSecuritySettingsController';
 import { useUserSettingsFileController } from './features/userSettings/useUserSettingsFileController';
+import { getAppIconResource } from './app/branding/appIcon';
 
 import {
   getAccountDisplayMark,
@@ -432,7 +433,7 @@ const PRODUCT_NAME_ZH = '净流';
 
 const PRODUCT_TAGLINE = '资产变化记录工具';
 
-const PRODUCT_ICON_PATH = 'icons/netraflow.ico';
+const PRODUCT_ICON_PATH = getAppIconResource(window.appInfo?.platform);
 
 const APP_VERSION =
 
@@ -1185,6 +1186,8 @@ function App() {
     return <StartupPersistenceErrorScreen error={startupPersistenceError} />;
   }
 
+  const appFocusRestoreRef = useRef<HTMLElement | null>(null);
+
   const mainContentRef = useRef<HTMLElement | null>(null);
 
   const leftLayerPanelRef = useRef<HTMLElement | null>(null);
@@ -1248,6 +1251,14 @@ function App() {
   const securityDocumentRef = useRef<SecurityDocument>(startupPersistenceSnapshot.security);
 
   const persistenceGenerationRef = useRef(0);
+
+  const applyUnlockedPersistenceSnapshotRef = useRef<
+    (snapshot: RuntimePersistenceSnapshot) => void
+  >(() => undefined);
+
+  const wasLockedRef = useRef(startupPersistenceSnapshot.coreProtection.locked);
+
+  const destructiveShutdownRef = useRef(false);
 
   const coreSaveCoordinatorRef = useRef<CoreSaveCoordinator<AppData> | null>(null);
 
@@ -1313,6 +1324,7 @@ function App() {
   const renderPersistenceGeneration = persistenceGenerationRef.current;
 
   const isCurrentPersistenceGeneration = () =>
+    !destructiveShutdownRef.current &&
     renderPersistenceGeneration === persistenceGenerationRef.current;
 
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(getSystemTheme);
@@ -2267,31 +2279,6 @@ function App() {
 
 
 
-  const markPendingFirstWelcomeAfterClearAll = () => {
-
-    const nextState: FirstWelcomeState = {
-
-      completed: false,
-
-      pendingAfterClearAll: true
-
-    };
-
-
-
-    persistStateDocument((currentDocument) => ({
-      ...currentDocument,
-      firstWelcome: normalizeFirstWelcomeState(nextState)
-    }));
-
-    setFirstWelcomeState(nextState);
-
-    setFirstWelcomeStage(null);
-
-  };
-
-
-
   const cancelPendingFirstWelcomeForRealChange = () => {
 
     setFirstWelcomeState((currentState) => {
@@ -2585,6 +2572,7 @@ function App() {
     unlockError,
     setUnlockError,
     isUnlocking,
+    lockScreenState,
     passwordEditorMode,
     oldPasswordInput,
     setOldPasswordInput,
@@ -2621,6 +2609,7 @@ function App() {
     updateAutoLockMinutesInput,
     resetInvalidAutoLockMinutesInput,
     unlockApp,
+    completeUnlockTransition,
     resetSecurityState
   } = useSecuritySettingsController({
     globalSettings,
@@ -2629,7 +2618,7 @@ function App() {
     getCurrentCoreDocument: () =>
       createCoreDocumentFromAppData({ groups: assetGroups, accounts, history }),
     unlockCoreDocument: (password) => {
-      unlockCoreDocument(password);
+      applyUnlockedPersistenceSnapshotRef.current(unlockCoreDocument(password));
     },
     enableCoreProtection,
     changeCorePassword,
@@ -2641,6 +2630,20 @@ function App() {
     showCoreIntegrityDialog: showCoreIntegrityActionPrompt,
     showToast
   });
+
+  useEffect(() => {
+    if (!wasLockedRef.current || isLocked) {
+      wasLockedRef.current = isLocked;
+      return;
+    }
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      appFocusRestoreRef.current?.focus({ preventScroll: true });
+    });
+
+    wasLockedRef.current = false;
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [isLocked]);
 
   const { exportUserSettings, importUserSettings } = useUserSettingsFileController({
     globalSettings,
@@ -3214,6 +3217,12 @@ function App() {
     }
   };
 
+  applyUnlockedPersistenceSnapshotRef.current = (snapshot) => {
+    persistenceGenerationRef.current += 1;
+    resetDataViews();
+    applyRuntimePersistenceSnapshot(snapshot, false);
+  };
+
   const showDemoLifecycleFailure = (error: unknown) => {
     const message =
       error instanceof Error && error.message.includes('程序所在目录不可写')
@@ -3334,6 +3343,30 @@ function App() {
     );
   };
 
+  const clearAllLocalDataAndQuit = () => {
+    if (destructiveShutdownRef.current) {
+      return;
+    }
+
+    destructiveShutdownRef.current = true;
+    persistenceGenerationRef.current += 1;
+    coreSaveCoordinator.beginDestructiveShutdown();
+    resetSecurityState();
+
+    const api = window.electronAPI ?? window.electronWindow;
+
+    if (!api?.clearAllLocalDataAndQuit) {
+      console.error('[NetraFlow cleanup] Destructive cleanup bridge is unavailable.');
+      forceCloseApp();
+      return;
+    }
+
+    void api.clearAllLocalDataAndQuit().catch((error) => {
+      console.error('[NetraFlow cleanup] Failed to clear all local data.', error);
+      forceCloseApp();
+    });
+  };
+
 
 
   const {
@@ -3353,7 +3386,6 @@ function App() {
     selectedExampleTemplateId,
     setSelectedExampleTemplateId,
     isExampleMode,
-    setIsExampleMode,
     defaultGlobalSettings: DEFAULT_GLOBAL_SETTINGS,
     defaultAssetChartSettings: DEFAULT_ASSET_CHART_SETTINGS,
     defaultAutoBackupSettings: DEFAULT_AUTO_BACKUP_SETTINGS,
@@ -3384,7 +3416,7 @@ function App() {
     exitExampleModeSession,
     writeTestDataToRealData,
     showConfirmationDialog,
-    markPendingFirstWelcomeAfterClearAll
+    clearAllLocalDataAndQuit
   });
 
 
@@ -5087,6 +5119,14 @@ function App() {
     openGlobalSettingsView();
 
   };
+
+  useEffect(() => {
+    const api = window.electronAPI ?? window.electronWindow;
+
+    return api?.onNetraFlowOpenSettings?.(() => {
+      openGlobalSettings();
+    });
+  }, [openGlobalSettings]);
 
   const openExampleDataSettingsFromHome = () => {
 
@@ -7506,7 +7546,7 @@ function App() {
   });
 
   const lockScreenLayerProps = createLockScreenLayerProps({
-    isLocked,
+    state: lockScreenState,
     productIconPath: PRODUCT_ICON_PATH,
     password: unlockPasswordInput,
     error: unlockError,
@@ -7515,7 +7555,8 @@ function App() {
       setUnlockPasswordInput(value);
       setUnlockError('');
     },
-    onSubmit: unlockApp
+    onSubmit: unlockApp,
+    onPanelExitComplete: completeUnlockTransition
   });
 
 
@@ -7529,9 +7570,11 @@ function App() {
 
   return (
 
+    <>
     <WindowFrame
       productIconPath={PRODUCT_ICON_PATH}
       productName={window.appInfo?.name ?? PRODUCT_NAME_EN}
+      contentInert={isLocked}
       data-theme-mode={globalSettings.themeMode}
       data-theme={resolvedTheme}
       data-resolved-theme={resolvedTheme}
@@ -7562,6 +7605,7 @@ function App() {
             />
           </>
         )}
+        focusRestoreRef={appFocusRestoreRef}
         mainContentRef={mainContentRef}
         mainContentClassName={mainPanelClassName}
         mainContentAriaDisabled={isSecuritySettingsPageDisabled}
@@ -7842,9 +7886,6 @@ function App() {
         onChooseStoryRoute={chooseFirstWelcomeStoryRoute}
       />
 
-      <LockScreenLayer {...lockScreenLayerProps} />
-
-
       {isSecretConsoleOpen ? (
         <SecretConsoleLayer
           ref={secretConsoleInputRef}
@@ -7861,6 +7902,8 @@ function App() {
       </AppShell>
 
     </WindowFrame>
+    <LockScreenLayer {...lockScreenLayerProps} />
+    </>
 
   );
 

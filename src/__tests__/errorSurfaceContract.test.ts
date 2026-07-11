@@ -75,7 +75,9 @@ test('product single instance lock is product-wide and acquired before persisten
   const mainSource = readProjectFile('electron/main.ts');
   const productLockSource = readProjectFile('electron/productInstanceLock.ts');
   const lockIndex = mainSource.indexOf('const gotProductInstanceLock = await productInstanceCoordinator.acquire();');
-  const rootsIndex = mainSource.indexOf('const persistenceRoots = createPersistenceEnvironmentRoots({');
+  const rootsIndex = mainSource.indexOf(
+    'const persistenceRoots = createPersistenceEnvironmentRoots(storageLayout);'
+  );
   const electronLockIndex = mainSource.indexOf('const gotSingleInstanceLock = app.requestSingleInstanceLock();');
 
   assert.ok(lockIndex >= 0);
@@ -375,6 +377,48 @@ test('close-before uses a single renderer state machine and one-shot main allow 
   assert.equal(preloadSource.includes("cancelCloseRequest: () => ipcRenderer.send('window:cancel-close-request')"), true);
   assert.equal(viteEnvSource.includes('allowClose?: () => void;'), true);
   assert.equal(viteEnvSource.includes('cancelCloseRequest?: () => void;'), true);
+});
+
+test('macOS app quit waits for close approval and defers persistence cleanup until will-quit', () => {
+  const mainSource = readProjectFile('electron/main.ts');
+  const shutdownStateSource = readProjectFile('electron/appShutdownState.ts');
+  const beforeQuitStart = mainSource.indexOf("app.on('before-quit', (event) => {");
+  const willQuitStart = mainSource.indexOf("app.on('will-quit', () => {");
+  const beforeQuitSource = mainSource.slice(beforeQuitStart, willQuitStart);
+  const willQuitSource = mainSource.slice(
+    willQuitStart,
+    mainSource.indexOf("app.on('window-all-closed'", willQuitStart)
+  );
+
+  assert.ok(beforeQuitStart >= 0);
+  assert.ok(willQuitStart > beforeQuitStart);
+  assert.equal(shutdownStateSource.includes("| 'window-close-request'"), true);
+  assert.equal(shutdownStateSource.includes("| 'app-quit-request'"), true);
+  assert.equal(shutdownStateSource.includes("| 'app-quit-approved'"), true);
+  assert.equal(shutdownStateSource.includes("| 'destructive-shutdown'"), true);
+  assert.equal(mainSource.includes('const appShutdownState = createAppShutdownState();'), true);
+  assert.equal(beforeQuitSource.includes("process.platform !== 'darwin'"), true);
+  assert.equal(
+    beforeQuitSource.includes('appShutdownState.requestAppQuit(Boolean(targetWindow))'),
+    true
+  );
+  assert.equal(beforeQuitSource.includes("appQuitRequest === 'continue-quit'"), true);
+  assert.equal(beforeQuitSource.includes("appQuitRequest === 'start-close-approval'"), true);
+  assert.equal(beforeQuitSource.includes('event.preventDefault();'), true);
+  assert.equal(
+    beforeQuitSource.includes('closeBeforeWindows.requestRendererCloseApproval(targetWindow);'),
+    true
+  );
+  assert.equal(beforeQuitSource.includes('cleanupDemoOnAppQuit'), false);
+  assert.equal(willQuitSource.includes('cleanupDemoOnAppQuit();'), true);
+  assert.equal(mainSource.includes('appShutdownState.cancelCloseRequest();'), true);
+  assert.equal(mainSource.includes('appShutdownState.handleWindowClosed();'), true);
+  assert.equal(
+    mainSource.includes('if (shouldResumeAppQuit) {\n      setTimeout(() => {\n        app.quit();'),
+    true
+  );
+  assert.equal(mainSource.includes('const isAppQuitInProgress = ()'), true);
+  assert.equal(mainSource.includes('!isAppQuitInProgress()'), true);
 });
 
 test('core integrity dialog exposes only the allowed pending-save actions', () => {
