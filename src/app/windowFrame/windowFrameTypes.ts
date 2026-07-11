@@ -11,12 +11,15 @@ export type WindowFrameProps = HTMLAttributes<HTMLDivElement> & {
   children: ReactNode;
   productIconPath: string;
   productName: string;
+  contentInert?: boolean;
 };
 
 export type WindowTitleBarProps = {
   controller: WindowFrameController;
   productIconPath: string;
   productName: string;
+  showBrand: boolean;
+  showWindowControls: boolean;
 };
 
 export type WindowControlsProps = WindowFrameController;

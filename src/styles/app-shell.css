@@ -15,6 +15,11 @@
   overflow: hidden;
 }
 
+/* This non-interactive landmark is focused only after unlocking. */
+.app-shell--focus-restore-target:focus {
+  outline: none;
+}
+
 @media (max-width: 1280px) {
   .app-shell {
     width: 100%;

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron';
 import fs from 'node:fs/promises';
 import {
   appendFileSync,
@@ -24,18 +24,26 @@ import {
 import { registerPersistenceHandlers } from './persistenceIpc.js';
 import { createProductInstanceCoordinator } from './productInstanceLock.js';
 import { createCloseBeforeWindowCoordinator } from './closeBeforeWindowState.js';
+import { createAppShutdownState } from './appShutdownState.js';
+import {
+  installMacosApplicationMenu,
+  type MacosApplicationMenuController
+} from './macosApplicationMenu.js';
+import { createMacosAboutPanelOptions } from './macosAboutPanel.js';
+import { createStorageLayout } from './storageLayout.js';
+import { getAppIconPath, getPlatformWindowOptions } from './windowPlatformOptions.js';
+import {
+  clearManagedLocalData,
+  createManagedDataDeletionPlan,
+  createSingleRunCleanupCoordinator,
+  type ManagedDataDeletionTarget
+} from './localDataCleanup.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const APP_NAME = 'NetraFlow';
 const APP_USER_MODEL_ID = 'com.netraflow.app';
 const DEV_APP_USER_MODEL_ID = 'com.netraflow.app.dev';
-const USERDATA_DIR_NAME = 'userdata';
-const RUNTIME_DIR_NAME = 'runtime';
-const SESSION_DATA_DIR_NAME = 'sessionData';
-const CACHE_DIR_NAME = 'cache';
-const LOGS_DIR_NAME = 'logs';
-const CRASH_DUMPS_DIR_NAME = 'crashDumps';
 const BILIBILI_PROFILE_URL = 'https://space.bilibili.com/1738773145';
 const GITHUB_RELEASES_URL = 'https://github.com/umucatt/NetraFlow/releases';
 const ALLOWED_GITHUB_RELEASES_HOSTS = new Set(['github.com', 'www.github.com']);
@@ -66,6 +74,10 @@ const THEME_BOOTSTRAP_BACKGROUND_COLORS: Record<
 let mainWindow: BrowserWindow | null = null;
 let pendingRendererLock = process.argv.includes('--lock');
 const forceClosingWindows = new WeakSet<BrowserWindow>();
+let macosApplicationMenu: MacosApplicationMenuController | null = null;
+let rendererIsReadyForApplicationMenu = false;
+let rendererCanLockFromApplicationMenu = false;
+let macosMenuLockRequestInProgress = false;
 const appendValidationDiagnostic = (
   event: string,
   details: Record<string, unknown> = {}
@@ -213,6 +225,31 @@ const createRuntimePersistenceStore = (
 const closeBeforeWindows = createCloseBeforeWindowCoordinator({
   onStateChange: (event) => appendValidationDiagnostic('close-before-window-state', event)
 });
+const appShutdownState = createAppShutdownState();
+const isDestructiveShutdown = () =>
+  appShutdownState.getIntent() === 'destructive-shutdown';
+const isAppQuitInProgress = () => appShutdownState.isAppQuitInProgress();
+const refreshMacosApplicationMenu = () => {
+  macosApplicationMenu?.refresh();
+};
+const resetRendererApplicationMenuState = () => {
+  rendererIsReadyForApplicationMenu = false;
+  rendererCanLockFromApplicationMenu = false;
+  macosMenuLockRequestInProgress = false;
+  refreshMacosApplicationMenu();
+};
+const isMacosApplicationMenuWindowReady = () =>
+  Boolean(
+    mainWindow &&
+      !mainWindow.isDestroyed() &&
+      rendererIsReadyForApplicationMenu &&
+      !isDestructiveShutdown() &&
+      !isAppQuitInProgress()
+  );
+const isMacosApplicationMenuLockEnabled = () =>
+  isMacosApplicationMenuWindowReady() &&
+  rendererCanLockFromApplicationMenu &&
+  !macosMenuLockRequestInProgress;
 let requestProductInstanceActivation = () => {
   pendingRendererLock = true;
 };
@@ -229,45 +266,20 @@ const isPortableBuild = () =>
     existsSync(path.join(app.getAppPath(), 'portable.flag')) ||
     existsSync(path.join(process.resourcesPath, 'portable.flag')));
 
-const getPackagedInstallRootPath = () => path.dirname(process.execPath);
-
-const getPortableRootPath = () => path.dirname(process.execPath);
-
-const getDevProjectRootPath = () => app.getAppPath();
-
-const getAppInstallRootPath = () => {
-  if (!app.isPackaged) {
-    return getDevProjectRootPath();
+const storageLayout = createStorageLayout({
+  platform: process.platform,
+  isPackaged: app.isPackaged,
+  isPortable: isPortableBuild(),
+  execPath: process.execPath,
+  appPath: app.getAppPath(),
+  defaultUserDataPath: app.getPath('userData'),
+  overrides: {
+    persistenceRoot: process.env.NETRAFLOW_PERSISTENCE_EXE_DIR,
+    userdata: process.env.NETRAFLOW_USERDATA_ROOT,
+    runtime: process.env.NETRAFLOW_RUNTIME_ROOT,
+    demo: process.env.NETRAFLOW_DEMO_ROOT
   }
-
-  return isPortableBuild() ? getPortableRootPath() : getPackagedInstallRootPath();
-};
-
-const appRoot = getAppInstallRootPath();
-
-const getNfUserDataRootPath = () => {
-  return persistenceRoots.realRoot;
-};
-
-const getNfRuntimeRootPath = () => {
-  const overridePath = process.env.NETRAFLOW_RUNTIME_ROOT;
-
-  if (overridePath) {
-    return path.resolve(overridePath);
-  }
-
-  return path.join(getAppInstallRootPath(), RUNTIME_DIR_NAME);
-};
-
-const getNfRuntimeUserDataPath = () => getNfRuntimeRootPath();
-
-const getNfSessionDataPath = () => path.join(getNfRuntimeRootPath(), SESSION_DATA_DIR_NAME);
-
-const getNfCachePath = () => path.join(getNfRuntimeRootPath(), CACHE_DIR_NAME);
-
-const getNfLogsPath = () => path.join(getNfRuntimeUserDataPath(), LOGS_DIR_NAME);
-
-const getNfCrashDumpsPath = () => path.join(getNfRuntimeRootPath(), CRASH_DUMPS_DIR_NAME);
+});
 
 const productInstanceCoordinator = createProductInstanceCoordinator({
   onActivate: () => requestProductInstanceActivation(),
@@ -280,17 +292,7 @@ if (!gotProductInstanceLock) {
   app.exit(0);
 }
 
-const persistenceRoots = createPersistenceEnvironmentRoots({
-  root: process.env.NETRAFLOW_PERSISTENCE_EXE_DIR
-    ? path.resolve(process.env.NETRAFLOW_PERSISTENCE_EXE_DIR)
-    : appRoot,
-  realRoot: process.env.NETRAFLOW_USERDATA_ROOT
-    ? path.resolve(process.env.NETRAFLOW_USERDATA_ROOT)
-    : undefined,
-  demoRoot: process.env.NETRAFLOW_DEMO_ROOT
-    ? path.resolve(process.env.NETRAFLOW_DEMO_ROOT)
-    : undefined
-});
+const persistenceRoots = createPersistenceEnvironmentRoots(storageLayout);
 
 const startupDemoCleanupResult = cleanupDemoDirectory(persistenceRoots);
 
@@ -566,36 +568,29 @@ const getBrowserWindowBackgroundColor = () => {
 };
 
 const configureRuntimeUserDataPath = () => {
-  const userDataRootPath = getNfUserDataRootPath();
-  const runtimeUserDataPath = getNfRuntimeUserDataPath();
-  const sessionDataPath = getNfSessionDataPath();
-  const cachePath = getNfCachePath();
-  const logsPath = getNfLogsPath();
-  const crashDumpsPath = getNfCrashDumpsPath();
-
-  mkdirSync(userDataRootPath, { recursive: true });
-  mkdirSync(runtimeUserDataPath, { recursive: true });
-  mkdirSync(sessionDataPath, { recursive: true });
-  mkdirSync(cachePath, { recursive: true });
-  mkdirSync(logsPath, { recursive: true });
-  mkdirSync(crashDumpsPath, { recursive: true });
-  app.setPath('userData', runtimeUserDataPath);
-  app.setPath('sessionData', sessionDataPath);
-  app.setPath('cache', cachePath);
-  app.setPath('crashDumps', crashDumpsPath);
-  app.setAppLogsPath(logsPath);
+  mkdirSync(storageLayout.userdata, { recursive: true });
+  mkdirSync(storageLayout.runtime, { recursive: true });
+  mkdirSync(storageLayout.sessionData, { recursive: true });
+  mkdirSync(storageLayout.cache, { recursive: true });
+  mkdirSync(storageLayout.logs, { recursive: true });
+  mkdirSync(storageLayout.crashDumps, { recursive: true });
+  app.setPath('userData', storageLayout.runtime);
+  app.setPath('sessionData', storageLayout.sessionData);
+  app.setPath('cache', storageLayout.cache);
+  app.setPath('crashDumps', storageLayout.crashDumps);
+  app.setAppLogsPath(storageLayout.logs);
 };
 
 configureRuntimeUserDataPath();
 
 const writeValidationPathDiagnostics = () => {
   appendValidationDiagnostic('resolved-paths', {
-    resolvedUserdataRoot: persistenceRoots.realRoot,
-    resolvedRuntimeRoot: getNfRuntimeRootPath(),
-    resolvedDemoRoot: persistenceRoots.demoRoot,
+    resolvedUserdataRoot: storageLayout.userdata,
+    resolvedRuntimeRoot: storageLayout.runtime,
+    resolvedDemoRoot: storageLayout.demo,
     electronUserDataPath: app.getPath('userData'),
     electronSessionDataPath: app.getPath('sessionData'),
-    electronCachePath: getNfCachePath()
+    electronCachePath: storageLayout.cache
   });
 };
 
@@ -604,6 +599,8 @@ registerPersistenceHandlers(persistenceStore, {
   enterDemoEnvironment: enterDemoPersistenceEnvironment,
   exitDemoEnvironment: exitDemoPersistenceEnvironment,
   promoteDemoCoreToRealEnvironment: promoteDemoCoreToRealPersistenceEnvironment
+}, {
+  isBlocked: isDestructiveShutdown
 });
 
 const writePackagedMainLog = (message: string, details: Record<string, unknown> = {}) => {
@@ -625,10 +622,6 @@ const writePackagedMainLog = (message: string, details: Record<string, unknown> 
     console.error('Failed to write packaged main log:', error);
   }
 };
-
-const getAppResourceRootPath = () => app.getAppPath();
-
-const getAppIconPath = () => path.join(getAppResourceRootPath(), 'public/icons/netraflow.ico');
 
 const isAllowedExternalUrl = (url: string) => {
   if (url === BILIBILI_PROFILE_URL) {
@@ -664,7 +657,12 @@ const registerWindowsUserTasks = () => {
     {
       program: process.execPath,
       arguments: lockArguments,
-      iconPath: app.isPackaged ? process.execPath : getAppIconPath(),
+      iconPath: app.isPackaged
+        ? process.execPath
+        : getAppIconPath({
+            platform: process.platform,
+            appResourceRoot: app.getAppPath()
+          }),
       iconIndex: 0,
       title: '锁定',
       description: '锁定 NetraFlow'
@@ -690,6 +688,10 @@ const sendRendererLock = (targetWindow: BrowserWindow) => {
 };
 
 const requestRendererLock = () => {
+  if (isDestructiveShutdown() || isAppQuitInProgress()) {
+    return;
+  }
+
   const targetWindow = mainWindow ?? BrowserWindow.getAllWindows()[0] ?? null;
 
   if (!targetWindow) {
@@ -699,6 +701,31 @@ const requestRendererLock = () => {
 
   sendRendererLock(targetWindow);
 };
+
+const requestMacosApplicationMenuLock = () => {
+  if (!isMacosApplicationMenuLockEnabled()) {
+    return;
+  }
+
+  macosMenuLockRequestInProgress = true;
+  refreshMacosApplicationMenu();
+  requestRendererLock();
+};
+
+const requestMacosApplicationMenuSettings = () => {
+  if (!isMacosApplicationMenuWindowReady() || !mainWindow) {
+    return;
+  }
+
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+
+  mainWindow.show();
+  mainWindow.focus();
+  mainWindow.webContents.send('netraflow-open-settings');
+};
+
 requestProductInstanceActivation = requestRendererLock;
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -760,6 +787,7 @@ ipcMain.on('window:close', (event) => {
     return;
   }
 
+  appShutdownState.requestWindowClose();
   closeBeforeWindows.requestRendererCloseApproval(targetWindow);
 });
 
@@ -781,6 +809,31 @@ ipcMain.on('window:cancel-close-request', (event) => {
   }
 
   closeBeforeWindows.cancelCloseRequest(targetWindow);
+  appShutdownState.cancelCloseRequest();
+  refreshMacosApplicationMenu();
+});
+
+ipcMain.on('app:lock-menu-state', (event, state: unknown) => {
+  const targetWindow = getEventWindow(event);
+
+  if (
+    targetWindow !== mainWindow ||
+    !state ||
+    typeof state !== 'object' ||
+    !('canLock' in state) ||
+    typeof state.canLock !== 'boolean'
+  ) {
+    return;
+  }
+
+  rendererIsReadyForApplicationMenu = true;
+  rendererCanLockFromApplicationMenu = state.canLock;
+
+  if (!state.canLock) {
+    macosMenuLockRequestInProgress = false;
+  }
+
+  refreshMacosApplicationMenu();
 });
 
 ipcMain.on('window:force-close', (event) => {
@@ -805,7 +858,7 @@ ipcMain.handle('app:open-external-url', async (_event, url: unknown) => {
 });
 
 ipcMain.handle('app:open-userdata-directory', async () => {
-  const errorMessage = await shell.openPath(persistenceRoots.realRoot);
+  const errorMessage = await shell.openPath(storageLayout.userdata);
 
   if (errorMessage) {
     throw new Error(errorMessage);
@@ -941,11 +994,21 @@ const atomicWriteJsonFile = async (targetPath: string, content: string) => {
   }
 };
 
+const pendingJsonWrites = new Set<Promise<void>>();
+
+const waitForPendingJsonWrites = async () => {
+  await Promise.allSettled(Array.from(pendingJsonWrites));
+};
+
 const isAllowedJsonExportFileName = (fileName: string) =>
   /^netraflow-(?:snapshot|backup)-\d{8}-\d{4}(?:\.encrypted)?\.json$/.test(fileName) ||
   /^netraflow-settings-\d{8}-\d{6}\.netraflow-settings\.json$/.test(fileName);
 
 const handleJsonWriteFile = async (_event: Electron.IpcMainInvokeEvent, request: unknown) => {
+  if (isDestructiveShutdown()) {
+    throw new Error('NetraFlow is clearing local data and shutting down.');
+  }
+
   if (
     typeof request !== 'object' ||
     request === null ||
@@ -977,13 +1040,99 @@ const handleJsonWriteFile = async (_event: Electron.IpcMainInvokeEvent, request:
   const resolvedDirectory = path.resolve(directory);
   const targetPath = path.join(resolvedDirectory, path.basename(fileName));
 
-  await atomicWriteJsonFile(targetPath, content);
+  const writePromise = atomicWriteJsonFile(targetPath, content);
+  pendingJsonWrites.add(writePromise);
+
+  try {
+    await writePromise;
+  } finally {
+    pendingJsonWrites.delete(writePromise);
+  }
 
   return { filePath: targetPath };
 };
 
 ipcMain.handle('backup:write-file', handleJsonWriteFile);
 ipcMain.handle('json:write-file', handleJsonWriteFile);
+
+type DestructiveCleanupRequest = {
+  targetWindow: BrowserWindow;
+  targetSession: Electron.Session;
+  deletionPlan: readonly ManagedDataDeletionTarget[];
+};
+
+const destructiveCleanupCoordinator = createSingleRunCleanupCoordinator(
+  async ({
+    targetWindow,
+    targetSession,
+    deletionPlan
+  }: DestructiveCleanupRequest) => {
+    appShutdownState.beginDestructiveShutdown();
+    pendingRendererLock = false;
+    resetRendererApplicationMenuState();
+
+    realPersistenceStore.lockCoreDocument();
+    demoPersistenceStore.lockCoreDocument();
+
+    try {
+      forceClosingWindows.add(targetWindow);
+      targetWindow.close();
+
+      if (!targetWindow.isDestroyed()) {
+        targetWindow.destroy();
+      }
+    } catch (error) {
+      console.error('[NetraFlow cleanup] Failed to stop the renderer.', error);
+    }
+
+    try {
+      await productInstanceCoordinator.release();
+    } catch (error) {
+      console.error('[NetraFlow cleanup] Failed to stop the instance coordinator.', error);
+    }
+
+    await waitForPendingJsonWrites();
+
+    try {
+      const cleanup = await clearManagedLocalData({
+        plan: deletionPlan,
+        session: targetSession
+      });
+
+      if (!cleanup.ok) {
+        console.error('[NetraFlow cleanup] Some managed local data could not be removed.', {
+          failedStages: cleanup.failures.map((failure) => failure.stage)
+        });
+      }
+    } catch (error) {
+      console.error('[NetraFlow cleanup] Managed local data cleanup failed.', error);
+    }
+
+    app.exit(0);
+  }
+);
+
+ipcMain.handle('app:clear-all-local-data-and-quit', (event) => {
+  const targetWindow = getEventWindow(event);
+
+  if (!targetWindow || targetWindow !== mainWindow) {
+    throw new Error('Destructive cleanup request did not originate from the main window.');
+  }
+
+  const deletionPlan = createManagedDataDeletionPlan({
+    layout: storageLayout,
+    platform: process.platform,
+    appPath: app.getAppPath(),
+    execPath: process.execPath,
+    homePath: app.getPath('home')
+  });
+
+  return destructiveCleanupCoordinator.request({
+    targetWindow,
+    targetSession: targetWindow.webContents.session,
+    deletionPlan
+  });
+});
 
 const isFileUrlForPath = (targetUrl: string, targetPath: string) => {
   try {
@@ -1024,14 +1173,16 @@ function createWindow() {
 
   const createdWindow = new BrowserWindow({
     title: APP_NAME,
-    icon: getAppIconPath(),
     width: 960,
     height: 640,
     backgroundColor: getBrowserWindowBackgroundColor(),
     minWidth: 720,
     minHeight: 480,
-    frame: false,
-    autoHideMenuBar: true,
+    autoHideMenuBar: process.platform !== 'darwin',
+    ...getPlatformWindowOptions({
+      platform: process.platform,
+      appResourceRoot: app.getAppPath()
+    }),
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -1040,8 +1191,11 @@ function createWindow() {
     }
   });
   mainWindow = createdWindow;
+  resetRendererApplicationMenuState();
 
-  createdWindow.setMenu(null);
+  if (process.platform !== 'darwin') {
+    createdWindow.setMenu(null);
+  }
   createdWindow.on('close', (event) => {
     if (forceClosingWindows.has(createdWindow)) {
       forceClosingWindows.delete(createdWindow);
@@ -1052,11 +1206,24 @@ function createWindow() {
       return;
     }
 
+    appShutdownState.requestWindowClose();
     closeBeforeWindows.requestRendererCloseApproval(createdWindow);
   });
   createdWindow.on('closed', () => {
+    const shouldResumeAppQuit = appShutdownState.handleWindowClosed();
+
     closeBeforeWindows.deleteWindow(createdWindow);
     mainWindow = null;
+    resetRendererApplicationMenuState();
+
+    if (shouldResumeAppQuit) {
+      setTimeout(() => {
+        app.quit();
+      }, 0);
+    }
+  });
+  createdWindow.webContents.on('did-start-loading', () => {
+    resetRendererApplicationMenuState();
   });
   createdWindow.webContents.on('did-finish-load', () => {
     if (!pendingRendererLock || !mainWindow) {
@@ -1144,11 +1311,35 @@ function createWindow() {
 
 if (gotSingleInstanceLock) {
   app.whenReady().then(() => {
+    const macosMenuPreferredLanguages =
+      process.platform === 'darwin' ? app.getPreferredSystemLanguages() : [];
+    const macosMenuFallbackLanguages =
+      process.platform === 'darwin' ? [app.getLocale(), app.getSystemLocale()] : [];
+
+    if (process.platform === 'darwin') {
+      app.setAboutPanelOptions(createMacosAboutPanelOptions(app.getName(), app.getVersion()));
+    }
+
+    macosApplicationMenu = installMacosApplicationMenu({
+      platform: process.platform,
+      appName: APP_NAME,
+      menu: Menu,
+      onOpenSettings: requestMacosApplicationMenuSettings,
+      onLock: requestMacosApplicationMenuLock,
+      isWindowReady: isMacosApplicationMenuWindowReady,
+      isLockEnabled: isMacosApplicationMenuLockEnabled,
+      getPreferredLanguages: () => macosMenuPreferredLanguages,
+      getFallbackLanguages: () => macosMenuFallbackLanguages
+    });
     registerWindowsUserTasks();
     createWindow();
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
+      if (
+        !isDestructiveShutdown() &&
+        !isAppQuitInProgress() &&
+        BrowserWindow.getAllWindows().length === 0
+      ) {
         createWindow();
       }
     });
@@ -1174,7 +1365,25 @@ const cleanupDemoOnAppQuit = () => {
   }
 };
 
-app.on('before-quit', cleanupDemoOnAppQuit);
+app.on('before-quit', (event) => {
+  if (process.platform !== 'darwin') {
+    return;
+  }
+
+  const targetWindow = mainWindow;
+  const appQuitRequest = appShutdownState.requestAppQuit(Boolean(targetWindow));
+  refreshMacosApplicationMenu();
+
+  if (appQuitRequest === 'continue-quit') {
+    return;
+  }
+
+  event.preventDefault();
+
+  if (appQuitRequest === 'start-close-approval' && targetWindow) {
+    closeBeforeWindows.requestRendererCloseApproval(targetWindow);
+  }
+});
 app.on('will-quit', () => {
   cleanupDemoOnAppQuit();
   void productInstanceCoordinator.release();

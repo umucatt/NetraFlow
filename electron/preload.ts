@@ -25,6 +25,7 @@ type PersistenceErrorCode =
   | 'PERSISTENCE_SNAPSHOT_ENCRYPT_FAILED'
   | 'PERSISTENCE_SNAPSHOT_DECRYPT_FAILED'
   | 'PERSISTENCE_CORE_EXTERNAL_MODIFIED'
+  | 'PERSISTENCE_SHUTTING_DOWN'
   | 'PERSISTENCE_READ_FAILED'
   | 'PERSISTENCE_READ_INVALID'
   | 'PERSISTENCE_SCHEMA_INVALID'
@@ -87,7 +88,8 @@ const unwrapPersistenceWriteResponse = (response: PersistenceWriteResponse) => {
 };
 
 contextBridge.exposeInMainWorld('appInfo', {
-  name: 'NetraFlow'
+  name: 'NetraFlow',
+  platform: process.platform
 });
 
 const electronAPI = {
@@ -99,6 +101,8 @@ const electronAPI = {
   allowClose: () => ipcRenderer.send('window:allow-close'),
   cancelCloseRequest: () => ipcRenderer.send('window:cancel-close-request'),
   forceClose: () => ipcRenderer.send('window:force-close'),
+  clearAllLocalDataAndQuit: () =>
+    ipcRenderer.invoke('app:clear-all-local-data-and-quit') as Promise<void>,
   isMaximized: () => ipcRenderer.invoke('window:is-maximized') as Promise<boolean>,
   openExternalUrl: (url: string) =>
     ipcRenderer.invoke('app:open-external-url', url) as Promise<void>,
@@ -121,6 +125,20 @@ const electronAPI = {
     return () => {
       ipcRenderer.removeListener('netraflow-lock', handleNetraFlowLock);
     };
+  },
+  onNetraFlowOpenSettings: (listener: () => void) => {
+    const handleNetraFlowOpenSettings = () => {
+      listener();
+    };
+
+    ipcRenderer.on('netraflow-open-settings', handleNetraFlowOpenSettings);
+
+    return () => {
+      ipcRenderer.removeListener('netraflow-open-settings', handleNetraFlowOpenSettings);
+    };
+  },
+  setLockMenuState: (state: { canLock: boolean }) => {
+    ipcRenderer.send('app:lock-menu-state', state);
   },
   onCloseRequest: (listener: () => void) => {
     const handleCloseRequest = () => {

@@ -16,6 +16,7 @@ export type AppShellProps = {
   style?: CSSProperties;
   shellProps?: Omit<HTMLAttributes<HTMLElement>, 'children' | 'className' | 'style'>;
   hiddenControls?: ReactNode;
+  focusRestoreRef?: RefObject<HTMLElement | null>;
   mainContent: ReactNode;
   mainContentRef?: RefObject<HTMLElement | null>;
   mainContentClassName: string;

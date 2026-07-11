@@ -16,24 +16,7 @@ export type PersistencePaths = {
 
 export type PersistenceEnvironment = 'real' | 'demo';
 
-const USERDATA_DIR_NAME = 'userdata';
-const DEMO_DIR_NAME = '.demo';
-
-export const resolveRealPersistenceRoot = (execPath = process.execPath) =>
-  path.join(path.dirname(execPath), USERDATA_DIR_NAME);
-
-export const resolveDemoPersistenceRoot = (execPath = process.execPath) =>
-  path.join(path.dirname(execPath), DEMO_DIR_NAME);
-
-export const resolvePersistenceRoot = (
-  environment: PersistenceEnvironment,
-  execPath = process.execPath
-) =>
-  environment === 'demo'
-    ? resolveDemoPersistenceRoot(execPath)
-    : resolveRealPersistenceRoot(execPath);
-
-export const createPersistencePaths = (root = resolveRealPersistenceRoot()): PersistencePaths => {
+export const createPersistencePaths = (root: string): PersistencePaths => {
   const resolvedRoot = path.resolve(root);
 
   return {

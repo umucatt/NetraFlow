@@ -230,3 +230,23 @@ test('failed coalesced save reports once and does not create an infinite retry l
   assert.equal(harness.errors.length, 1);
   assert.equal(harness.timers.activeCount(), 0);
 });
+
+test('destructive shutdown drops pending core data and rejects later saves', () => {
+  const harness = createHarness();
+
+  assert.equal(harness.update(1), true);
+  assert.equal(harness.timers.activeCount(), 1);
+
+  harness.coordinator.beginDestructiveShutdown();
+
+  assert.equal(harness.coordinator.getState().destructiveShutdown, true);
+  assert.equal(harness.coordinator.getState().pendingSave, null);
+  assert.equal(harness.coordinator.hasPendingSaveData(), false);
+  assert.equal(harness.timers.activeCount(), 0);
+  assert.equal(harness.coordinator.flushLatestSave(false), false);
+  assert.equal(harness.update(2), false);
+
+  harness.timers.tick(1500);
+  assert.deepEqual(harness.saveCalls, []);
+  assert.deepEqual(harness.acceptedValues, [1]);
+});

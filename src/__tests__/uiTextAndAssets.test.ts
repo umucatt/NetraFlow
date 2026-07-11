@@ -846,6 +846,7 @@ test('formal persistence owns renderer data and old storage bridge is removed', 
     'src/features/rollupImport/useRollupImportController.ts'
   );
   const mainSource = readProjectFile('electron/main.ts');
+  const storageLayoutSource = readProjectFile('electron/storageLayout.ts');
   const preloadSource = readProjectFile('electron/preload.ts');
   const indexSource = readProjectFile('index.html');
   const saveAppDataSource = appSource.slice(
@@ -882,25 +883,26 @@ test('formal persistence owns renderer data and old storage bridge is removed', 
   assert.equal(preloadSource.includes("contextBridge.exposeInMainWorld('netraflowStorage'"), false);
   assert.equal(preloadSource.includes("'nf-storage:"), false);
   assert.equal(mainSource.includes('storage.json'), false);
-  assert.equal(mainSource.includes("const USERDATA_DIR_NAME = 'userdata';"), true);
-  assert.equal(mainSource.includes("const RUNTIME_DIR_NAME = 'runtime';"), true);
+  assert.equal(storageLayoutSource.includes("const USERDATA_DIR_NAME = 'userdata';"), true);
+  assert.equal(storageLayoutSource.includes("const RUNTIME_DIR_NAME = 'runtime';"), true);
   assert.equal(mainSource.includes("const WINDOWS_ACCOUNT_MARKER_FILE_NAME = '.windows-account';"), false);
-  assert.equal(mainSource.includes('const getNfUserDataRootPath = () => {'), true);
-  assert.equal(mainSource.includes('return persistenceRoots.realRoot;'), true);
-  assert.equal(mainSource.includes('createPersistenceEnvironmentRoots({'), true);
+  assert.equal(mainSource.includes('const storageLayout = createStorageLayout({'), true);
+  assert.equal(mainSource.includes('createPersistenceEnvironmentRoots(storageLayout)'), true);
   assert.equal(mainSource.includes('NETRAFLOW_PERSISTENCE_EXE_DIR'), true);
   assert.equal(mainSource.includes('NETRAFLOW_USERDATA_ROOT'), true);
+  assert.equal(mainSource.includes('NETRAFLOW_RUNTIME_ROOT'), true);
   assert.equal(mainSource.includes('NETRAFLOW_DEMO_ROOT'), true);
-  assert.equal(mainSource.includes("path.join(getAppInstallRootPath(), RUNTIME_DIR_NAME)"), true);
-  assert.equal(mainSource.includes('const getNfRuntimeUserDataPath = () => getNfRuntimeRootPath();'), true);
+  assert.equal(mainSource.includes("app.setPath('userData', storageLayout.runtime)"), true);
+  assert.equal(mainSource.includes("app.setPath('sessionData', storageLayout.sessionData)"), true);
   assert.equal(mainSource.includes('getWindowsAccountKey'), false);
   assert.equal(mainSource.includes('getWindowsAccountIdentity'), false);
   assert.equal(mainSource.includes('writeWindowsAccountMarkers'), false);
   assert.equal(mainSource.includes('WINDOWS_ACCOUNT_MARKER_FILE_NAME'), false);
   assert.equal(mainSource.includes('node:crypto'), false);
   assert.equal(mainSource.includes('node:os'), false);
-  assert.equal(mainSource.includes('const getDevProjectRootPath = () => app.getAppPath();'), true);
-  assert.equal(mainSource.includes('return getDevProjectRootPath();'), true);
+  assert.equal(mainSource.includes('appPath: app.getAppPath()'), true);
+  assert.equal(storageLayoutSource.includes('if (!isPackaged)'), true);
+  assert.equal(storageLayoutSource.includes('return platformPath.resolve(appPath);'), true);
   assert.equal(mainSource.includes("path.join(app.getPath('appData'), APP_NAME)"), false);
   assert.equal(mainSource.includes("path.join(app.getPath('appData'), APP_NAME.toLowerCase())"), false);
   assert.equal(mainSource.includes('getLegacyPortableUserDataPath()'), false);
@@ -948,7 +950,8 @@ test('Electron renderer sandbox keeps the preload bridge boundary narrow', () =>
   assert.equal(preloadSource.includes("contextBridge.exposeInMainWorld('ipcRenderer'"), false);
   assert.equal(preloadSource.includes("contextBridge.exposeInMainWorld('electron'"), false);
   assert.equal(preloadSource.includes('remote'), false);
-  assert.equal(preloadSource.includes('process.'), false);
+  assert.equal(preloadSource.includes('platform: process.platform'), true);
+  assert.equal(preloadSource.match(/process\./g)?.length, 1);
   assert.equal(preloadSource.includes("require('electron')"), true);
   assert.equal(preloadSource.includes("require('node:"), false);
   assert.equal(preloadSource.includes('window.require'), false);
@@ -958,6 +961,38 @@ test('Electron renderer sandbox keeps the preload bridge boundary narrow', () =>
   assert.equal(rendererBridgeSource.includes('ipcRenderer'), false);
   assert.equal(typesSource.includes('ipcRenderer'), false);
   assert.equal(typesSource.includes('Electron.IpcRenderer'), false);
+});
+
+test('desktop platforms keep native macOS controls separate from Windows window controls', () => {
+  const mainSource = readProjectFile('electron/main.ts');
+  const windowPlatformOptionsSource = readProjectFile('electron/windowPlatformOptions.ts');
+  const preloadSource = readProjectFile('electron/preload.ts');
+  const viteEnvSource = readProjectFile('src/vite-env.d.ts');
+  const windowFrameSource = readProjectFile('src/app/windowFrame/WindowFrame.tsx');
+  const windowTitleBarSource = readProjectFile('src/app/windowFrame/WindowTitleBar.tsx');
+  const windowFrameStyles = readProjectFile('src/styles/window-frame.css');
+
+  assert.equal(windowPlatformOptionsSource.includes("if (platform === 'win32')"), true);
+  assert.equal(windowPlatformOptionsSource.includes('frame: false'), true);
+  assert.equal(windowPlatformOptionsSource.includes("if (platform === 'darwin')"), true);
+  assert.equal(windowPlatformOptionsSource.includes("titleBarStyle: 'hiddenInset'"), true);
+  assert.equal(mainSource.includes('trafficLightPosition'), false);
+  assert.equal(mainSource.includes('transparent:'), false);
+  assert.equal(mainSource.includes('vibrancy:'), false);
+  assert.equal(mainSource.includes('...getPlatformWindowOptions({'), true);
+  assert.equal(windowPlatformOptionsSource.includes("'public/icons/linux/512x512.png'"), true);
+  assert.equal(preloadSource.includes('platform: process.platform'), true);
+  assert.equal(viteEnvSource.includes("type DesktopPlatform = 'win32' | 'darwin' | 'linux';"), true);
+  assert.equal(windowFrameSource.includes("const platform = window.appInfo?.platform ?? 'win32';"), true);
+  assert.equal(windowFrameSource.includes("const showWindowControls = platform === 'win32';"), true);
+  assert.equal(windowFrameSource.includes('navigator.userAgent'), false);
+  assert.equal(windowFrameSource.includes('process.platform'), false);
+  assert.equal(
+    windowTitleBarSource.includes('showWindowControls ? <WindowControls {...controller} /> : null'),
+    true
+  );
+  assert.equal(windowFrameStyles.includes('.window-frame--darwin .window-frame__titlebar'), true);
+  assert.equal(windowFrameStyles.includes('padding-left: 78px;'), true);
 });
 
 test('page position memory copy and settings search keywords stay wired', () => {
@@ -1146,6 +1181,7 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
   const dialogShellSource = readProjectFile('src/components/dialogs/DialogShell.tsx');
   const stylesSource = readProjectStyles();
   const mainSource = readProjectFile('electron/main.ts');
+  const storageLayoutSource = readProjectFile('electron/storageLayout.ts');
   const afterPackSource = readProjectFile('scripts/after-pack-installer.mjs');
   const packageInstallerScriptSource = readProjectFile('scripts/package-installer.mjs');
   const resourcePatchSource = readProjectFile('scripts/patch-executable-resources.mjs');
@@ -1176,6 +1212,11 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
         executableName?: string;
         target?: unknown;
         signAndEditExecutable?: boolean;
+      };
+      linux?: {
+        icon?: string;
+        artifactName?: string;
+        target?: unknown;
       };
       nsis?: {
         oneClick?: boolean;
@@ -1229,6 +1270,9 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
   assert.equal(packageJson.build?.win?.signAndEditExecutable, false);
   assert.equal(JSON.stringify(packageJson.build?.win?.target).includes('"target":"nsis"'), true);
   assert.equal(JSON.stringify(packageJson.build?.win?.target).includes('"x64"'), true);
+  assert.equal(packageJson.build?.linux?.icon, 'public/icons/linux');
+  assert.equal(JSON.stringify(packageJson.build?.linux?.target).includes('"target":"AppImage"'), true);
+  assert.equal(JSON.stringify(packageJson.build?.linux?.target).includes('"x64"'), true);
   assert.equal(packageJson.build?.nsis?.oneClick, false);
   assert.equal(packageJson.build?.nsis?.perMachine, false);
   assert.equal(packageJson.build?.nsis?.selectPerMachineByDefault, undefined);
@@ -1260,32 +1304,28 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
   assert.equal(mainSource.includes("process.env.NETRAFLOW_PORTABLE === '1'"), true);
   assert.equal(mainSource.includes("path.join(app.getAppPath(), 'portable.flag')"), true);
   assert.equal(mainSource.includes("path.join(process.resourcesPath, 'portable.flag')"), true);
-  assert.equal(mainSource.includes("const USERDATA_DIR_NAME = 'userdata';"), true);
-  assert.equal(mainSource.includes("const RUNTIME_DIR_NAME = 'runtime';"), true);
-  assert.equal(mainSource.includes("const SESSION_DATA_DIR_NAME = 'sessionData';"), true);
-  assert.equal(mainSource.includes("const CACHE_DIR_NAME = 'cache';"), true);
-  assert.equal(mainSource.includes("const LOGS_DIR_NAME = 'logs';"), true);
-  assert.equal(mainSource.includes("const CRASH_DUMPS_DIR_NAME = 'crashDumps';"), true);
-  assert.equal(mainSource.includes('const getAppInstallRootPath = () =>'), true);
-  assert.equal(mainSource.includes('const getPortableRootPath = () =>'), true);
-  assert.equal(mainSource.includes('const getDevProjectRootPath = () => app.getAppPath();'), true);
-  assert.equal(mainSource.includes('return isPortableBuild() ? getPortableRootPath() : getPackagedInstallRootPath();'), true);
-  assert.equal(mainSource.includes('const getNfUserDataRootPath = () => {'), true);
-  assert.equal(mainSource.includes('return persistenceRoots.realRoot;'), true);
-  assert.equal(mainSource.includes('createPersistenceEnvironmentRoots({'), true);
-  assert.equal(mainSource.includes('path.join(getAppInstallRootPath(), RUNTIME_DIR_NAME)'), true);
-  assert.equal(mainSource.includes('path.join(getNfRuntimeRootPath(), SESSION_DATA_DIR_NAME)'), true);
-  assert.equal(mainSource.includes('path.join(getNfRuntimeRootPath(), CACHE_DIR_NAME)'), true);
-  assert.equal(mainSource.includes('path.join(getNfRuntimeRootPath(), CRASH_DUMPS_DIR_NAME)'), true);
+  assert.equal(storageLayoutSource.includes("const USERDATA_DIR_NAME = 'userdata';"), true);
+  assert.equal(storageLayoutSource.includes("const RUNTIME_DIR_NAME = 'runtime';"), true);
+  assert.equal(storageLayoutSource.includes("const SESSION_DATA_DIR_NAME = 'sessionData';"), true);
+  assert.equal(storageLayoutSource.includes("const CACHE_DIR_NAME = 'cache';"), true);
+  assert.equal(storageLayoutSource.includes("const LOGS_DIR_NAME = 'logs';"), true);
+  assert.equal(storageLayoutSource.includes("const CRASH_DUMPS_DIR_NAME = 'crashDumps';"), true);
+  assert.equal(storageLayoutSource.includes("if (platform === 'win32')"), true);
+  assert.equal(storageLayoutSource.includes('platformPath.dirname(execPath)'), true);
+  assert.equal(storageLayoutSource.includes("platform === 'darwin' || platform === 'linux'"), true);
+  assert.equal(mainSource.includes('const storageLayout = createStorageLayout({'), true);
+  assert.equal(mainSource.includes('createPersistenceEnvironmentRoots(storageLayout)'), true);
+  assert.equal(mainSource.includes("app.setPath('cache', storageLayout.cache)"), true);
+  assert.equal(mainSource.includes("app.setPath('crashDumps', storageLayout.crashDumps)"), true);
   assert.equal(mainSource.includes('const getLegacyPortableUserDataPath = () =>'), false);
   assert.equal(mainSource.includes("path.join(path.dirname(process.execPath), LEGACY_PORTABLE_USER_DATA_DIR_NAME)"), false);
   assert.equal(mainSource.includes('if (app.isPackaged) {\n    stageLegacyLocalStorageIfNeeded(runtimeUserDataPath);\n  }'), false);
-  assert.equal(mainSource.includes('mkdirSync(userDataRootPath, { recursive: true });'), true);
-  assert.equal(mainSource.includes("app.setPath('userData', runtimeUserDataPath);"), true);
-  assert.equal(mainSource.includes("app.setPath('sessionData', sessionDataPath);"), true);
-  assert.equal(mainSource.includes("app.setPath('cache', cachePath);"), true);
-  assert.equal(mainSource.includes("app.setPath('crashDumps', crashDumpsPath);"), true);
-  assert.equal(mainSource.includes('app.setAppLogsPath(logsPath);'), true);
+  assert.equal(mainSource.includes('mkdirSync(storageLayout.userdata, { recursive: true });'), true);
+  assert.equal(mainSource.includes("app.setPath('userData', storageLayout.runtime);"), true);
+  assert.equal(mainSource.includes("app.setPath('sessionData', storageLayout.sessionData);"), true);
+  assert.equal(mainSource.includes("app.setPath('cache', storageLayout.cache);"), true);
+  assert.equal(mainSource.includes("app.setPath('crashDumps', storageLayout.crashDumps);"), true);
+  assert.equal(mainSource.includes('app.setAppLogsPath(storageLayout.logs);'), true);
   assert.equal(mainSource.includes("app.setPath('userData', path.join(path.dirname(process.execPath), 'userData'))"), false);
   assert.equal(mainSource.includes("path.join(app.getPath('userData'), 'logs', 'main.log')"), false);
   assert.equal(mainSource.includes("path.join(app.getPath('logs'), 'main.log')"), true);
@@ -1812,6 +1852,7 @@ test('portable Windows package script creates an isolated zip bundle without ins
     scripts?: { 'dist:portable'?: string };
   };
   const mainSource = readProjectFile('electron/main.ts');
+  const storageLayoutSource = readProjectFile('electron/storageLayout.ts');
   const portableScriptSource = readProjectFile('scripts/package-portable.mjs');
 
   assert.equal(packageJson.scripts?.['dist:portable'], 'node scripts/package-portable.mjs');
@@ -1821,10 +1862,10 @@ test('portable Windows package script creates an isolated zip bundle without ins
   assert.equal(mainSource.includes("path.join(app.getAppPath(), 'portable.flag')"), true);
   assert.equal(mainSource.includes("path.join(process.resourcesPath, 'app', 'portable.flag')"), false);
   assert.equal(mainSource.includes("path.join(app.getPath('appData'), APP_NAME)"), false);
-  assert.equal(mainSource.includes('const getNfUserDataRootPath = () => {'), true);
-  assert.equal(mainSource.includes('return persistenceRoots.realRoot;'), true);
-  assert.equal(mainSource.includes('createPersistenceEnvironmentRoots({'), true);
-  assert.equal(mainSource.includes("path.join(getAppInstallRootPath(), RUNTIME_DIR_NAME)"), true);
+  assert.equal(mainSource.includes('isPortable: isPortableBuild()'), true);
+  assert.equal(storageLayoutSource.includes('isPortable intentionally does not alter'), true);
+  assert.equal(mainSource.includes('createPersistenceEnvironmentRoots(storageLayout)'), true);
+  assert.equal(mainSource.includes("app.setPath('userData', storageLayout.runtime)"), true);
   assert.equal(mainSource.includes('getWindowsAccountKey'), false);
   assert.equal(mainSource.includes('.windows-account'), false);
   assert.equal(mainSource.includes("path.join(path.dirname(process.execPath), LEGACY_PORTABLE_USER_DATA_DIR_NAME)"), false);
@@ -2096,7 +2137,12 @@ test('Windows taskbar lock uses Jump List IPC without tray or background hiding'
   assert.equal(mainSource.includes("const lockArguments = app.isPackaged ? '--lock'"), true);
   assert.equal(mainSource.includes('`"${app.getAppPath()}" --lock`'), true);
   assert.equal(mainSource.includes('arguments: lockArguments'), true);
-  assert.equal(mainSource.includes('iconPath: app.isPackaged ? process.execPath : getAppIconPath()'), true);
+  assert.equal(
+    mainSource.includes(
+      'iconPath: app.isPackaged\n        ? process.execPath\n        : getAppIconPath({'
+    ),
+    true
+  );
   assert.equal(mainSource.includes('app.requestSingleInstanceLock()'), true);
   assert.equal(mainSource.includes("app.on('second-instance'"), true);
   assert.equal(mainSource.includes('createProductInstanceCoordinator'), true);
@@ -2119,7 +2165,7 @@ test('Windows taskbar lock uses Jump List IPC without tray or background hiding'
     true
   );
   assert.equal(rendererLockSource.includes('lockCoreDocument();'), true);
-  assert.equal(rendererLockSource.includes('setIsLocked(true);'), true);
+  assert.equal(rendererLockSource.includes("setLockScreenState('locked');"), true);
   assert.equal(rendererLockSource.includes('unlockCoreDocument(unlockPasswordInput);'), true);
   assert.equal(rendererLockSource.includes('verifyPassword('), false);
   assert.equal(rendererLockSource.includes('globalSettings.passwordHash'), false);
@@ -2915,7 +2961,7 @@ test('release documentation keeps packaging notes scoped to changelog', () => {
 
   assert.equal(zhReadmeSource.includes('README_EN.md'), true);
   assert.equal(enReadmeSource.includes('README.md'), true);
-  assert.equal(combinedReadmeSource.includes('docs/assets/netraflow-icon.png'), true);
+  assert.equal(combinedReadmeSource.includes('public/icons/netraflow.svg'), true);
   assert.equal(changelogSource.includes('## 0.9.2'), true);
   assert.equal(changelogSource.includes('## 0.9.3'), true);
   assert.equal(combinedReadmeSource.includes('0.9.3'), false);

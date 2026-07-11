@@ -5,6 +5,8 @@ declare module '*.svg?raw' {
   export default content;
 }
 
+type DesktopPlatform = 'win32' | 'darwin' | 'linux';
+
 type ElectronWindowApi = {
   minimize: () => void;
   toggleMaximize: () => void;
@@ -14,6 +16,7 @@ type ElectronWindowApi = {
   allowClose?: () => void;
   cancelCloseRequest?: () => void;
   forceClose?: () => void;
+  clearAllLocalDataAndQuit?: () => Promise<void>;
   isMaximized: () => Promise<boolean>;
   openExternalUrl?: (url: string) => Promise<void>;
   openUserDataDirectory?: () => Promise<void>;
@@ -34,6 +37,8 @@ type ElectronWindowApi = {
     content: string;
   }) => Promise<{ filePath: string }>;
   onNetraFlowLock?: (listener: () => void) => () => void;
+  onNetraFlowOpenSettings?: (listener: () => void) => () => void;
+  setLockMenuState?: (state: { canLock: boolean }) => void;
   onCloseRequest?: (listener: () => void) => () => void;
   onMaximizedChange: (listener: (isMaximized: boolean) => void) => () => void;
 };
@@ -80,6 +85,7 @@ type NetraFlowPersistenceBridge = {
 interface Window {
   appInfo?: {
     name: string;
+    platform: DesktopPlatform;
     version?: string;
   };
   electronAPI: ElectronWindowApi;

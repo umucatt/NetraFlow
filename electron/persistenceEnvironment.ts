@@ -8,17 +8,13 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 
-import {
-  resolveDemoPersistenceRoot,
-  resolveRealPersistenceRoot,
-  type PersistenceEnvironment
-} from './persistencePaths.js';
+import type { PersistenceEnvironment } from './persistencePaths.js';
+import type { StorageLayout } from './storageLayout.js';
 
 export type { PersistenceEnvironment };
 
 export type PersistenceEnvironmentRoots = {
   root: string;
-  execDir: string;
   realRoot: string;
   demoRoot: string;
 };
@@ -53,29 +49,13 @@ const isPathInside = (parentPath: string, childPath: string) => {
   return child.startsWith(`${parent}${path.sep}`);
 };
 
-export const createPersistenceEnvironmentRoots = ({
-  root,
-  execPath = process.execPath,
-  execDir,
-  realRoot,
-  demoRoot
-}: {
-  root?: string;
-  execPath?: string;
-  execDir?: string;
-  realRoot?: string;
-  demoRoot?: string;
-} = {}): PersistenceEnvironmentRoots => {
-  const resolvedRoot = path.resolve(root ?? execDir ?? path.dirname(execPath));
-  const defaultExecPath = path.join(resolvedRoot, path.basename(execPath));
-
-  return {
-    root: resolvedRoot,
-    execDir: resolvedRoot,
-    realRoot: path.resolve(realRoot ?? resolveRealPersistenceRoot(defaultExecPath)),
-    demoRoot: path.resolve(demoRoot ?? resolveDemoPersistenceRoot(defaultExecPath))
-  };
-};
+export const createPersistenceEnvironmentRoots = (
+  layout: StorageLayout
+): PersistenceEnvironmentRoots => ({
+  root: path.resolve(layout.root),
+  realRoot: path.resolve(layout.userdata),
+  demoRoot: path.resolve(layout.demo)
+});
 
 export const assertSafeDemoRoot = ({
   root,

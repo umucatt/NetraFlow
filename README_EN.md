@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/netraflow-icon.png" alt="NetraFlow icon" width="128" />
+  <img src="public/icons/netraflow.svg" alt="NetraFlow icon" width="128" />
 </p>
 
 <h1 align="center">NetraFlow</h1>
@@ -179,7 +179,7 @@ If an output directory for the same version already exists, the release scripts 
 | --- | --- |
 | `electron/` | Electron main process, preload script, local storage, and window-related logic |
 | `src/` | React renderer, pages, feature modules, styles, and tests |
-| `public/icons/` | Application icon source files; Windows packaging continues to use `netraflow.ico` |
+| `public/icons/` | Formal icon resources: `netraflow.svg` is the sole source; Windows uses `netraflow.ico`, macOS uses `netraflow.icns`, and Linux uses the `linux/` PNG layers |
 | `docs/assets/` | Assets used by README and documentation |
 | `scripts/` | Development startup, release checks, packaging, artifact verification, and release-note scripts |
 | `build/` | Installer script resources and license files bundled with releases |
@@ -189,7 +189,8 @@ If an output directory for the same version already exists, the release scripts 
 
 - Changes to the local data structure need to preserve the four-file boundary, schema versioning, future-schema refusal, and the no-`previous` recovery path.
 - Do not package development runtime, userdata, caches, logs, or user data into release artifacts.
-- The Windows application icon source remains `public/icons/netraflow.ico`; `docs/assets/netraflow-icon.png` is only for README and documentation display.
+- `public/icons/netraflow.svg` is the sole production icon source; the README renders it directly and every platform asset is generated from it.
+- After changing the icon source, run `npm run generate:icons` to regenerate the Windows ICO, macOS ICNS, Linux PNG layers, and visual preview.
 - Release-flow changes should update `scripts/`, `.github/workflows/`, related tests, and README documentation together.
 - Import, snapshot, and security-related features should continue to prioritize format validation, integrity checks, and recoverability tests.
 
