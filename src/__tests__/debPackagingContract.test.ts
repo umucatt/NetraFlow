@@ -3,19 +3,24 @@
 import assert from 'node:assert/strict';
 import { lstatSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 
 const rootDir = process.cwd();
 const packageJsonSource = readFileSync(path.join(rootDir, 'package.json'), 'utf8');
 const packageJson = JSON.parse(packageJsonSource);
 const packagingSource = readFileSync(path.join(rootDir, 'scripts', 'package-deb.mjs'), 'utf8');
-const profileSource = readFileSync(path.join(rootDir, 'build', 'linux', 'deb', 'opt.NetraFlow.netraflow'), 'utf8');
-const localSource = readFileSync(path.join(rootDir, 'build', 'linux', 'deb', 'opt.NetraFlow.netraflow.local'), 'utf8');
-const postinst = readFileSync(path.join(rootDir, 'build', 'linux', 'deb', 'postinst'), 'utf8');
-const prerm = readFileSync(path.join(rootDir, 'build', 'linux', 'deb', 'prerm'), 'utf8');
+const normalizeNewlines = (source: string) => source.replace(/\r\n?/g, '\n');
+const readText = (...segments: string[]) =>
+  normalizeNewlines(readFileSync(path.join(rootDir, ...segments), 'utf8'));
+const debLogicUrl = pathToFileURL(path.join(rootDir, 'scripts', 'package-deb-logic.mjs')).href;
+const profileSource = readText('build', 'linux', 'deb', 'opt.NetraFlow.netraflow');
+const localSource = readText('build', 'linux', 'deb', 'opt.NetraFlow.netraflow.local');
+const postinst = readText('build', 'linux', 'deb', 'postinst');
+const prerm = readText('build', 'linux', 'deb', 'prerm');
 
 test('DEB metadata and artifact identity are exact and versioned from package.json', async () => {
-  const logic = await import(path.join(rootDir, 'scripts', 'package-deb-logic.mjs'));
+  const logic = await import(debLogicUrl);
   const control = logic.createDebControl({ version: packageJson.version, installedSizeKiB: 123 });
   assert.equal(packageJson.version, '0.9.9');
   assert.match(control, /^Package: netraflow$/m);
@@ -29,7 +34,7 @@ test('DEB metadata and artifact identity are exact and versioned from package.js
 });
 
 test('DEB file layout, static command link, desktop entry, icons, and conffiles are fixed', async () => {
-  const logic = await import(path.join(rootDir, 'scripts', 'package-deb-logic.mjs'));
+  const logic = await import(debLogicUrl);
   assert.equal(logic.DEB_EXECUTABLE_PATH, '/opt/NetraFlow/netraflow');
   assert.equal(logic.DEB_DESKTOP_PATH, '/usr/share/applications/netraflow.desktop');
   assert.equal(logic.DEB_APPARMOR_PATH, '/etc/apparmor.d/opt.NetraFlow.netraflow');
@@ -53,7 +58,7 @@ test('DEB uses the local Electron distribution and ASAR without AppImage or FPM 
 });
 
 test('DEB desktop and application tree cannot opt out of the Chromium sandbox', async () => {
-  const { DEB_DESKTOP_ENTRY } = await import(path.join(rootDir, 'scripts', 'package-deb-logic.mjs'));
+  const { DEB_DESKTOP_ENTRY } = await import(debLogicUrl);
   assert.equal(DEB_DESKTOP_ENTRY.match(/^Exec=(.+)$/m)?.[1], '/opt/NetraFlow/netraflow %U');
   assert.equal(DEB_DESKTOP_ENTRY.includes('--no-sandbox'), false);
   assert.equal(DEB_DESKTOP_ENTRY.includes('NF_PACKAGE_KIND'), false);
@@ -120,7 +125,7 @@ test('DEB build is unprivileged, local-only, narrowly cleaned, and root-owned in
 });
 
 test('DEB host checks reject root, non-x64, non-Linux, and old Node', async () => {
-  const { assertDebBuildHost } = await import(path.join(rootDir, 'scripts', 'package-deb-logic.mjs'));
+  const { assertDebBuildHost } = await import(debLogicUrl);
   assert.throws(() => assertDebBuildHost({ platform: 'darwin', arch: 'arm64', uid: 501, nodeMajor: 22 }), /Linux x64 host/);
   assert.throws(() => assertDebBuildHost({ platform: 'linux', arch: 'x64', uid: 0, nodeMajor: 22 }), /regular user/);
   assert.throws(() => assertDebBuildHost({ platform: 'linux', arch: 'x64', uid: 1000, nodeMajor: 20 }), /Node\.js 22/);

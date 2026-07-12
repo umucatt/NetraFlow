@@ -2,12 +2,16 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
 const rootDir = process.cwd();
 const packageJson = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
 const linuxBuild = packageJson.build.linux;
+const appImageLogicUrl = pathToFileURL(
+  path.join(rootDir, 'scripts', 'package-appimage-logic.mjs')
+).href;
 
 test('Linux builder configuration produces only an x64 AppImage with desktop metadata', () => {
   assert.deepEqual(linuxBuild.target, [{ target: 'AppImage', arch: ['x64'] }]);
@@ -34,7 +38,7 @@ test('application source and packaging configuration do not persist a sandbox by
 
 test('controlled AppImage packaging has an exact desktop entry and native AppRun contract', async (t) => {
   const { APPIMAGE_DESKTOP_ENTRY } = await import(
-    path.join(rootDir, 'scripts', 'package-appimage-logic.mjs')
+    appImageLogicUrl
   );
   assert.equal(APPIMAGE_DESKTOP_ENTRY, `[Desktop Entry]\nName=NetraFlow\nExec=AppRun %U\nTerminal=false\nType=Application\nIcon=netraflow\nCategories=Utility;\nStartupWMClass=NetraFlow\n`);
   assert.equal(APPIMAGE_DESKTOP_ENTRY.includes('--no-sandbox'), false);
@@ -114,7 +118,7 @@ test('launcher filters external sandbox and bootstrap flags and adds internal fl
 
 test('Linux AppImage packaging validates its host before any build work', async () => {
   const { assertLinuxX64BuildHost, getAppImageArtifactName } = await import(
-    path.join(rootDir, 'scripts', 'package-appimage-logic.mjs')
+    appImageLogicUrl
   );
 
   assert.throws(

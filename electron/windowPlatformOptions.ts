@@ -7,7 +7,7 @@ export type PlatformWindowOptionsInput = Readonly<{
 }>;
 
 export const getAppIconPath = ({ platform, appResourceRoot }: PlatformWindowOptionsInput) =>
-  path.join(
+  (platform === 'win32' ? path.win32 : path.posix).join(
     appResourceRoot,
     platform === 'linux' ? 'public/icons/linux/512x512.png' : 'public/icons/netraflow.ico'
   );

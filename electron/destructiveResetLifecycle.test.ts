@@ -14,11 +14,24 @@ import {
 } from './destructiveResetLifecycle.js';
 import { createStorageLayout } from './storageLayout.js';
 
-const makeLayout = (root: string) => createStorageLayout({
-  platform: 'linux', isPackaged: true, isPortable: false,
-  execPath: '/opt/NetraFlow/netraflow', appPath: '/opt/NetraFlow/resources/app.asar',
-  defaultUserDataPath: root
-});
+const makeLayout = (root: string) => {
+  const platformPath = process.platform === 'win32' ? path.win32 : path.posix;
+
+  return createStorageLayout({
+    platform: process.platform,
+    isPackaged: true,
+    isPortable: false,
+    execPath: platformPath.join(root, process.platform === 'win32' ? 'netraflow.exe' : 'netraflow'),
+    appPath: platformPath.join(root, 'resources', 'app.asar'),
+    defaultUserDataPath: root,
+    overrides: {
+      persistenceRoot: root,
+      userdata: platformPath.join(root, 'userdata'),
+      runtime: platformPath.join(root, 'runtime'),
+      demo: platformPath.join(root, '.demo')
+    }
+  });
+};
 
 test('userdata is atomically invalidated, physically deleted, and verified before runtime', async (t) => {
   const root = mkdtempSync(path.join(tmpdir(), 'netraflow-reset-'));
