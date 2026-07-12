@@ -1,6 +1,7 @@
 /// <reference types="node" />
 
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import test from 'node:test';
 
@@ -771,6 +772,12 @@ test('theme bootstrap resolves first frame before React mounts', () => {
     indexSource.indexOf('(function ()'),
     indexSource.indexOf('</script>')
   );
+  const inlineScriptMatch = indexSource.match(/<script>\n([\s\S]*?)\n    <\/script>/);
+
+  assert.ok(inlineScriptMatch);
+  const inlineScriptHash = createHash('sha256')
+    .update(inlineScriptMatch[1])
+    .digest('base64');
 
   assert.equal(globalSettingsLogicSource.includes("themeMode: 'system'"), true);
   assert.equal(indexSource.indexOf('<script>') < indexSource.indexOf('<script type="module"'), true);
@@ -780,8 +787,10 @@ test('theme bootstrap resolves first frame before React mounts', () => {
     true
   );
   assert.equal(indexSource.includes('window.localStorage'), false);
+  assert.equal(indexSource.includes(`'sha256-${inlineScriptHash}'`), true);
   assert.equal(bootstrapSource.includes("var defaultThemeMode = 'system';"), true);
   assert.equal(bootstrapSource.includes("var defaultThemeStyle = 'default';"), true);
+  assert.equal(bootstrapSource.includes('window.appInfo'), false);
   assert.equal(bootstrapSource.includes("window.matchMedia('(prefers-color-scheme: dark)').matches"), true);
   assert.equal(bootstrapSource.includes("value === 'light' || value === 'dark' || value === 'system'"), true);
   assert.equal(bootstrapSource.includes("value === 'default' || value === 'nyaa'"), true);
@@ -798,12 +807,14 @@ test('theme bootstrap resolves first frame before React mounts', () => {
   assert.equal(bootstrapSource.includes('root.dataset.theme = resolvedTheme;'), true);
   assert.equal(bootstrapSource.includes('root.dataset.resolvedTheme = resolvedTheme;'), true);
   assert.equal(bootstrapSource.includes('root.dataset.themeStyle = themeStyle;'), true);
+  assert.equal(bootstrapSource.includes('windowSurface'), false);
   assert.equal(
     bootstrapSource.includes("root.style.setProperty('color-scheme', resolvedTheme);"),
     true
   );
   assert.equal(bootstrapSource.includes("'background-color'"), true);
   assert.equal(bootstrapSource.includes('getPrebootBackgroundColor(resolvedTheme, themeStyle)'), true);
+  assert.equal(readProjectFile('src/styles/foundation.css').includes('data-window-surface'), false);
   assert.equal(mainSource.includes("nativeTheme.shouldUseDarkColors ? 'dark' : 'light'"), true);
   assert.equal(mainSource.includes('persistenceStore.readSettingsDocument()'), true);
   assert.equal(mainSource.includes('persistenceStore.readStateDocument()'), true);
@@ -963,7 +974,7 @@ test('Electron renderer sandbox keeps the preload bridge boundary narrow', () =>
   assert.equal(typesSource.includes('Electron.IpcRenderer'), false);
 });
 
-test('desktop platforms keep native macOS controls separate from Windows window controls', () => {
+test('desktop platforms keep Windows custom controls separate from native macOS and Linux frames', () => {
   const mainSource = readProjectFile('electron/main.ts');
   const windowPlatformOptionsSource = readProjectFile('electron/windowPlatformOptions.ts');
   const preloadSource = readProjectFile('electron/preload.ts');
@@ -984,7 +995,12 @@ test('desktop platforms keep native macOS controls separate from Windows window 
   assert.equal(preloadSource.includes('platform: process.platform'), true);
   assert.equal(viteEnvSource.includes("type DesktopPlatform = 'win32' | 'darwin' | 'linux';"), true);
   assert.equal(windowFrameSource.includes("const platform = window.appInfo?.platform ?? 'win32';"), true);
-  assert.equal(windowFrameSource.includes("const showWindowControls = platform === 'win32';"), true);
+  assert.equal(
+    windowFrameSource.includes('areCustomWindowControlsVisible(platform)'),
+    true
+  );
+  assert.equal(windowFrameSource.includes('isCustomWindowTitleBarVisible(platform)'), true);
+  assert.equal(windowFrameSource.includes('{showTitleBar ? ('), true);
   assert.equal(windowFrameSource.includes('navigator.userAgent'), false);
   assert.equal(windowFrameSource.includes('process.platform'), false);
   assert.equal(
@@ -993,6 +1009,24 @@ test('desktop platforms keep native macOS controls separate from Windows window 
   );
   assert.equal(windowFrameStyles.includes('.window-frame--darwin .window-frame__titlebar'), true);
   assert.equal(windowFrameStyles.includes('padding-left: 78px;'), true);
+  assert.match(windowFrameStyles, /\.window-frame--linux\s*\{\s*grid-template-rows: minmax\(0, 1fr\);\s*\}/);
+  assert.equal(windowFrameStyles.includes('clip-path'), false);
+  assert.doesNotMatch(windowFrameStyles, /\.window-frame--linux\s*\{[^}]*border-radius/s);
+  assert.match(
+    windowFrameStyles,
+    /\.window-frame__backdrop\s*\{[^}]*position: absolute;[^}]*inset: 0;[^}]*background: var\(--window-backdrop-bg\);[^}]*\}/s
+  );
+  assert.equal(
+    windowFrameSource.indexOf('<WindowBackdrop />') <
+      windowFrameSource.indexOf('<WindowTitleBar'),
+    true
+  );
+  assert.equal(
+    windowFrameSource.indexOf('<WindowBackdrop />') >
+      windowFrameSource.indexOf('<div className={frameClassName}'),
+    true
+  );
+  assert.equal(windowFrameStyles.includes('.window-frame--win32'), false);
 });
 
 test('page position memory copy and settings search keywords stay wired', () => {

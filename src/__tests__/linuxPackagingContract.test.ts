@@ -18,6 +18,19 @@ test('Linux builder configuration produces only an x64 AppImage with desktop met
   assert.equal(packageJson.scripts['dist:linux'], 'node scripts/package-appimage.mjs');
 });
 
+test('application source and packaging configuration do not persist a sandbox bypass', () => {
+  const forbiddenArgument = ['--no', 'sandbox'].join('-');
+  const inspectedSources = [
+    readFileSync(path.join(rootDir, 'package.json'), 'utf8'),
+    readFileSync(path.join(rootDir, 'scripts', 'package-appimage.mjs'), 'utf8'),
+    readFileSync(path.join(rootDir, 'electron', 'main.ts'), 'utf8')
+  ];
+
+  for (const source of inspectedSources) {
+    assert.equal(source.includes(forbiddenArgument), false);
+  }
+});
+
 test('Linux AppImage packaging validates its host before any build work', async () => {
   const { assertLinuxX64BuildHost, getAppImageArtifactName } = await import(
     path.join(rootDir, 'scripts', 'package-appimage-logic.mjs')

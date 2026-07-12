@@ -1,7 +1,11 @@
 import { WindowBackdrop } from './WindowBackdrop';
 import { WindowTitleBar } from './WindowTitleBar';
 import { useWindowFrameController } from './useWindowFrameController';
-import { isCustomWindowTitleBrandVisible } from './windowTitleBarLogic';
+import {
+  areCustomWindowControlsVisible,
+  isCustomWindowTitleBrandVisible,
+  isCustomWindowTitleBarVisible
+} from './windowTitleBarLogic';
 import type { WindowFrameProps } from './windowFrameTypes';
 
 export function WindowFrame({
@@ -14,8 +18,9 @@ export function WindowFrame({
 }: WindowFrameProps) {
   const controller = useWindowFrameController();
   const platform = window.appInfo?.platform ?? 'win32';
+  const showTitleBar = isCustomWindowTitleBarVisible(platform);
   const showBrand = isCustomWindowTitleBrandVisible(platform);
-  const showWindowControls = platform === 'win32';
+  const showWindowControls = areCustomWindowControlsVisible(platform);
   const frameClassName = [
     'window-frame',
     `window-frame--${platform}`,
@@ -28,13 +33,15 @@ export function WindowFrame({
   return (
     <div className={frameClassName} {...frameProps}>
       <WindowBackdrop />
-      <WindowTitleBar
-        controller={controller}
-        productIconPath={productIconPath}
-        productName={productName}
-        showBrand={showBrand}
-        showWindowControls={showWindowControls}
-      />
+      {showTitleBar ? (
+        <WindowTitleBar
+          controller={controller}
+          productIconPath={productIconPath}
+          productName={productName}
+          showBrand={showBrand}
+          showWindowControls={showWindowControls}
+        />
+      ) : null}
       <div
         className="window-frame__content"
         inert={contentInert || undefined}
