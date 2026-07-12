@@ -1,0 +1,6 @@
+build/linux/deb/postinst text eol=lf
+build/linux/deb/prerm text eol=lf
+build/linux/deb/opt.NetraFlow.netraflow text eol=lf
+build/linux/deb/opt.NetraFlow.netraflow.local text eol=lf
+build/linux/launcher/*.c text eol=lf
+build/linux/launcher/*.h text eol=lf

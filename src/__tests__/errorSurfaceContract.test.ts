@@ -6,7 +6,7 @@ import test from 'node:test';
 const projectRoot = process.cwd();
 
 const readProjectFile = (filePath: string) =>
-  readFileSync(path.join(projectRoot, filePath), 'utf8');
+  readFileSync(path.join(projectRoot, filePath), 'utf8').replace(/\r\n?/g, '\n');
 
 const normalizeAllowedDots = (text: string) =>
   text

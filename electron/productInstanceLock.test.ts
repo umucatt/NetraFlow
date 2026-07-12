@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import test from 'node:test';
@@ -29,9 +30,9 @@ const waitFor = async (predicate: () => boolean) => {
   assert.equal(predicate(), true);
 };
 
-const isWithinDirectory = (candidatePath: string, directory: string) => {
-  const relativePath = path.relative(directory, candidatePath);
-  return relativePath === '' || (relativePath !== '..' && !relativePath.startsWith(`..${path.sep}`));
+const isWithinPosixDirectory = (candidatePath: string, directory: string) => {
+  const relativePath = path.posix.relative(directory, candidatePath);
+  return relativePath === '' || (relativePath !== '..' && !relativePath.startsWith('../'));
 };
 let posixSocketUnavailable = false;
 
@@ -49,12 +50,17 @@ test('instance lock paths use the Windows pipe and short UID-isolated POSIX sock
   assert.equal(getInstanceLockPath({ platform: 'linux', getuid: () => 1000 }), linuxPath);
 
   for (const socketPath of [macPath, linuxPath]) {
-    assert.equal(path.isAbsolute(socketPath), true);
+    assert.equal(path.posix.isAbsolute(socketPath), true);
     assert.equal(socketPath.length < 104, true);
-    assert.equal(socketPath.includes(process.env.HOME ?? ''), false);
+    for (const homePath of ['/home/netraflow-test-user', 'C:\\Users\\netraflow-test-user']) {
+      assert.equal(socketPath.includes(homePath), false);
+    }
     assert.equal(socketPath.includes('netraflow-com-netraflow-app-single-instance'), false);
-    assert.equal(isWithinDirectory(socketPath, process.cwd()), false);
-    assert.equal(isWithinDirectory(socketPath, path.dirname(process.execPath)), false);
+    assert.equal(isWithinPosixDirectory(socketPath, pathToFileURL(process.cwd()).pathname), false);
+    assert.equal(
+      isWithinPosixDirectory(socketPath, path.posix.dirname(pathToFileURL(process.execPath).pathname)),
+      false
+    );
   }
 });
 

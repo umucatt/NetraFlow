@@ -22,10 +22,10 @@ export const getLinuxAppImagePreferencesPath = ({
   xdgConfigHome = process.env.XDG_CONFIG_HOME,
   home = os.homedir()
 }: { xdgConfigHome?: string; home?: string } = {}) =>
-  path.join(
-    xdgConfigHome && path.isAbsolute(xdgConfigHome)
+  path.posix.join(
+    xdgConfigHome && path.posix.isAbsolute(xdgConfigHome)
       ? xdgConfigHome
-      : path.join(home, '.config'),
+      : path.posix.join(home, '.config'),
     'NetraFlow',
     PREFERENCES_FILE_NAME
   );
