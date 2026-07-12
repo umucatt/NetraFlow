@@ -55,7 +55,7 @@ test('renderer stops persistence before invoking the pathless main cleanup chann
 test('main owns destructive state, deletion paths, session cleanup, and application exit', () => {
   const mainSource = readProjectFile('electron/mainApplication.ts');
   const persistenceIpcSource = readProjectFile('electron/persistenceIpc.ts');
-  const cleanupModuleSource = readProjectFile('electron/localDataCleanup.ts');
+  const cleanupModuleSource = readProjectFile('electron/destructiveResetLifecycle.ts');
   const handlerSource = mainSource.slice(
     mainSource.indexOf("ipcMain.handle('app:clear-all-local-data-and-quit'"),
     mainSource.indexOf('const isFileUrlForPath', mainSource.indexOf("ipcMain.handle('app:clear-all-local-data-and-quit'"))
@@ -72,12 +72,32 @@ test('main owns destructive state, deletion paths, session cleanup, and applicat
   assert.equal(coordinatorSource.includes('realPersistenceStore.lockCoreDocument();'), true);
   assert.equal(coordinatorSource.includes('demoPersistenceStore.lockCoreDocument();'), true);
   assert.equal(coordinatorSource.includes('forceClosingWindows.add(targetWindow);'), true);
-  assert.equal(coordinatorSource.includes('clearManagedLocalData({'), true);
+  assert.equal(coordinatorSource.includes('invalidateAndDeleteUserdata('), true);
+  assert.equal(coordinatorSource.includes('createRuntimePendingMarker('), true);
+  assert.equal(coordinatorSource.includes('isolateAndDeleteRuntime('), true);
   assert.equal(coordinatorSource.includes('app.exit(0);'), true);
   assert.equal(coordinatorSource.includes('app.quit();'), false);
-  assert.equal(cleanupModuleSource.includes('session.closeAllConnections()'), true);
-  assert.equal(cleanupModuleSource.includes('session.clearData()'), true);
-  assert.equal(cleanupModuleSource.includes('session.clearCache()'), true);
+  assert.equal(coordinatorSource.includes('targetSession.closeAllConnections()'), true);
+  assert.equal(coordinatorSource.includes('targetSession.clearData()'), true);
+  assert.equal(coordinatorSource.includes('targetSession.clearCache()'), true);
+  assert.equal(cleanupModuleSource.includes("'.userdata.deleting-'"), true);
+  assert.equal(cleanupModuleSource.includes("'.runtime.delete-pending-'"), true);
   assert.equal(persistenceIpcSource.includes('respondGuarded'), true);
   assert.equal(mainSource.includes('isBlocked: isDestructiveShutdown'), true);
+});
+
+test('clearing page is a standalone root with CSS-only dots and no business stores', () => {
+  const rootSource = readProjectFile('src/main.tsx');
+  const stylesSource = readProjectFile('src/styles.css');
+  const pageSource = rootSource.slice(
+    rootSource.indexOf('function ClearingPage()'),
+    rootSource.indexOf('function NormalApplicationRoot()')
+  );
+  assert.equal(pageSource.includes('正在清除全部数据'), true);
+  assert.equal(pageSource.includes('AppShell'), false);
+  assert.equal(pageSource.includes('Store'), false);
+  assert.equal(pageSource.includes('notifyClearingPageReady'), true);
+  assert.equal(stylesSource.includes('@keyframes destructive-clearing-dots'), true);
+  assert.equal(stylesSource.includes("content: '...'"), true);
+  assert.equal(rootSource.includes('clearing ? <ClearingPage />'), true);
 });

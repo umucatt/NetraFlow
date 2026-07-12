@@ -134,6 +134,8 @@ if (isSandboxConsentBootstrap) {
 } else {
 
 const electronAPI = {
+  normalAppStartupStateResolved: (state: string) =>
+    ipcRenderer.send('normal-app-startup-state-resolved', state),
   normalAppFirstFrameReady: () => ipcRenderer.send('normal-app-first-frame-ready'),
   minimize: () => ipcRenderer.send('window:minimize'),
   toggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
@@ -145,6 +147,12 @@ const electronAPI = {
   forceClose: () => ipcRenderer.send('window:force-close'),
   clearAllLocalDataAndQuit: () =>
     ipcRenderer.invoke('app:clear-all-local-data-and-quit') as Promise<void>,
+  notifyClearingPageReady: () => ipcRenderer.send('app:clearing-page-ready'),
+  onEnterClearingPage: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('netraflow-enter-clearing-page', listener);
+    return () => ipcRenderer.removeListener('netraflow-enter-clearing-page', listener);
+  },
   clearLinuxAppImageSandboxConsent: () =>
     ipcRenderer.invoke('app:clear-linux-appimage-sandbox-consent') as Promise<void>,
   isMaximized: () => ipcRenderer.invoke('window:is-maximized') as Promise<boolean>,
@@ -209,6 +217,12 @@ const electronAPI = {
 };
 
 const netraflowPersistence = {
+  readSnapshot: () =>
+    unwrapPersistenceResponse(ipcRenderer.sendSync('persistence:read-snapshot') as unknown),
+  commitInitializedSnapshot: (documents: unknown) =>
+    unwrapPersistenceResponse(
+      ipcRenderer.sendSync('persistence:commit-initialized-snapshot', documents) as unknown
+    ),
   readCoreDocument: () =>
     unwrapPersistenceResponse(ipcRenderer.sendSync('persistence:read-core') as unknown),
   writeCoreDocument: (document: unknown, options?: CoreWriteOptions) =>

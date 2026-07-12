@@ -136,6 +136,7 @@
     "dist:portable": "node scripts/package-portable.mjs",
     "dist:mac": "node scripts/package-dmg.mjs",
     "dist:linux": "node scripts/package-appimage.mjs",
+    "dist:deb": "node scripts/package-deb.mjs",
     "generate:icons": "node scripts/generate-icons.mjs",
     "preview": "vite preview"
   },

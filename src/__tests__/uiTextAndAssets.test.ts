@@ -2186,7 +2186,8 @@ test('Windows taskbar lock uses Jump List IPC without tray or background hiding'
   assert.equal(mainSource.includes('productInstanceCoordinator.release()'), true);
   assert.equal(productLockSource.includes('PRODUCT_INSTANCE_PIPE_PATH'), true);
   assert.equal(productLockSource.includes('netraflow-com-netraflow-app-single-instance'), true);
-  assert.equal(productLockSource.includes("if (error.code === 'EADDRINUSE')"), true);
+  assert.equal(productLockSource.includes("initial.code !== 'EADDRINUSE'"), true);
+  assert.equal(productLockSource.includes("existing.code !== 'ECONNREFUSED'"), true);
   assert.equal(mainSource.includes("argv.includes('--lock')"), true);
   assert.equal(mainSource.includes("targetWindow.webContents.send('netraflow-lock')"), true);
   assert.equal(preloadSource.includes('onNetraFlowLock'), true);

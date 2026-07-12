@@ -9,8 +9,8 @@ const preload = read('electron/preload.ts');
 const app = read('src/App.tsx');
 const about = read('src/features/settings/AboutNetraFlowPanel.tsx');
 
-test('only packaged Linux AppImage normal windows defer their first show', () => {
-  assert.equal(main.includes('const deferFirstShow = isLinuxAppImageRuntime() && app.isPackaged;'), true);
+test('packaged Linux normal windows defer their first show without changing other platforms', () => {
+  assert.equal(main.includes("const deferFirstShow = process.platform === 'linux' && app.isPackaged;"), true);
   assert.equal(main.includes('show: deferFirstShow ? false : undefined'), true);
   assert.match(main, /pageLoaded && rendererReady && !didShow/);
   assert.equal(main.includes("event.sender !== createdWindow.webContents"), true);
@@ -26,14 +26,30 @@ test('main and renderer receive one resolved formal theme before mounting', () =
   assert.equal(read('src/main.tsx').includes('document.documentElement.dataset.theme = window.appInfo.initialTheme'), true);
 });
 
-test('normal readiness waits for fonts, final two-column geometry, and two paint frames', () => {
-  assert.equal(app.includes('document.fonts?.ready'), true);
-  assert.equal(app.includes("querySelector<HTMLElement>('.app-shell')"), true);
-  assert.equal(app.includes("querySelector<HTMLElement>('.left-browse-panel')"), true);
-  assert.equal(app.includes("querySelector<HTMLElement>('.right-action-panel')"), true);
-  assert.equal(app.includes('Math.abs(leftRect.left - rightRect.left) > 1'), true);
-  assert.match(app, /requestAnimationFrame\(\(\) => requestAnimationFrame/);
-  assert.equal(app.includes('normalAppFirstFrameReady?.()'), true);
+test('normal readiness uses lifecycle-specific roots, fonts, theme, and two paint frames', () => {
+  const readiness = read('src/app/normalAppFirstFrame.ts');
+  assert.equal(readiness.includes('document.fonts?.ready'), false);
+  assert.equal(readiness.includes("state === 'initializing'"), true);
+  assert.equal(readiness.includes("state === 'onboarding'"), true);
+  assert.equal(readiness.includes("state === 'locked'"), true);
+  assert.equal(readiness.includes("'.first-welcome-modal'"), true);
+  assert.equal(readiness.includes("'.lock-screen'"), true);
+  assert.equal(readiness.includes("'.left-browse-panel'"), true);
+  assert.equal(readiness.includes("'.right-action-panel'"), true);
+  assert.equal(readiness.includes('documentRoot.dataset.resolvedTheme'), true);
+  assert.equal((readiness.match(/window\.requestAnimationFrame\(/g) ?? []).length >= 3, true);
+  assert.equal(readiness.includes('normalAppFirstFrameWasSent = true'), true);
+  assert.equal(readiness.includes('normalAppFirstFrameReady?.()'), true);
+  assert.equal(app.includes('useNormalAppFirstFrameReady('), true);
+  assert.equal(app.includes('resolveNormalAppFirstFrameState({'), true);
+});
+
+test('plain second-instance activation never enters the protected lock action', () => {
+  assert.match(main, /app\.on\('second-instance',[\s\S]+if \(argv\.includes\('--lock'\)\)[\s\S]+requestRendererLock\(\);[\s\S]+return;[\s\S]+requestWindowActivation\(\);/);
+  assert.equal(main.includes('requestProductInstanceActivation = requestWindowActivation;'), true);
+  assert.match(main, /if \(!mainWindowFirstFrameReady\) \{\s+pendingWindowActivation = true;\s+return;/);
+  assert.equal(main.includes("createdWindow.webContents.send('netraflow-lock')"), true);
+  assert.equal(main.includes('mainWindowFirstFrameReady = true;'), true);
 });
 
 test('current sandbox state is immutable UI input and status is outside contact card', () => {

@@ -59,6 +59,7 @@ import {
   createRuntimeGlobalSettings,
   createSecurityDocumentFromRuntime,
   createSettingsDocumentFromRuntime,
+  commitInitializedPersistenceSnapshot,
   acknowledgeCoreIntegrityIssue,
   disableCoreProtection,
   enableCoreProtection,
@@ -118,7 +119,9 @@ import {
 } from './app/snapshotSecurityDialogs';
 import {
   FirstWelcomeLayer,
+  classifyStartupDataState,
   normalizeFirstWelcomeState,
+  resolveStartupDestination,
   shouldShowFirstWelcome,
   type FirstWelcomeStage,
   type FirstWelcomeState,
@@ -235,6 +238,10 @@ import { useSnapshotBackupController } from './features/backup/useSnapshotBackup
 import { useSecuritySettingsController } from './features/security/useSecuritySettingsController';
 import { useUserSettingsFileController } from './features/userSettings/useUserSettingsFileController';
 import { getAppIconResource } from './app/branding/appIcon';
+import {
+  resolveNormalAppFirstFrameState,
+  useNormalAppFirstFrameReady
+} from './app/normalAppFirstFrame';
 
 import {
   getAccountDisplayMark,
@@ -507,6 +514,13 @@ const startupPersistenceState = (() => {
         coreProtection: {
           enabled: false,
           locked: false
+        },
+        documentExists: { core: false, settings: false, state: false, security: false },
+        documentStatus: {
+          core: 'missing' as const,
+          settings: 'missing' as const,
+          state: 'missing' as const,
+          security: 'missing' as const
         }
       },
       error
@@ -520,6 +534,15 @@ const startupAppData = createAppDataFromCoreDocument(startupPersistenceSnapshot.
 const startupFirstWelcomeState = normalizeFirstWelcomeState(
   startupPersistenceSnapshot.state.firstWelcome
 );
+const startupDestination = resolveStartupDestination({
+  coreExists: startupPersistenceSnapshot.documentExists.core,
+  stateExists: startupPersistenceSnapshot.documentExists.state,
+  firstWelcome: startupFirstWelcomeState,
+  locked: startupPersistenceSnapshot.coreProtection.locked,
+  dataState: startupPersistenceSnapshot.documentStatus
+    ? classifyStartupDataState(startupPersistenceSnapshot.documentStatus)
+    : undefined
+});
 const startupGlobalSettings = createRuntimeGlobalSettings(
   startupPersistenceSnapshot.settings,
   startupPersistenceSnapshot.state,
@@ -1188,51 +1211,6 @@ function App() {
 
   const appFocusRestoreRef = useRef<HTMLElement | null>(null);
 
-  useEffect(() => {
-    if (
-      window.appInfo?.packageKind !== 'appimage' ||
-      window.appInfo?.platform !== 'linux' ||
-      !window.electronAPI?.normalAppFirstFrameReady
-    ) return;
-
-    let cancelled = false;
-    let frame = 0;
-    const waitForFinalLayout = async () => {
-      if (document.fonts?.ready) await document.fonts.ready;
-      const inspect = () => {
-        if (cancelled) return;
-        const frameElement = document.querySelector<HTMLElement>('.window-frame');
-        const shell = document.querySelector<HTMLElement>('.app-shell');
-        const left = shell?.querySelector<HTMLElement>('.left-browse-panel');
-        const right = shell?.querySelector<HTMLElement>('.right-action-panel');
-        const frameRect = frameElement?.getBoundingClientRect();
-        const shellRect = shell?.getBoundingClientRect();
-        const leftRect = left?.getBoundingClientRect();
-        const rightRect = right?.getBoundingClientRect();
-        const hasFinalTwoColumnLayout = Boolean(
-          frameRect && shellRect && leftRect && rightRect &&
-          frameRect.width > 0 && frameRect.height > 0 &&
-          shellRect.width > 0 && shellRect.height > 0 &&
-          leftRect.width > 0 && rightRect.width > 0 &&
-          Math.abs(leftRect.left - rightRect.left) > 1
-        );
-        if (!hasFinalTwoColumnLayout) {
-          frame = requestAnimationFrame(inspect);
-          return;
-        }
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-          if (!cancelled) window.electronAPI.normalAppFirstFrameReady?.();
-        }));
-      };
-      frame = requestAnimationFrame(inspect);
-    };
-    void waitForFinalLayout();
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(frame);
-    };
-  }, []);
-
   const mainContentRef = useRef<HTMLElement | null>(null);
 
   const leftLayerPanelRef = useRef<HTMLElement | null>(null);
@@ -1294,6 +1272,7 @@ function App() {
   const stateDocumentRef = useRef<StateDocument>(startupPersistenceSnapshot.state);
 
   const securityDocumentRef = useRef<SecurityDocument>(startupPersistenceSnapshot.security);
+  const persistenceDocumentExistsRef = useRef(startupPersistenceSnapshot.documentExists);
 
   const persistenceGenerationRef = useRef(0);
 
@@ -1326,7 +1305,7 @@ function App() {
 
   const [firstWelcomeStage, setFirstWelcomeStage] = useState<FirstWelcomeStage>(() =>
 
-    shouldShowFirstWelcome(startupFirstWelcomeState) ? 'welcome' : null
+    startupDestination === 'onboarding' ? 'welcome' : null
 
   );
 
@@ -2323,10 +2302,22 @@ function App() {
 
 
 
+    if (!persistenceDocumentExistsRef.current.core) {
+      writeCoreDocument(createCoreDocumentFromAppData(appData));
+      persistenceDocumentExistsRef.current = {
+        ...persistenceDocumentExistsRef.current,
+        core: true
+      };
+    }
+
     persistStateDocument((currentDocument) => ({
       ...currentDocument,
       firstWelcome: normalizeFirstWelcomeState(nextState)
     }));
+    persistenceDocumentExistsRef.current = {
+      ...persistenceDocumentExistsRef.current,
+      state: true
+    };
 
     setFirstWelcomeState(nextState);
 
@@ -3233,7 +3224,8 @@ function App() {
       coreProtection: {
         enabled: false,
         locked: false
-      }
+      },
+      documentExists: { core: true, settings: true, state: true, security: true }
     };
   };
 
@@ -3254,6 +3246,7 @@ function App() {
     settingsDocumentRef.current = snapshot.settings;
     stateDocumentRef.current = snapshot.state;
     securityDocumentRef.current = snapshot.security;
+    persistenceDocumentExistsRef.current = snapshot.documentExists;
 
     setAppData(nextAppData);
     setAssetChartSettings(snapshot.settings.assetChart);
@@ -3266,7 +3259,22 @@ function App() {
       false
     );
     setFirstWelcomeState(nextFirstWelcomeState);
-    setFirstWelcomeStage(shouldShowFirstWelcome(nextFirstWelcomeState) ? 'welcome' : null);
+    const destination = resolveStartupDestination({
+      coreExists: snapshot.documentExists.core,
+      stateExists: snapshot.documentExists.state,
+      firstWelcome: nextFirstWelcomeState,
+      locked: snapshot.coreProtection.locked,
+      dataState: snapshot.documentStatus
+        ? classifyStartupDataState(snapshot.documentStatus)
+        : undefined
+    });
+    if (destination === 'invalid') {
+      setRuntimePersistenceError(
+        new Error('Failed to apply persistence snapshot: PERSISTENCE_SNAPSHOT_INVALID')
+      );
+      return;
+    }
+    setFirstWelcomeStage(destination === 'onboarding' ? 'welcome' : null);
     setIsExampleMode(nextIsExampleMode);
 
     if (!nextIsExampleMode) {
@@ -3368,17 +3376,24 @@ function App() {
     }
 
     const nextAppData = createTestDataInRealAppData(createExampleData);
+    const nextState = normalizeStateDocument({
+      ...stateDocumentRef.current,
+      firstWelcome: { completed: true, pendingAfterClearAll: false }
+    });
 
-    return saveAppDataWithExternalModificationCheck(
-      nextAppData,
-      { allowEmptyHistoryOverwrite: true },
-      () => {
-        latestRealAppDataRef.current = cloneAppData(nextAppData);
-        setAppData(nextAppData);
-        setIsExampleMode(false);
-      },
-      { flush: true }
-    );
+    try {
+      coreSaveCoordinator.acknowledgePendingSaveWithoutPersisting();
+      const snapshot = commitInitializedPersistenceSnapshot({
+        core: createCoreDocumentFromAppData(nextAppData),
+        state: nextState
+      });
+      applyRuntimePersistenceSnapshot(snapshot, false);
+      return true;
+    } catch (error) {
+      console.error('[NetraFlow test data] Failed to commit initialized snapshot.', error);
+      setRuntimePersistenceError(error);
+      return false;
+    }
   };
 
   const writeExtremeTestDataToRealData = () => {
@@ -3387,17 +3402,24 @@ function App() {
     }
 
     const nextAppData = createExtremeTestDataInRealAppData(createExtremeExampleData);
+    const nextState = normalizeStateDocument({
+      ...stateDocumentRef.current,
+      firstWelcome: { completed: true, pendingAfterClearAll: false }
+    });
 
-    return saveAppDataWithExternalModificationCheck(
-      nextAppData,
-      { allowEmptyHistoryOverwrite: true },
-      () => {
-        latestRealAppDataRef.current = cloneAppData(nextAppData);
-        setAppData(nextAppData);
-        setIsExampleMode(false);
-      },
-      { flush: true }
-    );
+    try {
+      coreSaveCoordinator.acknowledgePendingSaveWithoutPersisting();
+      const snapshot = commitInitializedPersistenceSnapshot({
+        core: createCoreDocumentFromAppData(nextAppData),
+        state: nextState
+      });
+      applyRuntimePersistenceSnapshot(snapshot, false);
+      return true;
+    } catch (error) {
+      console.error('[NetraFlow test data] Failed to commit initialized snapshot.', error);
+      setRuntimePersistenceError(error);
+      return false;
+    }
   };
 
   const clearAllLocalDataAndQuit = () => {
@@ -3409,6 +3431,7 @@ function App() {
     persistenceGenerationRef.current += 1;
     coreSaveCoordinator.beginDestructiveShutdown();
     resetSecurityState();
+    window.dispatchEvent(new Event('netraflow-enter-clearing-page'));
 
     const api = window.electronAPI ?? window.electronWindow;
 
@@ -7617,6 +7640,15 @@ function App() {
     onSubmit: unlockApp,
     onPanelExitComplete: completeUnlockTransition
   });
+
+  useNormalAppFirstFrameReady(
+    resolveNormalAppFirstFrameState({
+      initializing: runtimePersistenceError !== null,
+      onboarding: firstWelcomeStage !== null,
+      locked: isLocked
+    }),
+    isGlobalSettingsOpen
+  );
 
 
 

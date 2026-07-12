@@ -4,6 +4,8 @@ import type { PersistenceStore } from './persistenceFileStore.js';
 import { runWithPersistenceShutdownGuard } from './persistenceShutdownGuard.js';
 
 export type PersistenceDemoLifecycleHandlers = {
+  readSnapshot?: () => unknown;
+  commitInitializedSnapshot?: (documents: unknown) => unknown;
   enterDemoEnvironment: (documents: unknown) => unknown;
   exitDemoEnvironment: () => unknown;
   promoteDemoCoreToRealEnvironment: () => unknown;
@@ -27,6 +29,21 @@ export const registerPersistenceHandlers = (
 ) => {
   const respondGuarded = (event: IpcMainEvent, action: () => unknown) =>
     respond(event, runWithPersistenceShutdownGuard(isBlocked, action));
+
+  ipcMain.on('persistence:read-snapshot', (event) =>
+    respondGuarded(event, () => demoLifecycle?.readSnapshot?.() ?? {
+      ok: false,
+      code: 'PERSISTENCE_SNAPSHOT_UNAVAILABLE',
+      message: 'Persistence snapshot lifecycle is unavailable.'
+    })
+  );
+  ipcMain.on('persistence:commit-initialized-snapshot', (event, documents: unknown) =>
+    respondGuarded(event, () => demoLifecycle?.commitInitializedSnapshot?.(documents) ?? {
+      ok: false,
+      code: 'PERSISTENCE_SNAPSHOT_UNAVAILABLE',
+      message: 'Persistence snapshot lifecycle is unavailable.'
+    })
+  );
 
   ipcMain.on('persistence:read-core', (event) =>
     respondGuarded(event, () => store.readCoreDocument())

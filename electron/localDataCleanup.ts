@@ -1,4 +1,4 @@
-import { rm } from 'node:fs/promises';
+import { access, rm } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { StorageLayout } from './storageLayout.js';
@@ -31,7 +31,8 @@ export type ManagedDataCleanupFailure = Readonly<{
     | 'close-session-connections'
     | 'clear-session-data'
     | 'clear-session-cache'
-    | 'delete-runtime';
+    | 'delete-runtime'
+    | 'verify-managed-data-removed';
   error: unknown;
 }>;
 
@@ -227,6 +228,25 @@ export const clearManagedLocalData = async ({
   await attempt('clear-session-data', () => session.clearData());
   await attempt('clear-session-cache', () => session.clearCache());
   await attempt('delete-runtime', () => removeManagedDirectory(runtimePath));
+  await attempt('verify-managed-data-removed', async () => {
+    for (const targetPath of [demoPath, userdataPath, runtimePath]) {
+      try {
+        await access(targetPath);
+      } catch (error) {
+        if (
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          (error as { code?: unknown }).code === 'ENOENT'
+        ) {
+          continue;
+        }
+        throw error;
+      }
+
+      throw new Error(`Managed data path still exists after cleanup: ${targetPath}`);
+    }
+  });
 
   return {
     ok: failures.length === 0,

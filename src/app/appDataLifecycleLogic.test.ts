@@ -197,10 +197,10 @@ test('testdatain promotes current demo core or generates real asset data only', 
   assert.equal(handlerSource.includes('return promoteCurrentDemoCoreToRealData();'), true);
   assert.equal(handlerSource.includes('exitExampleModeSession()'), false);
   assert.equal(handlerSource.includes('createTestDataInRealAppData(createExampleData)'), true);
-  assert.equal(handlerSource.includes('saveAppDataWithExternalModificationCheck('), true);
-  assert.equal(handlerSource.includes('allowEmptyHistoryOverwrite: true'), true);
-  assert.equal(handlerSource.includes('setAppData(nextAppData)'), true);
-  assert.equal(handlerSource.includes('setIsExampleMode(false)'), true);
+  assert.equal(handlerSource.includes('commitInitializedPersistenceSnapshot({'), true);
+  assert.equal(handlerSource.includes('createCoreDocumentFromAppData(nextAppData)'), true);
+  assert.equal(handlerSource.includes('completed: true'), true);
+  assert.equal(handlerSource.includes('applyRuntimePersistenceSnapshot(snapshot, false)'), true);
   assert.equal(handlerSource.includes('applyLifecycleSnapshot'), false);
   assert.equal(handlerSource.includes('applyBackupState'), false);
   assert.equal(handlerSource.includes('backupRecords'), false);

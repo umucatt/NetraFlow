@@ -9,6 +9,7 @@ type DesktopPlatform = 'win32' | 'darwin' | 'linux';
 
 type ElectronWindowApi = {
   normalAppFirstFrameReady?: () => void;
+  normalAppStartupStateResolved?: (state: string) => void;
   minimize: () => void;
   toggleMaximize: () => void;
   maximize: () => Promise<boolean>;
@@ -18,6 +19,8 @@ type ElectronWindowApi = {
   cancelCloseRequest?: () => void;
   forceClose?: () => void;
   clearAllLocalDataAndQuit?: () => Promise<void>;
+  notifyClearingPageReady?: () => void;
+  onEnterClearingPage?: (callback: () => void) => () => void;
   clearLinuxAppImageSandboxConsent?: () => Promise<void>;
   isMaximized: () => Promise<boolean>;
   openExternalUrl?: (url: string) => Promise<void>;
@@ -46,6 +49,8 @@ type ElectronWindowApi = {
 };
 
 type NetraFlowPersistenceBridge = {
+  readSnapshot?: () => unknown;
+  commitInitializedSnapshot?: (documents: unknown) => unknown;
   readCoreDocument: () => unknown;
   writeCoreDocument: (
     document: unknown,
