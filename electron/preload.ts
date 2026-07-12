@@ -87,12 +87,54 @@ const unwrapPersistenceWriteResponse = (response: PersistenceWriteResponse) => {
   }
 };
 
+const isLinuxAppImage =
+  process.platform === 'linux' && process.env.NF_PACKAGE_KIND === 'appimage';
+const isSandboxConsentBootstrap =
+  isLinuxAppImage &&
+  (process.argv.includes('--nf-sandbox-consent-bootstrap') ||
+    (process.argv.includes('--no-sandbox') &&
+      process.env.NF_UNSANDBOXED_AUTHORIZED !== '1')) &&
+  process.env.NF_BOOTSTRAP_COMPLETE !== '1';
+const isUnsandboxedAppImage = isLinuxAppImage && process.argv.includes('--no-sandbox');
+
 contextBridge.exposeInMainWorld('appInfo', {
   name: 'NetraFlow',
-  platform: process.platform
+  platform: process.platform,
+  packageKind: isLinuxAppImage ? 'appimage' : 'other',
+  sandboxConsentBootstrap: isSandboxConsentBootstrap,
+  chromiumSandboxEnabled: !isUnsandboxedAppImage,
+  initialTheme: (() => {
+    const value = process.argv.find((argument) => argument.startsWith('--nf-initial-theme='))
+      ?.slice('--nf-initial-theme='.length);
+    return value === 'dark' ? 'dark' : value === 'light' ? 'light' : undefined;
+  })()
 });
 
+if (isSandboxConsentBootstrap) {
+  type BootstrapTheme = 'light' | 'dark';
+  const themeArgument = process.argv.find((argument) => argument.startsWith('--nf-bootstrap-theme='));
+  const themeValue = themeArgument?.slice('--nf-bootstrap-theme='.length);
+  const initialTheme: BootstrapTheme = themeValue === 'dark' ? 'dark' : 'light';
+  contextBridge.exposeInMainWorld('sandboxBootstrap', {
+    initialTheme,
+    onThemeChanged: (listener: (theme: BootstrapTheme) => void) => {
+      const handleThemeChanged = (_event: IpcRendererEvent, theme: unknown) => {
+        if (theme === 'light' || theme === 'dark') listener(theme);
+      };
+      ipcRenderer.on('sandbox-bootstrap:theme-changed', handleThemeChanged);
+      return () => ipcRenderer.removeListener('sandbox-bootstrap:theme-changed', handleThemeChanged);
+    },
+    quit: () => ipcRenderer.invoke('sandbox-bootstrap:quit') as Promise<void>,
+    consent: () => ipcRenderer.invoke('sandbox-bootstrap:consent') as Promise<{
+      ok: boolean;
+      message?: string;
+    }>,
+    firstFrameReady: () => ipcRenderer.send('bootstrap-first-frame-ready')
+  });
+} else {
+
 const electronAPI = {
+  normalAppFirstFrameReady: () => ipcRenderer.send('normal-app-first-frame-ready'),
   minimize: () => ipcRenderer.send('window:minimize'),
   toggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
   maximize: () => ipcRenderer.invoke('window:maximize') as Promise<boolean>,
@@ -103,6 +145,8 @@ const electronAPI = {
   forceClose: () => ipcRenderer.send('window:force-close'),
   clearAllLocalDataAndQuit: () =>
     ipcRenderer.invoke('app:clear-all-local-data-and-quit') as Promise<void>,
+  clearLinuxAppImageSandboxConsent: () =>
+    ipcRenderer.invoke('app:clear-linux-appimage-sandbox-consent') as Promise<void>,
   isMaximized: () => ipcRenderer.invoke('window:is-maximized') as Promise<boolean>,
   openExternalUrl: (url: string) =>
     ipcRenderer.invoke('app:open-external-url', url) as Promise<void>,
@@ -266,3 +310,4 @@ const netraflowPersistence = {
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
 contextBridge.exposeInMainWorld('electronWindow', electronAPI);
 contextBridge.exposeInMainWorld('netraflowPersistence', netraflowPersistence);
+}

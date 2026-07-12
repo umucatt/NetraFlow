@@ -8,6 +8,7 @@ declare module '*.svg?raw' {
 type DesktopPlatform = 'win32' | 'darwin' | 'linux';
 
 type ElectronWindowApi = {
+  normalAppFirstFrameReady?: () => void;
   minimize: () => void;
   toggleMaximize: () => void;
   maximize: () => Promise<boolean>;
@@ -17,6 +18,7 @@ type ElectronWindowApi = {
   cancelCloseRequest?: () => void;
   forceClose?: () => void;
   clearAllLocalDataAndQuit?: () => Promise<void>;
+  clearLinuxAppImageSandboxConsent?: () => Promise<void>;
   isMaximized: () => Promise<boolean>;
   openExternalUrl?: (url: string) => Promise<void>;
   openUserDataDirectory?: () => Promise<void>;
@@ -87,6 +89,17 @@ interface Window {
     name: string;
     platform: DesktopPlatform;
     version?: string;
+    packageKind?: 'appimage' | 'other';
+    sandboxConsentBootstrap?: boolean;
+    chromiumSandboxEnabled?: boolean;
+    initialTheme?: 'light' | 'dark';
+  };
+  sandboxBootstrap?: {
+    initialTheme: 'light' | 'dark';
+    onThemeChanged: (listener: (theme: 'light' | 'dark') => void) => () => void;
+    quit: () => Promise<void>;
+    consent: () => Promise<{ ok: boolean; message?: string }>;
+    firstFrameReady: () => void;
   };
   electronAPI: ElectronWindowApi;
   electronWindow?: ElectronWindowApi;

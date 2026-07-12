@@ -12,7 +12,7 @@ test('development startup keeps Vite, wait-on, and Electron on the same strict p
   const packageJson = JSON.parse(readProjectFile('package.json')) as {
     scripts?: Record<string, string>;
   };
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const devLauncherSource = readProjectFile('scripts/dev.mjs');
 
   const devScript = packageJson.scripts?.dev ?? '';
@@ -60,7 +60,7 @@ test('development startup keeps Vite, wait-on, and Electron on the same strict p
 });
 
 test('theme bootstrap reads formal settings and state without storage writes', () => {
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const start = mainSource.indexOf('const readThemeBootstrapSettings = () => {');
   const end = mainSource.indexOf('const getSystemThemeForBootstrap', start);
   const themeSource = mainSource.slice(start, end);
@@ -75,7 +75,7 @@ test('theme bootstrap reads formal settings and state without storage writes', (
 });
 
 test('main exposes formal persistence IPC and removes old storage IPC', () => {
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const persistenceIpcSource = readProjectFile('electron/persistenceIpc.ts');
 
   assert.equal(mainSource.includes('registerPersistenceHandlers(persistenceStore, {'), true);
@@ -99,7 +99,7 @@ test('main exposes formal persistence IPC and removes old storage IPC', () => {
 });
 
 test('main creates one StorageLayout before wiring persistence and runtime paths', () => {
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const layoutDeclaration = mainSource.indexOf('const storageLayout = createStorageLayout({');
   const persistenceRootCall = mainSource.indexOf(
     'const persistenceRoots = createPersistenceEnvironmentRoots(storageLayout);'

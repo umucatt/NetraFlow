@@ -25,6 +25,7 @@ type DialogShellProps = {
   backdropStyle?: CSSProperties;
   as?: 'section' | 'form';
   role?: 'dialog' | 'alertdialog';
+  embedded?: boolean;
   onKeyDown?: KeyboardEventHandler<HTMLElement>;
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
 };
@@ -47,7 +48,8 @@ function DialogShell({
   as = 'section',
   role = 'dialog',
   onKeyDown,
-  onSubmit
+  onSubmit,
+  embedded = false
 }: DialogShellProps) {
   const generatedTitleId = useId();
   const resolvedTitleId = titleId ?? generatedTitleId;
@@ -99,6 +101,22 @@ function DialogShell({
       {actions ? <div className={actionsClassName}>{actions}</div> : null}
     </>
   );
+
+  if (embedded && as === 'section') {
+    return (
+      <section
+        role={role}
+        aria-modal="true"
+        aria-labelledby={resolvedTitleId}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={onKeyDown}
+        className={resolvedClassName}
+        style={cardStyle}
+      >
+        {content}
+      </section>
+    );
+  }
 
   return (
     <div

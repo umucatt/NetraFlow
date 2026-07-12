@@ -53,7 +53,7 @@ test('renderer stops persistence before invoking the pathless main cleanup chann
 });
 
 test('main owns destructive state, deletion paths, session cleanup, and application exit', () => {
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const persistenceIpcSource = readProjectFile('electron/persistenceIpc.ts');
   const cleanupModuleSource = readProjectFile('electron/localDataCleanup.ts');
   const handlerSource = mainSource.slice(

@@ -316,7 +316,7 @@ test('page surfaces and right panel page frames stay scoped', () => {
 
 test('about GitHub link uses the shared external IPC allowlist without user-facing failure toast', () => {
   const appSource = readProjectFile('src/App.tsx');
-  const electronMainSource = readProjectFile('electron/main.ts');
+  const electronMainSource = readProjectFile('electron/mainApplication.ts');
   const openGithubBlock = appSource.slice(
     appSource.indexOf('const openGithubReleases'),
     appSource.indexOf('const formatMoney')
@@ -767,7 +767,7 @@ test('theme bootstrap resolves first frame before React mounts', () => {
     'src/app/globalSettings/globalSettingsLogic.ts'
   );
   const indexSource = readProjectFile('index.html');
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const bootstrapSource = indexSource.slice(
     indexSource.indexOf('(function ()'),
     indexSource.indexOf('</script>')
@@ -827,7 +827,7 @@ test('theme bootstrap resolves first frame before React mounts', () => {
     mainSource.includes("themeMode === 'system' ? getSystemThemeForBootstrap() : themeMode"),
     true
   );
-  assert.equal(mainSource.includes('backgroundColor: getBrowserWindowBackgroundColor()'), true);
+  assert.equal(mainSource.includes('backgroundColor: initialTheme.backgroundColor'), true);
   ['#f6f3ea', '#171a1f', '#fff6fa', '#18141b'].forEach((color) => {
     assert.equal(bootstrapSource.includes(color), true);
     assert.equal(mainSource.includes(color), true);
@@ -856,7 +856,7 @@ test('formal persistence owns renderer data and old storage bridge is removed', 
   const rollupControllerSource = readProjectFile(
     'src/features/rollupImport/useRollupImportController.ts'
   );
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const storageLayoutSource = readProjectFile('electron/storageLayout.ts');
   const preloadSource = readProjectFile('electron/preload.ts');
   const indexSource = readProjectFile('index.html');
@@ -930,7 +930,7 @@ test('formal persistence owns renderer data and old storage bridge is removed', 
 });
 
 test('Electron renderer sandbox keeps the preload bridge boundary narrow', () => {
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const preloadSource = readProjectFile('electron/preload.ts');
   const typesSource = readProjectFile('src/vite-env.d.ts');
   const rendererBridgeSource = [
@@ -962,7 +962,7 @@ test('Electron renderer sandbox keeps the preload bridge boundary narrow', () =>
   assert.equal(preloadSource.includes("contextBridge.exposeInMainWorld('electron'"), false);
   assert.equal(preloadSource.includes('remote'), false);
   assert.equal(preloadSource.includes('platform: process.platform'), true);
-  assert.equal(preloadSource.match(/process\./g)?.length, 1);
+  assert.equal(preloadSource.match(/process\./g)?.length, 10);
   assert.equal(preloadSource.includes("require('electron')"), true);
   assert.equal(preloadSource.includes("require('node:"), false);
   assert.equal(preloadSource.includes('window.require'), false);
@@ -975,7 +975,7 @@ test('Electron renderer sandbox keeps the preload bridge boundary narrow', () =>
 });
 
 test('desktop platforms keep Windows custom controls separate from native macOS and Linux frames', () => {
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const windowPlatformOptionsSource = readProjectFile('electron/windowPlatformOptions.ts');
   const preloadSource = readProjectFile('electron/preload.ts');
   const viteEnvSource = readProjectFile('src/vite-env.d.ts');
@@ -1214,7 +1214,7 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
   const confirmDialogSource = readProjectFile('src/components/dialogs/ConfirmDialog.tsx');
   const dialogShellSource = readProjectFile('src/components/dialogs/DialogShell.tsx');
   const stylesSource = readProjectStyles();
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const storageLayoutSource = readProjectFile('electron/storageLayout.ts');
   const afterPackSource = readProjectFile('scripts/after-pack-installer.mjs');
   const packageInstallerScriptSource = readProjectFile('scripts/package-installer.mjs');
@@ -1436,15 +1436,16 @@ test('toast controller and viewport use one fixed bottom-right edge slide style'
   assert.match(toastViewportBlock, /bottom: 30px;/);
   assert.match(toastViewportBlock, /z-index: 120;/);
   assert.match(toastViewportBlock, /justify-items: end;/);
-  assert.match(toastViewportBlock, /width: 188px;/);
+  assert.match(toastViewportBlock, /width: max-content;/);
   assert.match(toastViewportBlock, /max-width: calc\(100vw - 44px\);/);
   assert.match(toastViewportBlock, /pointer-events: none;/);
 
   assert.match(toastItemBlock, /place-items: center;/);
-  assert.match(toastItemBlock, /width: 188px;/);
+  assert.match(toastItemBlock, /width: max-content;/);
   assert.match(toastItemBlock, /max-width: calc\(100vw - 44px\);/);
   assert.match(toastItemBlock, /text-align: center;/);
   assert.match(toastItemBlock, /overflow-wrap: break-word;/);
+  assert.match(toastItemBlock, /white-space: nowrap;/);
   assert.match(toastItemBlock, /border-right: 0;/);
   assert.match(toastItemBlock, /border-radius: var\(--radius-section\) 0 0 var\(--radius-section\);/);
   assert.match(toastItemBlock, /background: color-mix\(in srgb, var\(--panel-bg-strong\) 92%, var\(--surface-muted\)\);/);
@@ -1454,8 +1455,8 @@ test('toast controller and viewport use one fixed bottom-right edge slide style'
   assert.equal(toastViewportSource.includes('minWidth'), false);
   assert.equal(toastViewportBlock.includes('min-width: 132px;'), false);
   assert.equal(toastItemBlock.includes('min-width: 132px;'), false);
-  assert.equal(toastViewportBlock.includes('width: fit-content;'), false);
-  assert.equal(toastItemBlock.includes('width: fit-content;'), false);
+  assert.equal(toastViewportBlock.includes('width: 188px;'), false);
+  assert.equal(toastItemBlock.includes('width: 188px;'), false);
   assert.equal(toastViewportBlock.includes('min(320px, calc(100vw - 44px))'), false);
   assert.equal(toastItemBlock.includes('min(320px, calc(100vw - 44px))'), false);
   assert.equal(toastItemBlock.includes('rgba(22, 163, 74'), false);
@@ -1885,7 +1886,7 @@ test('portable Windows package script creates an isolated zip bundle without ins
   const packageJson = JSON.parse(readProjectFile('package.json')) as {
     scripts?: { 'dist:portable'?: string };
   };
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const storageLayoutSource = readProjectFile('electron/storageLayout.ts');
   const portableScriptSource = readProjectFile('scripts/package-portable.mjs');
 
@@ -2147,7 +2148,7 @@ test('Windows executable icon resources use the local mature rcedit path only', 
 });
 
 test('Windows taskbar lock uses Jump List IPC without tray or background hiding', () => {
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const productLockSource = readProjectFile('electron/productInstanceLock.ts');
   const preloadSource = readProjectFile('electron/preload.ts');
   const appSource = readProjectFile('src/App.tsx');
@@ -2908,7 +2909,7 @@ test('popup and system prompt copy removes sentence periods without touching dot
   const rollupControllerSource = readProjectFile(
     'src/features/rollupImport/useRollupImportController.ts'
   );
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const packageJson = JSON.parse(readProjectFile('package.json')) as { version?: string };
 
   const popupSources = [

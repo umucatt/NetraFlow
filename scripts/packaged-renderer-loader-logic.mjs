@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 
 const hasAppGetAppPath = (source) => /app\s*\.\s*getAppPath\s*\(/.test(source);
 
@@ -76,7 +77,16 @@ export const validatePackagedRendererLoader = (source) => {
 
 export const assertPackagedRendererLoader = (mainPath) => {
   const mainSource = readFileSync(mainPath, 'utf8');
-  const errors = validatePackagedRendererLoader(mainSource);
+  const applicationPath = path.join(path.dirname(mainPath), 'mainApplication.js');
+  const usesControlledDispatcher = /import\(\s*['"]\.\/mainApplication\.js['"]\s*\)/.test(mainSource);
+  const loaderSource = usesControlledDispatcher && existsSync(applicationPath)
+    ? readFileSync(applicationPath, 'utf8')
+    : mainSource;
+  const errors = validatePackagedRendererLoader(loaderSource);
+
+  if (existsSync(applicationPath) && !usesControlledDispatcher) {
+    errors.push('main dispatcher does not load mainApplication.js');
+  }
 
   if (errors.length > 0) {
     throw new Error(

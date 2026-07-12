@@ -43,6 +43,7 @@ type UseAppDataLifecycleControllerOptions = {
   writeTestDataToRealData: () => boolean;
   showConfirmationDialog: (request: AppCallbackConfirmationDialogRequest) => void;
   clearAllLocalDataAndQuit: () => void;
+  clearLinuxAppImageSandboxConsent?: () => Promise<void>;
 };
 
 export function useAppDataLifecycleController({
@@ -68,7 +69,8 @@ export function useAppDataLifecycleController({
   exitExampleModeSession,
   writeTestDataToRealData,
   showConfirmationDialog,
-  clearAllLocalDataAndQuit
+  clearAllLocalDataAndQuit,
+  clearLinuxAppImageSandboxConsent
 }: UseAppDataLifecycleControllerOptions) {
   const [resetConfirmation, setResetConfirmation] =
     useState<AppDataResetConfirmation>(null);
@@ -200,6 +202,7 @@ export function useAppDataLifecycleController({
     }
 
     if (action === 'settings') {
+      void clearLinuxAppImageSandboxConsent?.();
       resetUserConfiguration();
       return;
     }
