@@ -72,7 +72,7 @@ test('close-time core read failure uses the fatal surface instead of force-closi
 });
 
 test('product single instance lock is product-wide and acquired before persistence setup', () => {
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const productLockSource = readProjectFile('electron/productInstanceLock.ts');
   const lockIndex = mainSource.indexOf('const gotProductInstanceLock = await productInstanceCoordinator.acquire();');
   const rootsIndex = mainSource.indexOf(
@@ -347,7 +347,7 @@ test('ordinary core saves use one trailing coalescing timer and explicit flush b
 
 test('close-before uses a single renderer state machine and one-shot main allow close', () => {
   const appSource = readProjectFile('src/App.tsx');
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const closeBeforeControllerSource = readProjectFile('src/app/closeBeforeController.ts');
   const closeBeforeWindowSource = readProjectFile('electron/closeBeforeWindowState.ts');
   const preloadSource = readProjectFile('electron/preload.ts');
@@ -380,7 +380,7 @@ test('close-before uses a single renderer state machine and one-shot main allow 
 });
 
 test('macOS app quit waits for close approval and defers persistence cleanup until will-quit', () => {
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const shutdownStateSource = readProjectFile('electron/appShutdownState.ts');
   const beforeQuitStart = mainSource.indexOf("app.on('before-quit', (event) => {");
   const willQuitStart = mainSource.indexOf("app.on('will-quit', () => {");

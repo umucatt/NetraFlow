@@ -24,6 +24,25 @@ function AboutNetraFlowPanel({
   onStartVersionLongPress,
   onClearVersionLongPress
 }: AboutNetraFlowPanelProps) {
+  const showSandboxStatus =
+    window.appInfo?.platform === 'linux' &&
+      window.appInfo?.packageKind === 'appimage' &&
+      window.appInfo?.sandboxConsentBootstrap !== true &&
+      window.appInfo?.chromiumSandboxEnabled === false;
+
+  const clearSandboxConsent = async () => {
+    try {
+      await window.electronAPI?.clearLinuxAppImageSandboxConsent?.();
+      window.dispatchEvent(new CustomEvent('netraflow:toast', {
+        detail: { message: '下次启动将重新尝试启用沙盒', tone: 'info' }
+      }));
+    } catch {
+      window.dispatchEvent(new CustomEvent('netraflow:toast', {
+        detail: { message: '无法清除兼容模式授权', tone: 'error' }
+      }));
+    }
+  };
+
   return (
     <section className="about-netraflow">
       <div className="about-netraflow__summary">
@@ -81,6 +100,16 @@ function AboutNetraFlowPanel({
           </button>
         </div>
       </section>
+
+      {showSandboxStatus ? (
+        <button
+          type="button"
+          className="about-netraflow__sandbox-status"
+          onClick={() => void clearSandboxConsent()}
+        >
+          Chromium 沙盒未启用
+        </button>
+      ) : null}
 
     </section>
   );

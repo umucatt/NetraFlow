@@ -13,7 +13,7 @@ test('the macOS About panel has one visible version and no extra copyright field
 });
 
 test('the main process installs the compact native macOS About panel', () => {
-  const mainSource = readFileSync('electron/main.ts', 'utf8');
+  const mainSource = readFileSync('electron/mainApplication.ts', 'utf8');
 
   assert.match(mainSource, /app\.setAboutPanelOptions\(createMacosAboutPanelOptions\(app\.getName\(\), app\.getVersion\(\)\)\)/);
   assert.equal(mainSource.includes('copyright:'), false);

@@ -18,3 +18,13 @@ export const assertLinuxX64BuildHost = ({
 
 export const getAppImageArtifactName = ({ productName, version }) =>
   `${productName}_${version}_x86_64.AppImage`;
+
+export const APPIMAGE_DESKTOP_ENTRY = `[Desktop Entry]
+Name=NetraFlow
+Exec=AppRun %U
+Terminal=false
+Type=Application
+Icon=netraflow
+Categories=Utility;
+StartupWMClass=NetraFlow
+`;

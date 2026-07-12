@@ -10,7 +10,7 @@
   z-index: 120;
   display: grid;
   justify-items: end;
-  width: 188px;
+  width: max-content;
   max-width: calc(100vw - 44px);
   pointer-events: none;
 }
@@ -18,7 +18,7 @@
 .toast-viewport__item {
   display: grid;
   place-items: center;
-  width: 188px;
+  width: max-content;
   max-width: calc(100vw - 44px);
   min-height: 42px;
   padding: 10px 14px;
@@ -34,7 +34,13 @@
   line-height: 1.38;
   text-align: center;
   overflow-wrap: break-word;
+  white-space: nowrap;
   animation: nf-toast-edge-lifecycle 2500ms ease-out forwards;
+}
+
+.sandbox-compatibility-gate {
+  min-height: 100%;
+  background: var(--app-bg);
 }
 
 @keyframes nf-toast-edge-lifecycle {
@@ -1828,6 +1834,24 @@
 .about-netraflow__info-icon {
   width: 20px;
   height: 20px;
+}
+
+.about-netraflow__sandbox-status {
+  justify-self: start;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.about-netraflow__sandbox-status:hover,
+.about-netraflow__sandbox-status:focus-visible {
+  color: var(--text-main);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .settings-navigation-panel {

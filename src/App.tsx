@@ -1188,6 +1188,51 @@ function App() {
 
   const appFocusRestoreRef = useRef<HTMLElement | null>(null);
 
+  useEffect(() => {
+    if (
+      window.appInfo?.packageKind !== 'appimage' ||
+      window.appInfo?.platform !== 'linux' ||
+      !window.electronAPI?.normalAppFirstFrameReady
+    ) return;
+
+    let cancelled = false;
+    let frame = 0;
+    const waitForFinalLayout = async () => {
+      if (document.fonts?.ready) await document.fonts.ready;
+      const inspect = () => {
+        if (cancelled) return;
+        const frameElement = document.querySelector<HTMLElement>('.window-frame');
+        const shell = document.querySelector<HTMLElement>('.app-shell');
+        const left = shell?.querySelector<HTMLElement>('.left-browse-panel');
+        const right = shell?.querySelector<HTMLElement>('.right-action-panel');
+        const frameRect = frameElement?.getBoundingClientRect();
+        const shellRect = shell?.getBoundingClientRect();
+        const leftRect = left?.getBoundingClientRect();
+        const rightRect = right?.getBoundingClientRect();
+        const hasFinalTwoColumnLayout = Boolean(
+          frameRect && shellRect && leftRect && rightRect &&
+          frameRect.width > 0 && frameRect.height > 0 &&
+          shellRect.width > 0 && shellRect.height > 0 &&
+          leftRect.width > 0 && rightRect.width > 0 &&
+          Math.abs(leftRect.left - rightRect.left) > 1
+        );
+        if (!hasFinalTwoColumnLayout) {
+          frame = requestAnimationFrame(inspect);
+          return;
+        }
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (!cancelled) window.electronAPI.normalAppFirstFrameReady?.();
+        }));
+      };
+      frame = requestAnimationFrame(inspect);
+    };
+    void waitForFinalLayout();
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
+  }, []);
+
   const mainContentRef = useRef<HTMLElement | null>(null);
 
   const leftLayerPanelRef = useRef<HTMLElement | null>(null);
@@ -1408,6 +1453,18 @@ function App() {
     useState<GlobalSettingsSection>('appearance');
 
   const { toastMessages, showToast, dismissToast } = useToastController();
+
+  useEffect(() => {
+    const handleToast = (event: Event) => {
+      const detail = (event as CustomEvent<{ message?: unknown; tone?: unknown }>).detail;
+      if (typeof detail?.message !== 'string') {
+        return;
+      }
+      showToast(detail.message, detail.tone === 'error' || detail.tone === 'success' ? detail.tone : 'info');
+    };
+    window.addEventListener('netraflow:toast', handleToast);
+    return () => window.removeEventListener('netraflow:toast', handleToast);
+  }, [showToast]);
 
   const showCoreIntegrityPrompt = (pendingSave: AppCoreSaveRequest | null) => {
     closeConfirmationDialog();
@@ -3416,7 +3473,9 @@ function App() {
     exitExampleModeSession,
     writeTestDataToRealData,
     showConfirmationDialog,
-    clearAllLocalDataAndQuit
+    clearAllLocalDataAndQuit,
+    clearLinuxAppImageSandboxConsent: () =>
+      window.electronAPI?.clearLinuxAppImageSandboxConsent?.() ?? Promise.resolve()
   });
 
 

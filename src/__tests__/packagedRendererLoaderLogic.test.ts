@@ -1,13 +1,14 @@
 /// <reference types="node" />
 
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
 type PackagedRendererLoaderModule = {
   validatePackagedRendererLoader: (source: string) => string[];
+  assertPackagedRendererLoader: (mainPath: string) => void;
 };
 
 const projectRootPath = process.cwd();
@@ -148,7 +149,7 @@ test('packaged renderer loader contract rejects packaged dev-server fallback', a
   );
 });
 
-test('current generated dist-electron main passes packaged renderer loader contract', async (t) => {
+test('current generated dist-electron dispatcher passes packaged renderer loader contract', async (t) => {
   const generatedMainPath = path.join(projectRootPath, 'dist-electron', 'main.js');
 
   if (!existsSync(generatedMainPath)) {
@@ -156,8 +157,6 @@ test('current generated dist-electron main passes packaged renderer loader contr
     return;
   }
 
-  const { validatePackagedRendererLoader } = await loadPackagedRendererLoaderLogic();
-  const generatedMainSource = readFileSync(generatedMainPath, 'utf8');
-
-  assert.deepEqual(validatePackagedRendererLoader(generatedMainSource), []);
+  const { assertPackagedRendererLoader } = await loadPackagedRendererLoaderLogic();
+  assert.doesNotThrow(() => assertPackagedRendererLoader(generatedMainPath));
 });
