@@ -104,33 +104,6 @@ const rollbackGroupDetailRecordForTrend = (
   setGroupDetailStateAmount(state, group, record, record.beforeAmount);
 };
 
-const getGroupDetailStateAtDate = (
-  group: AssetGroupWithAccounts,
-  currentState: Map<string, { label: string; amount: number }>,
-  recordsByTimeDesc: Array<{ record: HistoryRecord; timestamp: number; index: number }>,
-  date: string
-) => {
-  const state = new Map(currentState);
-  const cutoff = getDateEndTimestamp(date);
-
-  recordsByTimeDesc.forEach((entry) => {
-    if (entry.timestamp > cutoff) {
-      rollbackGroupDetailRecordForTrend(
-        state,
-        group,
-        entry.record,
-        recordsByTimeDesc.some(
-          (candidate) =>
-            candidate.record.accountId === entry.record.accountId &&
-            candidate.timestamp <= cutoff
-        )
-      );
-    }
-  });
-
-  return state;
-};
-
 export const deriveGroupDetailTrendData = (
   group: AssetGroupWithAccounts,
   history: HistoryRecord[],
@@ -175,9 +148,39 @@ export const deriveGroupDetailTrendData = (
     }))
     .filter((entry) => entry.timestamp > 0)
     .sort((left, right) => right.timestamp - left.timestamp || left.index - right.index);
-  const dailyStates = dates.map((date) =>
-    getGroupDetailStateAtDate(group, currentState, recordsByTimeDesc, date)
-  );
+  const earliestTimestampByAccountId = new Map<string, number>();
+
+  recordsByTimeDesc.forEach(({ record, timestamp }) => {
+    const current = earliestTimestampByAccountId.get(record.accountId);
+    if (current === undefined || timestamp < current) {
+      earliestTimestampByAccountId.set(record.accountId, timestamp);
+    }
+  });
+
+  const state = new Map(currentState);
+  const stateByDate = new Map<string, Map<string, { label: string; amount: number }>>();
+  let recordIndex = 0;
+
+  [...dates].reverse().forEach((date) => {
+    const cutoff = getDateEndTimestamp(date);
+
+    while (
+      recordIndex < recordsByTimeDesc.length &&
+      recordsByTimeDesc[recordIndex]!.timestamp > cutoff
+    ) {
+      const entry = recordsByTimeDesc[recordIndex]!;
+      rollbackGroupDetailRecordForTrend(
+        state,
+        group,
+        entry.record,
+        (earliestTimestampByAccountId.get(entry.record.accountId) ?? Infinity) <= cutoff
+      );
+      recordIndex += 1;
+    }
+
+    stateByDate.set(date, new Map(state));
+  });
+  const dailyStates = dates.map((date) => stateByDate.get(date) ?? new Map());
   const registry = getAccountColorRegistry(group, history);
   const registryById = new Map(registry.map((item) => [item.id, item]));
   const accountIds = new Set<string>();

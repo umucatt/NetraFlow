@@ -1,0 +1,8 @@
+# NetraFlow only needs permission to create the user namespace used by the
+# Chromium sandbox. All other access remains unconfined.
+
+profile netraflow /opt/NetraFlow/netraflow flags=(unconfined) {
+  userns,
+
+  include if exists <local/opt.NetraFlow.netraflow>
+}

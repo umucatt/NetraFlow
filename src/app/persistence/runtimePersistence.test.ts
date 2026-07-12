@@ -20,6 +20,7 @@ import type {
 } from './persistenceDocuments';
 import {
   createCoreDocumentFromAppData,
+  commitInitializedPersistenceSnapshot,
   createRuntimeGlobalSettings,
   createSecurityDocumentFromRuntime,
   createSettingsDocumentFromRuntime,
@@ -186,7 +187,8 @@ test('runtime persistence validates demo environment transitions', () => {
       settings: createDefaultSettingsDocument(),
       state: createDefaultStateDocument(),
       security: createDefaultSecurityDocument(),
-      coreProtection: { enabled: false, locked: false }
+      coreProtection: { enabled: false, locked: false },
+      documentExists: { core: true, settings: true, state: true, security: true }
     };
     const entered = enterDemoPersistenceEnvironment(demoSnapshot);
     const exited = exitDemoPersistenceEnvironment();
@@ -207,4 +209,100 @@ test('runtime persistence validates demo core promotion transition', () => {
     assert.deepEqual(promoted.snapshot.security, createDefaultSecurityDocument());
     assert.deepEqual(promoted.cleanup, { ok: true, removed: true });
   });
+});
+
+test('startup prefers one consistent snapshot bridge read', () => {
+  const previousWindow = (globalThis as unknown as { window?: unknown }).window;
+  let snapshotReads = 0;
+  (globalThis as unknown as { window?: unknown }).window = {
+    netraflowPersistence: {
+      readSnapshot: () => {
+        snapshotReads += 1;
+        return {
+          ok: true,
+          snapshot: {
+            core: coreDocument,
+            settings: createDefaultSettingsDocument(),
+            state: createDefaultStateDocument(),
+            security: createDefaultSecurityDocument(),
+            coreProtection: { enabled: false, locked: false },
+            documentExists: { core: true, settings: false, state: true, security: false },
+            documentStatus: { core: 'valid', settings: 'missing', state: 'valid', security: 'missing' }
+          }
+        };
+      },
+      readCoreDocument: () => assert.fail('individual core read must not run'),
+      readSettingsDocument: () => assert.fail('individual settings read must not run'),
+      readStateDocument: () => assert.fail('individual state read must not run'),
+      readSecurityDocument: () => assert.fail('individual security read must not run')
+    }
+  };
+
+  try {
+    const snapshot = readRuntimePersistenceSnapshot();
+    assert.equal(snapshotReads, 1);
+    assert.equal(snapshot.documentStatus?.core, 'valid');
+  } finally {
+    (globalThis as unknown as { window?: unknown }).window = previousWindow;
+  }
+});
+
+test('invalid consistent snapshot is rejected instead of normalized to onboarding', () => {
+  const previousWindow = (globalThis as unknown as { window?: unknown }).window;
+  (globalThis as unknown as { window?: unknown }).window = {
+    netraflowPersistence: {
+      readSnapshot: () => ({
+        ok: true,
+        snapshot: {
+          core: coreDocument,
+          settings: createDefaultSettingsDocument(),
+          state: createDefaultStateDocument(),
+          security: createDefaultSecurityDocument(),
+          documentStatus: { core: 'valid', settings: 'invalid', state: 'valid', security: 'valid' }
+        }
+      })
+    }
+  };
+
+  try {
+    assert.throws(() => readRuntimePersistenceSnapshot(), /PERSISTENCE_SNAPSHOT_INVALID/);
+  } finally {
+    (globalThis as unknown as { window?: unknown }).window = previousWindow;
+  }
+});
+
+test('test data commit sends core and completed state as one snapshot', () => {
+  const previousWindow = (globalThis as unknown as { window?: unknown }).window;
+  const state = {
+    ...createDefaultStateDocument(),
+    firstWelcome: { completed: true, pendingAfterClearAll: false }
+  };
+  let request: unknown;
+  (globalThis as unknown as { window?: unknown }).window = {
+    netraflowPersistence: {
+      commitInitializedSnapshot: (value: unknown) => {
+        request = value;
+        return {
+          ok: true,
+          snapshot: {
+            core: coreDocument,
+            settings: createDefaultSettingsDocument(),
+            state,
+            security: createDefaultSecurityDocument(),
+            coreProtection: { enabled: false, locked: false },
+            documentExists: { core: true, settings: false, state: true, security: false },
+            documentStatus: { core: 'valid', settings: 'missing', state: 'valid', security: 'missing' }
+          }
+        };
+      }
+    }
+  };
+
+  try {
+    const snapshot = commitInitializedPersistenceSnapshot({ core: coreDocument, state });
+    assert.deepEqual(request, { core: coreDocument, state });
+    assert.equal(snapshot.state.firstWelcome.completed, true);
+  } finally {
+    (globalThis as unknown as { window?: unknown }).window = previousWindow;
+  }
 });

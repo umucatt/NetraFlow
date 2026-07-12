@@ -1,11 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron';
 import fs from 'node:fs/promises';
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  type PathLike
-} from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, type PathLike } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -33,13 +28,24 @@ import { createMacosAboutPanelOptions } from './macosAboutPanel.js';
 import { createStorageLayout } from './storageLayout.js';
 import { getAppIconPath, getPlatformWindowOptions } from './windowPlatformOptions.js';
 import {
-  clearManagedLocalData,
   createManagedDataDeletionPlan,
   createSingleRunCleanupCoordinator,
   type ManagedDataDeletionTarget
 } from './localDataCleanup.js';
 import { clearLinuxAppImageUnsandboxedConsent } from './linuxAppImagePreferences.js';
 import { isLinuxAppImageRuntime } from './linuxAppImageRuntime.js';
+import { createPersistencePaths } from './persistencePaths.js';
+import {
+  recoverInterruptedSnapshotTransaction,
+  runPersistenceSnapshotTransaction
+} from './persistenceSnapshotTransaction.js';
+import {
+  createResetTransaction,
+  createRuntimePendingMarker,
+  invalidateAndDeleteUserdata,
+  isolateAndDeleteRuntime,
+  runStartupDeletePreflight
+} from './destructiveResetLifecycle.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,6 +56,18 @@ const BILIBILI_PROFILE_URL = 'https://space.bilibili.com/1738773145';
 const GITHUB_RELEASES_URL = 'https://github.com/umucatt/NetraFlow/releases';
 const ALLOWED_GITHUB_RELEASES_HOSTS = new Set(['github.com', 'www.github.com']);
 const JSON_INTEGRITY_ALGORITHM = 'SHA-256';
+const processStartTime = process.hrtime.bigint();
+let resetLogToFile = true;
+const writeResetLifecycleLog = (event: string, details: Record<string, unknown> = {}) => {
+  const elapsedMs = Number(process.hrtime.bigint() - processStartTime) / 1_000_000;
+  const payload = { event, elapsedMs: elapsedMs.toFixed(1), ...details };
+  appendValidationDiagnostic(event, { elapsedMs: elapsedMs.toFixed(1), ...details });
+  if (!resetLogToFile) {
+    console.error('[NetraFlow reset]', payload);
+    return;
+  }
+  console.info('[NetraFlow reset]', payload);
+};
 type ThemeMode = 'light' | 'dark' | 'system';
 type ResolvedTheme = 'light' | 'dark';
 type ThemeStyle = 'default' | 'nyaa';
@@ -75,6 +93,8 @@ const THEME_BOOTSTRAP_BACKGROUND_COLORS: Record<
 };
 let mainWindow: BrowserWindow | null = null;
 let pendingRendererLock = process.argv.includes('--lock');
+let pendingWindowActivation = false;
+let mainWindowFirstFrameReady = process.platform !== 'linux' || !app.isPackaged;
 const forceClosingWindows = new WeakSet<BrowserWindow>();
 let macosApplicationMenu: MacosApplicationMenuController | null = null;
 let rendererIsReadyForApplicationMenu = false;
@@ -253,7 +273,7 @@ const isMacosApplicationMenuLockEnabled = () =>
   rendererCanLockFromApplicationMenu &&
   !macosMenuLockRequestInProgress;
 let requestProductInstanceActivation = () => {
-  pendingRendererLock = true;
+  pendingWindowActivation = true;
 };
 
 app.setName(APP_NAME);
@@ -285,6 +305,7 @@ const storageLayout = createStorageLayout({
 
 const productInstanceCoordinator = createProductInstanceCoordinator({
   onActivate: () => requestProductInstanceActivation(),
+  getState: () => isDestructiveShutdown() ? 'resetting' : 'active',
   logger: console
 });
 
@@ -294,7 +315,11 @@ if (!gotProductInstanceLock) {
   app.exit(0);
 }
 
+await runStartupDeletePreflight(storageLayout, writeResetLifecycleLog);
+
 const persistenceRoots = createPersistenceEnvironmentRoots(storageLayout);
+
+recoverInterruptedSnapshotTransaction(createPersistencePaths(persistenceRoots.realRoot));
 
 const startupDemoCleanupResult = cleanupDemoDirectory(persistenceRoots);
 
@@ -370,6 +395,25 @@ const readPersistenceSnapshotFromStore = (store: PersistenceStore) => {
     );
   }
 
+  const invalidNonCore = [settings, state, security].find(
+    (result) => result.ok && !('locked' in result) && result.degraded === true
+  );
+
+  if (invalidNonCore && invalidNonCore.ok && !('locked' in invalidNonCore)) {
+    return createLifecycleError(
+      invalidNonCore.code ?? 'PERSISTENCE_READ_INVALID',
+      'A persistence document exists but is invalid.'
+    );
+  }
+
+  const anyDocumentExists = core.exists || settings.exists || state.exists || security.exists;
+  if (anyDocumentExists && (!core.exists || !state.exists)) {
+    return createLifecycleError(
+      'PERSISTENCE_SNAPSHOT_INCOMPLETE',
+      'The persistence snapshot is incomplete.'
+    );
+  }
+
   const coreProtection =
     'locked' in core
       ? {
@@ -390,9 +434,85 @@ const readPersistenceSnapshotFromStore = (store: PersistenceStore) => {
       settings: settings.document,
       state: state.document,
       security: security.document,
-      coreProtection
+      coreProtection,
+      documentExists: {
+        core: core.exists,
+        settings: settings.exists,
+        state: state.exists,
+        security: security.exists
+      },
+      documentStatus: {
+        core: core.exists ? 'valid' : 'missing',
+        settings: settings.exists ? 'valid' : 'missing',
+        state: state.exists ? 'valid' : 'missing',
+        security: security.exists ? 'valid' : 'missing'
+      }
     }
   };
+};
+
+const commitInitializedPersistenceSnapshot = (documents: unknown) => {
+  if (!isPlainObject(documents) || !isPlainObject(documents.state)) {
+    return createLifecycleError(
+      'PERSISTENCE_SCHEMA_INVALID',
+      'Initialized persistence snapshot is invalid.'
+    );
+  }
+
+  const firstWelcome = isPlainObject(documents.state.firstWelcome)
+    ? documents.state.firstWelcome
+    : null;
+  if (firstWelcome?.completed !== true || firstWelcome.pendingAfterClearAll === true) {
+    return createLifecycleError(
+      'PERSISTENCE_SCHEMA_INVALID',
+      'Initialized persistence snapshot must complete first welcome.'
+    );
+  }
+
+  const store = persistenceEnvironmentStore.getCurrentStore();
+  const previousCore = store.readCoreDocument();
+  const previousState = store.readStateDocument();
+
+  if (!previousCore.ok || !previousState.ok || 'locked' in previousState) {
+    return createLifecycleError(
+      'PERSISTENCE_READ_FAILED',
+      'Could not capture the previous persistence snapshot.'
+    );
+  }
+
+  const writeResult = runPersistenceSnapshotTransaction(
+    store.paths,
+    () => {
+      const coreWrite = store.writeCoreDocument(documents.core, {
+        allowExternalCoreOverwrite: true
+      });
+      if (!coreWrite.ok) {
+        return createLifecycleError(coreWrite.code, coreWrite.message);
+      }
+
+      const stateWrite = store.writeStateDocument(documents.state);
+      return stateWrite.ok
+        ? { ok: true as const }
+        : createLifecycleError(stateWrite.code, stateWrite.message);
+    },
+    (result) => result.ok
+  );
+  if (!writeResult.ok) {
+    return writeResult;
+  }
+
+  const snapshot = readPersistenceSnapshotFromStore(store);
+  if (!snapshot.ok) {
+    if (previousCore.exists && !('locked' in previousCore)) {
+      store.writeCoreDocument(previousCore.document, { allowExternalCoreOverwrite: true });
+    }
+    if (previousState.exists) {
+      store.writeStateDocument(previousState.document);
+    }
+    return snapshot;
+  }
+
+  return snapshot;
 };
 
 const writeDemoPersistenceDocuments = (documents: unknown) => {
@@ -607,6 +727,8 @@ const writeValidationPathDiagnostics = () => {
 
 writeValidationPathDiagnostics();
 registerPersistenceHandlers(persistenceStore, {
+  readSnapshot: () => readPersistenceSnapshotFromStore(persistenceStore),
+  commitInitializedSnapshot: commitInitializedPersistenceSnapshot,
   enterDemoEnvironment: enterDemoPersistenceEnvironment,
   exitDemoEnvironment: exitDemoPersistenceEnvironment,
   promoteDemoCoreToRealEnvironment: promoteDemoCoreToRealPersistenceEnvironment
@@ -633,6 +755,13 @@ const writePackagedMainLog = (message: string, details: Record<string, unknown> 
     console.error('Failed to write packaged main log:', error);
   }
 };
+
+const writeStartupStage = (stage: string) => {
+  const elapsedMs = Number(process.hrtime.bigint() - processStartTime) / 1_000_000;
+  writePackagedMainLog(`startup-stage ${stage}`, { elapsedMs: elapsedMs.toFixed(1) });
+};
+
+writeStartupStage('process-start');
 
 const isAllowedExternalUrl = (url: string) => {
   if (url === BILIBILI_PROFILE_URL) {
@@ -698,6 +827,35 @@ const sendRendererLock = (targetWindow: BrowserWindow) => {
   targetWindow.webContents.send('netraflow-lock');
 };
 
+const activateMainWindow = (targetWindow: BrowserWindow) => {
+  if (!mainWindowFirstFrameReady) {
+    pendingWindowActivation = true;
+    return;
+  }
+
+  if (targetWindow.isMinimized()) {
+    targetWindow.restore();
+  }
+
+  targetWindow.show();
+  targetWindow.focus();
+};
+
+const requestWindowActivation = () => {
+  if (isDestructiveShutdown() || isAppQuitInProgress()) {
+    return;
+  }
+
+  const targetWindow = mainWindow ?? BrowserWindow.getAllWindows()[0] ?? null;
+
+  if (!targetWindow) {
+    pendingWindowActivation = true;
+    return;
+  }
+
+  activateMainWindow(targetWindow);
+};
+
 const requestRendererLock = () => {
   if (isDestructiveShutdown() || isAppQuitInProgress()) {
     return;
@@ -707,6 +865,13 @@ const requestRendererLock = () => {
 
   if (!targetWindow) {
     pendingRendererLock = true;
+    pendingWindowActivation = true;
+    return;
+  }
+
+  if (!mainWindowFirstFrameReady) {
+    pendingRendererLock = true;
+    pendingWindowActivation = true;
     return;
   }
 
@@ -737,7 +902,7 @@ const requestMacosApplicationMenuSettings = () => {
   mainWindow.webContents.send('netraflow-open-settings');
 };
 
-requestProductInstanceActivation = requestRendererLock;
+requestProductInstanceActivation = requestWindowActivation;
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -746,8 +911,12 @@ if (!gotSingleInstanceLock) {
   app.quit();
 } else {
   app.on('second-instance', (_event, argv) => {
-    pendingRendererLock = pendingRendererLock || argv.includes('--lock');
-    requestRendererLock();
+    if (argv.includes('--lock')) {
+      requestRendererLock();
+      return;
+    }
+
+    requestWindowActivation();
   });
 }
 
@@ -1082,6 +1251,32 @@ type DestructiveCleanupRequest = {
   deletionPlan: readonly ManagedDataDeletionTarget[];
 };
 
+let clearingPageReady: (() => void) | null = null;
+ipcMain.on('app:clearing-page-ready', (event) => {
+  if (event.sender === mainWindow?.webContents && clearingPageReady) {
+    const resolveReady = clearingPageReady;
+    clearingPageReady = null;
+    if (process.env.NETRAFLOW_E2E_CLEAR_ALL === '1') {
+      void event.sender.executeJavaScript(`(() => {
+        const page = document.querySelector('.destructive-clearing-page');
+        const dots = document.querySelector('.destructive-clearing-page__dots');
+        return {
+          text: page?.textContent,
+          hasAppShell: Boolean(document.querySelector('.app-shell')),
+          hasSidebar: Boolean(document.querySelector('.settings-navigation-panel')),
+          hasDots: Boolean(dots),
+          dotsAnimation: dots ? getComputedStyle(dots, '::after').animationName : ''
+        };
+      })()`, true).then(
+        (result) => appendValidationDiagnostic('electron-clear-all-e2e-page', result as Record<string, unknown>),
+        (error) => appendValidationDiagnostic('electron-clear-all-e2e-failed', { error: String(error) })
+      ).finally(resolveReady);
+      return;
+    }
+    resolveReady();
+  }
+});
+
 const destructiveCleanupCoordinator = createSingleRunCleanupCoordinator(
   async ({
     targetWindow,
@@ -1089,30 +1284,24 @@ const destructiveCleanupCoordinator = createSingleRunCleanupCoordinator(
     deletionPlan
   }: DestructiveCleanupRequest) => {
     appShutdownState.beginDestructiveShutdown();
+    writeResetLifecycleLog('clear-all-confirmed');
+    writeResetLifecycleLog('clearing-entered');
+    writeResetLifecycleLog('persistence-generation-invalidated');
     pendingRendererLock = false;
+    pendingWindowActivation = false;
     resetRendererApplicationMenuState();
 
     realPersistenceStore.lockCoreDocument();
     demoPersistenceStore.lockCoreDocument();
 
-    try {
-      forceClosingWindows.add(targetWindow);
-      targetWindow.close();
-
-      if (!targetWindow.isDestroyed()) {
-        targetWindow.destroy();
-      }
-    } catch (error) {
-      console.error('[NetraFlow cleanup] Failed to stop the renderer.', error);
-    }
-
-    try {
-      await productInstanceCoordinator.release();
-    } catch (error) {
-      console.error('[NetraFlow cleanup] Failed to stop the instance coordinator.', error);
-    }
-
     await waitForPendingJsonWrites();
+    writeResetLifecycleLog('pending-writes-drained');
+
+    await new Promise<void>((resolve) => {
+      clearingPageReady = resolve;
+      targetWindow.webContents.send('netraflow-enter-clearing-page');
+    });
+    writeResetLifecycleLog('clearing-page-shown');
 
     if (isLinuxAppImageRuntime()) {
       try {
@@ -1122,21 +1311,29 @@ const destructiveCleanupCoordinator = createSingleRunCleanupCoordinator(
       }
     }
 
+    const transaction = createResetTransaction(storageLayout);
     try {
-      const cleanup = await clearManagedLocalData({
-        plan: deletionPlan,
-        session: targetSession
-      });
-
-      if (!cleanup.ok) {
-        console.error('[NetraFlow cleanup] Some managed local data could not be removed.', {
-          failedStages: cleanup.failures.map((failure) => failure.stage)
-        });
-      }
+      await targetSession.closeAllConnections();
+      await targetSession.clearData();
+      await targetSession.clearCache();
+      writeResetLifecycleLog('runtime-session-cleared');
+      const demoTarget = deletionPlan.find((entry) => entry.kind === 'demo');
+      if (demoTarget) await fs.rm(demoTarget.path, { recursive: true, force: true, maxRetries: 4, retryDelay: 40 });
+      await invalidateAndDeleteUserdata(transaction, writeResetLifecycleLog);
+      await createRuntimePendingMarker(transaction, writeResetLifecycleLog);
     } catch (error) {
       console.error('[NetraFlow cleanup] Managed local data cleanup failed.', error);
+      return;
     }
 
+    resetLogToFile = false;
+    forceClosingWindows.add(targetWindow);
+    targetWindow.destroy();
+    writeResetLifecycleLog('clearing-window-destroyed');
+    await isolateAndDeleteRuntime(transaction, writeResetLifecycleLog);
+    app.releaseSingleInstanceLock();
+    await productInstanceCoordinator.release().catch((error) => console.error(error));
+    writeResetLifecycleLog('reset-process-exit');
     app.exit(0);
   }
 );
@@ -1200,7 +1397,8 @@ const isAllowedRendererNavigation = ({
 function createWindow() {
   const preloadPath = path.join(__dirname, 'preload.js');
   const initialTheme = getInitialWindowTheme();
-  const deferFirstShow = isLinuxAppImageRuntime() && app.isPackaged;
+  const deferFirstShow = process.platform === 'linux' && app.isPackaged;
+  mainWindowFirstFrameReady = !deferFirstShow;
 
   const createdWindow = new BrowserWindow({
     title: APP_NAME,
@@ -1225,8 +1423,49 @@ function createWindow() {
         : []
     }
   });
+  writeStartupStage('window-created');
   mainWindow = createdWindow;
   resetRendererApplicationMenuState();
+
+  if (process.env.NETRAFLOW_E2E_CLEAR_ALL === '1') {
+    createdWindow.webContents.once('did-finish-load', () => {
+      void createdWindow.webContents.executeJavaScript(`(async () => {
+        const waitFor = async (predicate, timeoutMs = 15000) => {
+          const deadline = performance.now() + timeoutMs;
+          while (performance.now() < deadline) {
+            const value = predicate();
+            if (value) return value;
+            await new Promise((resolve) => setTimeout(resolve, 20));
+          }
+          throw new Error('E2E DOM condition timed out');
+        };
+        const button = async (label) => waitFor(() => Array.from(document.querySelectorAll('button')).find((entry) => entry.textContent?.trim() === label));
+        (await button('全局设置')).click();
+        (await button('数据与备份')).click();
+        (await button('清除所有')).click();
+        const dialog = await waitFor(() => document.querySelector('[role="dialog"]'));
+        const code = dialog.querySelector('.reset-confirmation-code')?.textContent?.trim();
+        const input = dialog.querySelector('input');
+        if (!code || !input) throw new Error('Reset confirmation controls are missing');
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        setter?.call(input, code);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        (await button('确认执行')).click();
+        const page = await waitFor(() => document.querySelector('.destructive-clearing-page'));
+        return {
+          text: page.textContent,
+          hasAppShell: Boolean(document.querySelector('.app-shell')),
+          hasSidebar: Boolean(document.querySelector('.settings-navigation-panel')),
+          hasDots: Boolean(document.querySelector('.destructive-clearing-page__dots')),
+          dotsAnimation: getComputedStyle(document.querySelector('.destructive-clearing-page__dots'), '::after').animationName
+        };
+      })()`, true).then(
+        (result) => appendValidationDiagnostic('electron-clear-all-e2e-page', result as Record<string, unknown>),
+        (error) => appendValidationDiagnostic('electron-clear-all-e2e-failed', { error: String(error) })
+      );
+    });
+  }
 
   if (deferFirstShow) {
     let pageLoaded = false;
@@ -1235,16 +1474,39 @@ function createWindow() {
     const showWhenReady = () => {
       if (pageLoaded && rendererReady && !didShow && !createdWindow.isDestroyed()) {
         didShow = true;
+        mainWindowFirstFrameReady = true;
         createdWindow.show();
+        writeStartupStage('window-shown');
+        if (pendingWindowActivation) {
+          pendingWindowActivation = false;
+          createdWindow.focus();
+        }
+        if (pendingRendererLock) {
+          pendingRendererLock = false;
+          createdWindow.webContents.send('netraflow-lock');
+        }
       }
     };
     const handleFirstFrameReady = (event: Electron.IpcMainEvent) => {
       if (event.sender !== createdWindow.webContents || rendererReady) return;
+      writeStartupStage('first-frame-ready-sent');
       rendererReady = true;
+      writeStartupStage('first-frame-ready-received');
       showWhenReady();
     };
+    const handleStartupStateResolved = (event: Electron.IpcMainEvent, state: unknown) => {
+      if (
+        event.sender === createdWindow.webContents &&
+        (state === 'onboarding' || state === 'locked' || state === 'application')
+      ) {
+        writeStartupStage('startup-state-resolved');
+        ipcMain.removeListener('normal-app-startup-state-resolved', handleStartupStateResolved);
+      }
+    };
     ipcMain.on('normal-app-first-frame-ready', handleFirstFrameReady);
+    ipcMain.on('normal-app-startup-state-resolved', handleStartupStateResolved);
     createdWindow.webContents.once('did-finish-load', () => {
+      writeStartupStage('renderer-did-finish-load');
       pageLoaded = true;
       showWhenReady();
     });
@@ -1261,6 +1523,7 @@ function createWindow() {
     createdWindow.once('closed', () => {
       clearTimeout(firstFrameTimeout);
       ipcMain.removeListener('normal-app-first-frame-ready', handleFirstFrameReady);
+      ipcMain.removeListener('normal-app-startup-state-resolved', handleStartupStateResolved);
     });
   }
 
@@ -1285,6 +1548,7 @@ function createWindow() {
 
     closeBeforeWindows.deleteWindow(createdWindow);
     mainWindow = null;
+    mainWindowFirstFrameReady = process.platform !== 'linux' || !app.isPackaged;
     resetRendererApplicationMenuState();
 
     if (shouldResumeAppQuit) {
@@ -1297,7 +1561,7 @@ function createWindow() {
     resetRendererApplicationMenuState();
   });
   createdWindow.webContents.on('did-finish-load', () => {
-    if (!pendingRendererLock || !mainWindow) {
+    if (!pendingRendererLock || !mainWindow || !mainWindowFirstFrameReady) {
       return;
     }
 
@@ -1350,6 +1614,7 @@ function createWindow() {
   });
 
   const loadFileWithLogging = (targetPath: string, mode: 'packaged' | 'local') => {
+    writeStartupStage('renderer-load-start');
     writePackagedMainLog('Loading renderer', {
       ...loadDiagnostics,
       finalAction: 'loadFile',
@@ -1382,6 +1647,7 @@ function createWindow() {
 
 if (gotSingleInstanceLock) {
   app.whenReady().then(() => {
+    writeStartupStage('app-ready');
     const macosMenuPreferredLanguages =
       process.platform === 'darwin' ? app.getPreferredSystemLanguages() : [];
     const macosMenuFallbackLanguages =
@@ -1420,6 +1686,10 @@ if (gotSingleInstanceLock) {
 let didRunQuitDemoCleanup = false;
 
 const cleanupDemoOnAppQuit = () => {
+  if (isDestructiveShutdown()) {
+    return;
+  }
+
   if (didRunQuitDemoCleanup) {
     return;
   }
