@@ -89,9 +89,15 @@ test('main owns destructive state, deletion paths, session cleanup, and applicat
 test('clearing page is a standalone root with CSS-only dots and no business stores', () => {
   const rootSource = readProjectFile('src/main.tsx');
   const stylesSource = readProjectFile('src/styles.css');
+  const foundationSource = readProjectFile('src/styles/foundation.css');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const pageSource = rootSource.slice(
     rootSource.indexOf('function ClearingPage()'),
     rootSource.indexOf('function NormalApplicationRoot()')
+  );
+  const pageStyles = stylesSource.slice(
+    stylesSource.indexOf('.destructive-clearing-page {'),
+    stylesSource.indexOf('.destructive-clearing-page__status')
   );
   assert.equal(pageSource.includes('正在清除全部数据'), true);
   assert.equal(pageSource.includes('AppShell'), false);
@@ -99,5 +105,35 @@ test('clearing page is a standalone root with CSS-only dots and no business stor
   assert.equal(pageSource.includes('notifyClearingPageReady'), true);
   assert.equal(stylesSource.includes('@keyframes destructive-clearing-dots'), true);
   assert.equal(stylesSource.includes("content: '...'"), true);
+  assert.match(pageStyles, /background:\s*var\(--app-bg\);/);
+  assert.match(pageStyles, /color:\s*var\(--text-main\);/);
+  assert.equal(pageStyles.includes('--color-background'), false);
+  assert.equal(pageStyles.includes('--color-text'), false);
+  assert.equal(pageStyles.includes('#f6f3ea'), false);
+  assert.equal(pageStyles.includes('#242424'), false);
+  assert.equal(pageSource.includes('dataset.theme'), false);
+  assert.equal(pageSource.includes('dataset.resolvedTheme'), false);
+  assert.equal(pageSource.includes('dataset.themeStyle'), false);
+  assert.equal(pageSource.includes('matchMedia'), false);
+  assert.equal(pageSource.includes('settings'), false);
+  assert.equal(pageSource.includes('setTimeout'), false);
+  assert.match(
+    foundationSource,
+    /\[data-theme='light'\]\[data-theme-style='nyaa'\]\s*\{[\s\S]*--app-bg:[\s\S]*--text-main:/
+  );
+  assert.match(
+    foundationSource,
+    /\[data-theme='dark'\]\[data-theme-style='nyaa'\]\s*\{[\s\S]*--app-bg:[\s\S]*--text-main:/
+  );
+  [
+    'theme: document.documentElement.dataset.theme',
+    'resolvedTheme: document.documentElement.dataset.resolvedTheme',
+    'themeStyle: document.documentElement.dataset.themeStyle',
+    "rootStyle.getPropertyValue('--app-bg')",
+    "rootStyle.getPropertyValue('--text-main')",
+    'pageBackgroundImage:',
+    'pageBackgroundColor:',
+    'pageColor:'
+  ].forEach((diagnostic) => assert.equal(mainSource.includes(diagnostic), true));
   assert.equal(rootSource.includes('clearing ? <ClearingPage />'), true);
 });

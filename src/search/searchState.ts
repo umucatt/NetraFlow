@@ -57,6 +57,10 @@ export const createInitialSearchState = <TSnapshot = unknown>(): SearchState<TSn
   lastOpenedResultId: ''
 });
 
+export const shouldBuildGlobalSearchIndex = (
+  state: Pick<SearchState, 'isOpen' | 'floatingNavigation'>
+) => state.isOpen || state.floatingNavigation !== null;
+
 const resetSearchState = <TSnapshot>(
   state: SearchState<TSnapshot>
 ): SearchState<TSnapshot> => ({

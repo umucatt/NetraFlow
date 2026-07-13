@@ -8,6 +8,15 @@ export type NormalAppFirstFrameState =
 
 let normalAppFirstFrameWasSent = false;
 
+export const shouldReportNormalAppFirstFrame = (
+  platform: string | undefined,
+  initialTheme: 'light' | 'dark' | undefined
+) => platform === 'linux' && Boolean(initialTheme);
+
+export const shouldReportNormalAppStartupState = (
+  initialTheme: 'light' | 'dark' | undefined
+) => Boolean(initialTheme);
+
 export const resolveNormalAppFirstFrameState = ({
   initializing,
   onboarding,
@@ -87,10 +96,21 @@ export const useNormalAppFirstFrameReady = (
 ) => {
   useEffect(() => {
     if (
+      state !== 'initializing' &&
+      shouldReportNormalAppStartupState(window.appInfo?.initialTheme)
+    ) {
+      window.electronAPI?.normalAppStartupStateResolved?.(state);
+    }
+  }, [state]);
+
+  useEffect(() => {
+    if (
       normalAppFirstFrameWasSent ||
       state === 'initializing' ||
-      window.appInfo?.platform !== 'linux' ||
-      !window.appInfo.initialTheme ||
+      !shouldReportNormalAppFirstFrame(
+        window.appInfo?.platform,
+        window.appInfo?.initialTheme
+      ) ||
       !window.electronAPI?.normalAppFirstFrameReady
     ) {
       return;
@@ -100,8 +120,6 @@ export const useNormalAppFirstFrameReady = (
     let inspectionFrame = 0;
     let firstPaintFrame = 0;
     let secondPaintFrame = 0;
-    window.electronAPI?.normalAppStartupStateResolved?.(state);
-
     const waitForStableLayout = () => {
       const inspect = () => {
         if (cancelled || normalAppFirstFrameWasSent) {

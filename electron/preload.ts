@@ -107,6 +107,12 @@ contextBridge.exposeInMainWorld('appInfo', {
     const value = process.argv.find((argument) => argument.startsWith('--nf-initial-theme='))
       ?.slice('--nf-initial-theme='.length);
     return value === 'dark' ? 'dark' : value === 'light' ? 'light' : undefined;
+  })(),
+  initialThemeStyle: (() => {
+    const value = process.argv.find((argument) =>
+      argument.startsWith('--nf-initial-theme-style=')
+    )?.slice('--nf-initial-theme-style='.length);
+    return value === 'default' ? 'default' : value === 'nyaa' ? 'nyaa' : undefined;
   })()
 });
 

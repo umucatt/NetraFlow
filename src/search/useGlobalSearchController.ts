@@ -16,7 +16,8 @@ import { getSearchNavigationTargetsForResult } from './searchNavigationLogic';
 import {
   createInitialSearchState,
   getSearchEscapeAction,
-  searchStateReducer
+  searchStateReducer,
+  shouldBuildGlobalSearchIndex
 } from './searchState';
 import type {
   AssetGroupWithAccounts,
@@ -103,9 +104,15 @@ export const useGlobalSearchController = <TSnapshot = unknown>({
     };
   }, [state.isOpen]);
 
+  const shouldBuildSearchIndex = shouldBuildGlobalSearchIndex(state);
   const searchIndex = useMemo(
-    () => createGlobalSearchIndex(groups, historyRecords, backupRecords, createIndexOptions),
-    [backupRecords, createIndexOptions, groups, historyRecords]
+    () => createGlobalSearchIndex(
+      shouldBuildSearchIndex ? groups : [],
+      shouldBuildSearchIndex ? historyRecords : [],
+      shouldBuildSearchIndex ? backupRecords : [],
+      createIndexOptions
+    ),
+    [backupRecords, createIndexOptions, groups, historyRecords, shouldBuildSearchIndex]
   );
 
   const output = useMemo(

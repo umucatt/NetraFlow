@@ -768,15 +768,16 @@ test('theme bootstrap resolves first frame before React mounts', () => {
   );
   const indexSource = readProjectFile('index.html');
   const mainSource = readProjectFile('electron/mainApplication.ts');
+  const startupThemeSource = readProjectFile('electron/startupTheme.ts');
   const bootstrapSource = indexSource.slice(
     indexSource.indexOf('(function ()'),
     indexSource.indexOf('</script>')
   );
-  const inlineScriptMatch = indexSource.match(/<script>\n([\s\S]*?)\n    <\/script>/);
+  const inlineScriptMatch = indexSource.match(/<script>([\s\S]*?)<\/script>/);
 
   assert.ok(inlineScriptMatch);
   const inlineScriptHash = createHash('sha256')
-    .update(inlineScriptMatch[1])
+    .update(inlineScriptMatch[1].replace(/\r\n?/g, '\n'))
     .digest('base64');
 
   assert.equal(globalSettingsLogicSource.includes("themeMode: 'system'"), true);
@@ -820,17 +821,17 @@ test('theme bootstrap resolves first frame before React mounts', () => {
   assert.equal(mainSource.includes('persistenceStore.readStateDocument()'), true);
   assert.equal(mainSource.includes('const globalSettings = isPlainObject(settings.global)'), true);
   assert.equal(mainSource.includes('const personalization = isPlainObject(state.personalization)'), true);
-  assert.equal(mainSource.includes('value === \'light\' || value === \'dark\' || value === \'system\''), true);
-  assert.equal(mainSource.includes('value === \'default\' || value === \'nyaa\''), true);
-  assert.equal(mainSource.includes('const nyaaThemeUnlocked = value.nyaaThemeUnlocked === true;'), true);
+  assert.equal(startupThemeSource.includes("value === 'light' || value === 'dark' || value === 'system'"), true);
+  assert.equal(startupThemeSource.includes("value === 'default' || value === 'nyaa'"), true);
+  assert.equal(startupThemeSource.includes('const nyaaThemeUnlocked = value.nyaaThemeUnlocked === true;'), true);
   assert.equal(
-    mainSource.includes("themeMode === 'system' ? getSystemThemeForBootstrap() : themeMode"),
+    startupThemeSource.includes("settings.themeMode === 'system' ? systemTheme : settings.themeMode"),
     true
   );
   assert.equal(mainSource.includes('backgroundColor: initialTheme.backgroundColor'), true);
   ['#f6f3ea', '#171a1f', '#fff6fa', '#18141b'].forEach((color) => {
     assert.equal(bootstrapSource.includes(color), true);
-    assert.equal(mainSource.includes(color), true);
+    assert.equal(startupThemeSource.includes(color), true);
   });
   assert.equal(appSource.includes('root.dataset.themeMode = globalSettings.themeMode;'), true);
   assert.equal(appSource.includes('root.dataset.resolvedTheme = resolvedTheme;'), true);
@@ -962,7 +963,7 @@ test('Electron renderer sandbox keeps the preload bridge boundary narrow', () =>
   assert.equal(preloadSource.includes("contextBridge.exposeInMainWorld('electron'"), false);
   assert.equal(preloadSource.includes('remote'), false);
   assert.equal(preloadSource.includes('platform: process.platform'), true);
-  assert.equal(preloadSource.match(/process\./g)?.length, 10);
+  assert.equal(preloadSource.match(/process\./g)?.length, 11);
   assert.equal(preloadSource.includes("require('electron')"), true);
   assert.equal(preloadSource.includes("require('node:"), false);
   assert.equal(preloadSource.includes('window.require'), false);

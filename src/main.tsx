@@ -42,6 +42,10 @@ if (window.appInfo?.sandboxConsentBootstrap) {
 } else if (window.appInfo?.initialTheme) {
   document.documentElement.dataset.theme = window.appInfo.initialTheme;
   document.documentElement.dataset.resolvedTheme = window.appInfo.initialTheme;
+  document.documentElement.style.setProperty('color-scheme', window.appInfo.initialTheme);
+  if (window.appInfo.initialThemeStyle) {
+    document.documentElement.dataset.themeStyle = window.appInfo.initialThemeStyle;
+  }
 }
 
 const favicon = document.querySelector<HTMLLinkElement>('#app-favicon');
