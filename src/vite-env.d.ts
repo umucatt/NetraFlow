@@ -98,6 +98,7 @@ interface Window {
     sandboxConsentBootstrap?: boolean;
     chromiumSandboxEnabled?: boolean;
     initialTheme?: 'light' | 'dark';
+    initialThemeStyle?: 'default' | 'nyaa';
   };
   sandboxBootstrap?: {
     initialTheme: 'light' | 'dark';

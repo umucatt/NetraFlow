@@ -6,6 +6,14 @@ import test from 'node:test';
 import { readProjectFile } from './contractText';
 
 const DEV_PORT = '5174';
+const VITE_WATCH_IGNORES = [
+  'runtime',
+  'userdata',
+  '.demo',
+  'release',
+  'dist',
+  'dist-electron'
+] as const;
 
 test('development startup keeps Vite, wait-on, and Electron on the same strict port', () => {
   const viteConfigSource = readProjectFile('vite.config.ts');
@@ -22,6 +30,10 @@ test('development startup keeps Vite, wait-on, and Electron on the same strict p
 
   assert.match(viteConfigSource, /server:\s*\{[\s\S]*port:\s*5174/);
   assert.match(viteConfigSource, /server:\s*\{[\s\S]*strictPort:\s*true/);
+  VITE_WATCH_IGNORES.forEach((directory) => {
+    assert.equal(viteConfigSource.includes(`'**/${directory}/**'`), true);
+  });
+  assert.equal(/hmr:\s*false/.test(viteConfigSource), false);
   assert.equal(devScript, 'node scripts/dev.mjs');
   assert.equal(devRendererScript, 'vite');
   assert.equal(devLauncherSource.includes('const DEV_PORT = 5174;'), true);

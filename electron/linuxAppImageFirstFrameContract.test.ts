@@ -2,6 +2,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import {
+  canShowNormalAppWindow,
+  shouldDeferNormalAppFirstShow,
+  shouldWaitForStableRendererFrame
+} from './normalAppFirstFramePolicy';
 
 const read = (file: string) => readFileSync(path.join(process.cwd(), file), 'utf8');
 const main = read('electron/mainApplication.ts');
@@ -9,21 +14,77 @@ const preload = read('electron/preload.ts');
 const app = read('src/App.tsx');
 const about = read('src/features/settings/AboutNetraFlowPanel.tsx');
 
-test('packaged Linux normal windows defer their first show without changing other platforms', () => {
-  assert.equal(main.includes("const deferFirstShow = process.platform === 'linux' && app.isPackaged;"), true);
-  assert.equal(main.includes('show: deferFirstShow ? false : undefined'), true);
-  assert.match(main, /pageLoaded && rendererReady && !didShow/);
+test('initial hiding and stable renderer-frame waiting are independent policies', () => {
+  assert.equal(main.includes('show: deferInitialShow ? false : undefined'), false);
+  assert.equal(main.includes('...(deferInitialShow ? { show: false } : {}),'), true);
+  [
+    ['win32', false, true],
+    ['win32', true, true],
+    ['linux', false, false],
+    ['linux', true, true],
+    ['darwin', false, false],
+    ['darwin', true, false]
+  ].forEach(([platform, isPackaged, expected]) => {
+    const options = shouldDeferNormalAppFirstShow(platform as NodeJS.Platform, isPackaged as boolean)
+      ? { show: false }
+      : {};
+    assert.equal(Object.hasOwn(options, 'show'), expected);
+  });
+  [
+    ['win32', false, false],
+    ['win32', true, false],
+    ['linux', false, false],
+    ['linux', true, true],
+    ['darwin', false, false],
+    ['darwin', true, false]
+  ].forEach(([platform, isPackaged, expected]) => {
+    assert.equal(
+      shouldWaitForStableRendererFrame(
+        platform as NodeJS.Platform,
+        isPackaged as boolean
+      ),
+      expected
+    );
+  });
+});
+
+test('Windows shows after document load while packaged Linux also waits for renderer readiness', () => {
+  assert.equal(canShowNormalAppWindow(false, false, false), false);
+  assert.equal(canShowNormalAppWindow(true, false, false), true);
+  assert.equal(canShowNormalAppWindow(false, true, true), false);
+  assert.equal(canShowNormalAppWindow(true, false, true), false);
+  assert.equal(canShowNormalAppWindow(true, true, true), true);
+  const deferredShowBlock = main.slice(
+    main.indexOf('if (deferInitialShow) {'),
+    main.indexOf("if (process.platform !== 'darwin')")
+  );
+  assert.equal(deferredShowBlock.includes('canShowNormalAppWindow('), true);
+  assert.equal(deferredShowBlock.includes('waitForStableRendererFrame'), true);
+  assert.equal(deferredShowBlock.includes('createdWindow.show();'), true);
+  assert.match(
+    deferredShowBlock,
+    /if \(waitForStableRendererFrame\) \{[\s\S]*ipcMain\.on\('normal-app-first-frame-ready'/
+  );
+  assert.match(
+    deferredShowBlock,
+    /\}\s*ipcMain\.on\('normal-app-startup-state-resolved', handleStartupStateResolved\);/
+  );
+  assert.match(deferredShowBlock, /const firstFrameTimeout = setTimeout\([\s\S]*15_000\);/);
   assert.equal(main.includes("event.sender !== createdWindow.webContents"), true);
   assert.equal(main.includes("ipcMain.removeListener('normal-app-first-frame-ready'"), true);
   assert.equal(main.includes('ready-to-show'), false);
 });
 
-test('main and renderer receive one resolved formal theme before mounting', () => {
+test('main and renderer receive one complete formal theme snapshot before mounting', () => {
+  const rendererMain = read('src/main.tsx');
   assert.equal(main.includes('const initialTheme = getInitialWindowTheme();'), true);
   assert.equal(main.includes('backgroundColor: initialTheme.backgroundColor'), true);
   assert.equal(main.includes('`--nf-initial-theme=${initialTheme.resolvedTheme}`'), true);
+  assert.equal(main.includes('`--nf-initial-theme-style=${initialTheme.themeStyle}`'), true);
   assert.equal(preload.includes("value === 'dark' ? 'dark' : value === 'light' ? 'light' : undefined"), true);
-  assert.equal(read('src/main.tsx').includes('document.documentElement.dataset.theme = window.appInfo.initialTheme'), true);
+  assert.equal(preload.includes("value === 'default' ? 'default' : value === 'nyaa' ? 'nyaa' : undefined"), true);
+  assert.equal(rendererMain.includes('document.documentElement.dataset.theme = window.appInfo.initialTheme'), true);
+  assert.equal(rendererMain.includes('document.documentElement.dataset.themeStyle = window.appInfo.initialThemeStyle'), true);
 });
 
 test('normal readiness uses lifecycle-specific roots, fonts, theme, and two paint frames', () => {

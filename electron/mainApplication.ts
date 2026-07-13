@@ -36,6 +36,16 @@ import { clearLinuxAppImageUnsandboxedConsent } from './linuxAppImagePreferences
 import { isLinuxAppImageRuntime } from './linuxAppImageRuntime.js';
 import { createPersistencePaths } from './persistencePaths.js';
 import {
+  canShowNormalAppWindow,
+  shouldDeferNormalAppFirstShow,
+  shouldWaitForStableRendererFrame
+} from './normalAppFirstFramePolicy.js';
+import {
+  createStartupThemeSnapshot,
+  normalizeThemeBootstrapSettings,
+  type ResolvedTheme
+} from './startupTheme.js';
+import {
   recoverInterruptedSnapshotTransaction,
   runPersistenceSnapshotTransaction
 } from './persistenceSnapshotTransaction.js';
@@ -68,33 +78,10 @@ const writeResetLifecycleLog = (event: string, details: Record<string, unknown> 
   }
   console.info('[NetraFlow reset]', payload);
 };
-type ThemeMode = 'light' | 'dark' | 'system';
-type ResolvedTheme = 'light' | 'dark';
-type ThemeStyle = 'default' | 'nyaa';
-type ThemeBootstrapSettings = {
-  themeMode: ThemeMode;
-  themeStyle: ThemeStyle;
-  nyaaThemeUnlocked: boolean;
-};
-const DEFAULT_THEME_MODE: ThemeMode = 'system';
-const DEFAULT_THEME_STYLE: ThemeStyle = 'default';
-const THEME_BOOTSTRAP_BACKGROUND_COLORS: Record<
-  ThemeStyle,
-  Record<ResolvedTheme, string>
-> = {
-  default: {
-    light: '#f6f3ea',
-    dark: '#171a1f'
-  },
-  nyaa: {
-    light: '#fff6fa',
-    dark: '#18141b'
-  }
-};
 let mainWindow: BrowserWindow | null = null;
 let pendingRendererLock = process.argv.includes('--lock');
 let pendingWindowActivation = false;
-let mainWindowFirstFrameReady = process.platform !== 'linux' || !app.isPackaged;
+let mainWindowFirstFrameReady = !shouldDeferNormalAppFirstShow(process.platform, app.isPackaged);
 const forceClosingWindows = new WeakSet<BrowserWindow>();
 let macosApplicationMenu: MacosApplicationMenuController | null = null;
 let rendererIsReadyForApplicationMenu = false;
@@ -614,33 +601,6 @@ const promoteDemoCoreToRealPersistenceEnvironment = () => {
   };
 };
 
-const isThemeMode = (value: unknown): value is ThemeMode =>
-  value === 'light' || value === 'dark' || value === 'system';
-
-const isThemeStyle = (value: unknown): value is ThemeStyle =>
-  value === 'default' || value === 'nyaa';
-
-const normalizeThemeBootstrapSettings = (value: unknown): ThemeBootstrapSettings => {
-  if (!isPlainObject(value)) {
-    return {
-      themeMode: DEFAULT_THEME_MODE,
-      themeStyle: DEFAULT_THEME_STYLE,
-      nyaaThemeUnlocked: false
-    };
-  }
-
-  const nyaaThemeUnlocked = value.nyaaThemeUnlocked === true;
-
-  return {
-    themeMode: isThemeMode(value.themeMode) ? value.themeMode : DEFAULT_THEME_MODE,
-    themeStyle:
-      nyaaThemeUnlocked && isThemeStyle(value.themeStyle)
-        ? value.themeStyle
-        : DEFAULT_THEME_STYLE,
-    nyaaThemeUnlocked
-  };
-};
-
 const readThemeBootstrapSettings = () => {
   const settingsResult = persistenceStore.readSettingsDocument();
   const stateResult = persistenceStore.readStateDocument();
@@ -674,28 +634,9 @@ const getSystemThemeForBootstrap = (): ResolvedTheme => {
   }
 };
 
-const resolveThemeForBootstrap = (themeMode: ThemeMode): ResolvedTheme =>
-  themeMode === 'system' ? getSystemThemeForBootstrap() : themeMode;
-
-const getThemeBootstrapBackgroundColor = (
-  resolvedTheme: ResolvedTheme,
-  themeStyle: ThemeStyle
-) => THEME_BOOTSTRAP_BACKGROUND_COLORS[themeStyle][resolvedTheme];
-
-const getBrowserWindowBackgroundColor = () => {
-  const settings = readThemeBootstrapSettings();
-  const resolvedTheme = resolveThemeForBootstrap(settings.themeMode);
-
-  return getThemeBootstrapBackgroundColor(resolvedTheme, settings.themeStyle);
-};
-
 const getInitialWindowTheme = () => {
   const settings = readThemeBootstrapSettings();
-  const resolvedTheme = resolveThemeForBootstrap(settings.themeMode);
-  return {
-    resolvedTheme,
-    backgroundColor: getThemeBootstrapBackgroundColor(resolvedTheme, settings.themeStyle)
-  };
+  return createStartupThemeSnapshot(settings, getSystemThemeForBootstrap());
 };
 
 const configureRuntimeUserDataPath = () => {
@@ -758,6 +699,10 @@ const writePackagedMainLog = (message: string, details: Record<string, unknown> 
 
 const writeStartupStage = (stage: string) => {
   const elapsedMs = Number(process.hrtime.bigint() - processStartTime) / 1_000_000;
+  appendValidationDiagnostic('startup-stage', {
+    stage,
+    elapsedMs: elapsedMs.toFixed(1)
+  });
   writePackagedMainLog(`startup-stage ${stage}`, { elapsedMs: elapsedMs.toFixed(1) });
 };
 
@@ -1260,12 +1205,22 @@ ipcMain.on('app:clearing-page-ready', (event) => {
       void event.sender.executeJavaScript(`(() => {
         const page = document.querySelector('.destructive-clearing-page');
         const dots = document.querySelector('.destructive-clearing-page__dots');
+        const rootStyle = getComputedStyle(document.documentElement);
+        const pageStyle = page ? getComputedStyle(page) : null;
         return {
           text: page?.textContent,
           hasAppShell: Boolean(document.querySelector('.app-shell')),
           hasSidebar: Boolean(document.querySelector('.settings-navigation-panel')),
           hasDots: Boolean(dots),
-          dotsAnimation: dots ? getComputedStyle(dots, '::after').animationName : ''
+          dotsAnimation: dots ? getComputedStyle(dots, '::after').animationName : '',
+          theme: document.documentElement.dataset.theme,
+          resolvedTheme: document.documentElement.dataset.resolvedTheme,
+          themeStyle: document.documentElement.dataset.themeStyle,
+          appBackground: rootStyle.getPropertyValue('--app-bg').trim(),
+          mainText: rootStyle.getPropertyValue('--text-main').trim(),
+          pageBackgroundImage: pageStyle?.backgroundImage,
+          pageBackgroundColor: pageStyle?.backgroundColor,
+          pageColor: pageStyle?.color
         };
       })()`, true).then(
         (result) => appendValidationDiagnostic('electron-clear-all-e2e-page', result as Record<string, unknown>),
@@ -1397,15 +1352,19 @@ const isAllowedRendererNavigation = ({
 function createWindow() {
   const preloadPath = path.join(__dirname, 'preload.js');
   const initialTheme = getInitialWindowTheme();
-  const deferFirstShow = process.platform === 'linux' && app.isPackaged;
-  mainWindowFirstFrameReady = !deferFirstShow;
+  const deferInitialShow = shouldDeferNormalAppFirstShow(process.platform, app.isPackaged);
+  const waitForStableRendererFrame = shouldWaitForStableRendererFrame(
+    process.platform,
+    app.isPackaged
+  );
+  mainWindowFirstFrameReady = !deferInitialShow;
 
   const createdWindow = new BrowserWindow({
     title: APP_NAME,
     width: 960,
     height: 640,
     backgroundColor: initialTheme.backgroundColor,
-    show: deferFirstShow ? false : undefined,
+    ...(deferInitialShow ? { show: false } : {}),
     minWidth: 720,
     minHeight: 480,
     autoHideMenuBar: process.platform !== 'darwin',
@@ -1418,8 +1377,11 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      additionalArguments: deferFirstShow
-        ? [`--nf-initial-theme=${initialTheme.resolvedTheme}`]
+      additionalArguments: deferInitialShow
+        ? [
+            `--nf-initial-theme=${initialTheme.resolvedTheme}`,
+            `--nf-initial-theme-style=${initialTheme.themeStyle}`
+          ]
         : []
     }
   });
@@ -1453,12 +1415,22 @@ function createWindow() {
         input.dispatchEvent(new Event('change', { bubbles: true }));
         (await button('确认执行')).click();
         const page = await waitFor(() => document.querySelector('.destructive-clearing-page'));
+        const rootStyle = getComputedStyle(document.documentElement);
+        const pageStyle = getComputedStyle(page);
         return {
           text: page.textContent,
           hasAppShell: Boolean(document.querySelector('.app-shell')),
           hasSidebar: Boolean(document.querySelector('.settings-navigation-panel')),
           hasDots: Boolean(document.querySelector('.destructive-clearing-page__dots')),
-          dotsAnimation: getComputedStyle(document.querySelector('.destructive-clearing-page__dots'), '::after').animationName
+          dotsAnimation: getComputedStyle(document.querySelector('.destructive-clearing-page__dots'), '::after').animationName,
+          theme: document.documentElement.dataset.theme,
+          resolvedTheme: document.documentElement.dataset.resolvedTheme,
+          themeStyle: document.documentElement.dataset.themeStyle,
+          appBackground: rootStyle.getPropertyValue('--app-bg').trim(),
+          mainText: rootStyle.getPropertyValue('--text-main').trim(),
+          pageBackgroundImage: pageStyle.backgroundImage,
+          pageBackgroundColor: pageStyle.backgroundColor,
+          pageColor: pageStyle.color
         };
       })()`, true).then(
         (result) => appendValidationDiagnostic('electron-clear-all-e2e-page', result as Record<string, unknown>),
@@ -1467,12 +1439,17 @@ function createWindow() {
     });
   }
 
-  if (deferFirstShow) {
+  if (deferInitialShow) {
     let pageLoaded = false;
     let rendererReady = false;
     let didShow = false;
     const showWhenReady = () => {
-      if (pageLoaded && rendererReady && !didShow && !createdWindow.isDestroyed()) {
+      const canShowWindow = canShowNormalAppWindow(
+        pageLoaded,
+        rendererReady,
+        waitForStableRendererFrame
+      );
+      if (canShowWindow && !didShow && !createdWindow.isDestroyed()) {
         didShow = true;
         mainWindowFirstFrameReady = true;
         createdWindow.show();
@@ -1503,7 +1480,9 @@ function createWindow() {
         ipcMain.removeListener('normal-app-startup-state-resolved', handleStartupStateResolved);
       }
     };
-    ipcMain.on('normal-app-first-frame-ready', handleFirstFrameReady);
+    if (waitForStableRendererFrame) {
+      ipcMain.on('normal-app-first-frame-ready', handleFirstFrameReady);
+    }
     ipcMain.on('normal-app-startup-state-resolved', handleStartupStateResolved);
     createdWindow.webContents.once('did-finish-load', () => {
       writeStartupStage('renderer-did-finish-load');
@@ -1548,7 +1527,10 @@ function createWindow() {
 
     closeBeforeWindows.deleteWindow(createdWindow);
     mainWindow = null;
-    mainWindowFirstFrameReady = process.platform !== 'linux' || !app.isPackaged;
+    mainWindowFirstFrameReady = !shouldDeferNormalAppFirstShow(
+      process.platform,
+      app.isPackaged
+    );
     resetRendererApplicationMenuState();
 
     if (shouldResumeAppQuit) {

@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   isNormalAppFirstFrameLayoutStable,
-  resolveNormalAppFirstFrameState
+  resolveNormalAppFirstFrameState,
+  shouldReportNormalAppFirstFrame,
+  shouldReportNormalAppStartupState
 } from './normalAppFirstFrame';
 
 const element = (width: number, height: number, left = 0) => ({
@@ -20,6 +22,34 @@ const createLayout = (selectors: Record<string, unknown>) => {
     }
   };
 };
+
+test('only Linux packaged first-frame scenarios report renderer readiness', () => {
+  [
+    ['win32', 'dark', false],
+    ['win32', 'light', false],
+    ['win32', undefined, false],
+    ['linux', 'dark', true],
+    ['linux', 'light', true],
+    ['linux', undefined, false],
+    ['darwin', 'dark', false],
+    ['darwin', 'light', false],
+    ['freebsd', 'dark', false]
+  ].forEach(([platform, initialTheme, expected]) => {
+    assert.equal(
+      shouldReportNormalAppFirstFrame(
+        platform as string,
+        initialTheme as 'light' | 'dark' | undefined
+      ),
+      expected
+    );
+  });
+});
+
+test('every delayed normal window reports its resolved startup state', () => {
+  assert.equal(shouldReportNormalAppStartupState('light'), true);
+  assert.equal(shouldReportNormalAppStartupState('dark'), true);
+  assert.equal(shouldReportNormalAppStartupState(undefined), false);
+});
 
 test('normal first-frame lifecycle resolves every legal initial branch', () => {
   assert.equal(resolveNormalAppFirstFrameState({ initializing: true, onboarding: true, locked: true }), 'initializing');
