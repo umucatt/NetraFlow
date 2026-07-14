@@ -1,40 +1,47 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useReducer,
   useRef
 } from 'react';
-import { createGlobalSearchIndex, runGlobalSearch } from './searchEngine';
+import type { SearchIndexConfig } from './searchIndexConfig';
+import {
+  createSearchQueryCommitScheduler,
+  isSearchCompositionActive
+} from './searchInputComposition';
 import {
   getNextSearchNavigationTarget,
-  getSearchNavigationCycle,
   getSearchResultItemId,
-  getSearchResultsForCategory
+  getSearchNavigationCycle
 } from './searchNavigation';
 import { getSearchNavigationTargetsForResult } from './searchNavigationLogic';
 import {
+  resolveDisplayedSearchSelection,
+  resolveSearchResultDisplay
+} from './searchResultPresentation';
+import {
   createInitialSearchState,
   getSearchEscapeAction,
-  searchStateReducer,
-  shouldBuildGlobalSearchIndex
+  searchStateReducer
 } from './searchState';
+import { useGlobalSearchWorker } from './useGlobalSearchWorker';
 import type {
   AssetGroupWithAccounts,
   BackupRecord,
-  CreateSearchIndexOptions,
   GlobalSearchResult,
   HistoryRecord,
   SearchCategory,
   SearchLogicMode,
-  SearchNavigationTarget
+  SearchNavigationTarget,
+  SettingsSearchItem
 } from './searchTypes';
 
 export type UseGlobalSearchControllerOptions<TSnapshot = unknown> = {
   groups: AssetGroupWithAccounts[];
   historyRecords: HistoryRecord[];
   backupRecords: BackupRecord[];
-  createIndexOptions: CreateSearchIndexOptions;
+  searchIndexConfig: SearchIndexConfig;
+  settingsItems: SettingsSearchItem[];
   searchLogicMode: SearchLogicMode;
   createNavigationSnapshot: () => TSnapshot;
   restoreNavigationSnapshot: (snapshot: TSnapshot) => void;
@@ -46,7 +53,8 @@ export const useGlobalSearchController = <TSnapshot = unknown>({
   groups,
   historyRecords,
   backupRecords,
-  createIndexOptions,
+  searchIndexConfig,
+  settingsItems,
   searchLogicMode,
   createNavigationSnapshot,
   restoreNavigationSnapshot,
@@ -54,22 +62,53 @@ export const useGlobalSearchController = <TSnapshot = unknown>({
   onExitNavigation
 }: UseGlobalSearchControllerOptions<TSnapshot>) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const composingRef = useRef(false);
+  const draftQueryRef = useRef('');
+  const committedQueryRef = useRef('');
+  const resetPresentationRef = useRef<() => void>(() => undefined);
   const [state, dispatch] = useReducer(
     searchStateReducer<TSnapshot>,
     undefined,
     createInitialSearchState<TSnapshot>
   );
 
-  const openSearch = useCallback(() => {
-    dispatch({ type: 'open' });
+  const commitQueryRef = useRef<(query: string) => void>(() => undefined);
+  const queryCommitSchedulerRef = useRef<ReturnType<typeof createSearchQueryCommitScheduler<number>> | null>(null);
+
+  if (!queryCommitSchedulerRef.current) {
+    queryCommitSchedulerRef.current = createSearchQueryCommitScheduler<number>({
+      setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
+      clearTimer: (timer) => window.clearTimeout(timer),
+      onCommit: (query) => commitQueryRef.current(query)
+    });
+  }
+
+  const resetInputRefs = useCallback(() => {
+    composingRef.current = false;
+    draftQueryRef.current = '';
+    committedQueryRef.current = '';
+    queryCommitSchedulerRef.current?.cancel();
+    resetPresentationRef.current();
   }, []);
 
+  const openSearch = useCallback(() => {
+    resetInputRefs();
+    dispatch({ type: 'open' });
+  }, [resetInputRefs]);
+
   const closeSearch = useCallback(() => {
+    resetInputRefs();
     dispatch({ type: 'close-and-reset' });
-  }, []);
+  }, [resetInputRefs]);
 
   const clearNavigation = useCallback(() => {
     dispatch({ type: 'clear-navigation' });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      queryCommitSchedulerRef.current?.cancel();
+    };
   }, []);
 
   useEffect(() => {
@@ -104,25 +143,34 @@ export const useGlobalSearchController = <TSnapshot = unknown>({
     };
   }, [state.isOpen]);
 
-  const shouldBuildSearchIndex = shouldBuildGlobalSearchIndex(state);
-  const searchIndex = useMemo(
-    () => createGlobalSearchIndex(
-      shouldBuildSearchIndex ? groups : [],
-      shouldBuildSearchIndex ? historyRecords : [],
-      shouldBuildSearchIndex ? backupRecords : [],
-      createIndexOptions
-    ),
-    [backupRecords, createIndexOptions, groups, historyRecords, shouldBuildSearchIndex]
+  const workerSearch = useGlobalSearchWorker({
+    groups,
+    historyRecords,
+    backupRecords,
+    config: searchIndexConfig,
+    settingsItems,
+    query: state.committedQuery,
+    searchLogicMode,
+    resultLimitsByCategory: state.resultLimitsByCategory,
+    isOpen: state.isOpen
+  });
+  resetPresentationRef.current = workerSearch.resetPresentation;
+  const resultDisplay = resolveSearchResultDisplay(
+    workerSearch.presentation,
+    {
+      revision: workerSearch.revision,
+      query: state.committedQuery,
+      selectedCategory: state.selectedCategory,
+      searchLogicMode,
+      resultLimitsByCategory: state.resultLimitsByCategory,
+      isOpen: state.isOpen
+    },
+    workerSearch.lifecycle,
+    workerSearch.statusText
   );
-
-  const output = useMemo(
-    () =>
-      runGlobalSearch(searchIndex, state.query, {
-        selectedCategory: state.selectedCategory,
-        searchLogicMode
-      }),
-    [searchIndex, searchLogicMode, state.query, state.selectedCategory]
-  );
+  const output = resultDisplay.displayedOutput;
+  const canNavigateCurrentOutput =
+    workerSearch.canNavigate && resultDisplay.canInteractWithResults;
 
   useEffect(() => {
     if (state.weakMode !== output.weakMode) {
@@ -139,21 +187,44 @@ export const useGlobalSearchController = <TSnapshot = unknown>({
     currentNavigationTarget
   );
   const canMoveNavigation = navigationCycle.length > 1;
-  const activeResults = getSearchResultsForCategory(output, state.selectedCategory);
-  const focusedResult =
-    activeResults.find(
-      (result) => getSearchResultItemId(result.target) === state.hoveredResultId
-    ) ??
-    activeResults.find(
-      (result) => getSearchResultItemId(result.target) === state.focusedResultId
-    ) ??
-    activeResults[0] ??
-    null;
+  const displayedSelection = resolveDisplayedSearchSelection(
+    output,
+    resultDisplay.displayedCategory,
+    state.selectedResultIdsByCategory[resultDisplay.displayedCategory],
+    state.hoveredResultId
+  );
+  const activeResults = displayedSelection.displayedResults;
+  const focusedResult = displayedSelection.displayedPreviewResult;
+  const displayedResultItemIds = activeResults.map((result) =>
+    getSearchResultItemId(result.target)
+  );
+  const displayedResultItemIdsKey = displayedResultItemIds.join('|');
+
+  useEffect(() => {
+    if (!resultDisplay.canInteractWithResults) {
+      return;
+    }
+
+    dispatch({
+      type: 'reconcile-selection',
+      category: resultDisplay.displayedCategory,
+      itemIds: displayedResultItemIds
+    });
+  }, [
+    displayedResultItemIdsKey,
+    resultDisplay.canInteractWithResults,
+    resultDisplay.displayedCategory,
+    resultDisplay.resultPresentationVersion
+  ]);
 
   const markUserInteraction = useCallback(() => undefined, []);
 
   const startNavigation = useCallback(
     (target: SearchNavigationTarget) => {
+      if (!canNavigateCurrentOutput) {
+        return;
+      }
+
       const targets = getSearchNavigationTargetsForResult(
         target,
         output.strongNavigationTargets
@@ -170,14 +241,23 @@ export const useGlobalSearchController = <TSnapshot = unknown>({
       });
       navigateToTarget(target);
     },
-    [createNavigationSnapshot, navigateToTarget, output.strongNavigationTargets]
+    [
+      createNavigationSnapshot,
+      navigateToTarget,
+      output.strongNavigationTargets,
+      canNavigateCurrentOutput
+    ]
   );
 
   const openResult = useCallback(
     (result: GlobalSearchResult) => {
+      if (!activeResults.some((activeResult) => activeResult.target.key === result.target.key)) {
+        return;
+      }
+
       startNavigation(result.target);
     },
-    [startNavigation]
+    [activeResults, startNavigation]
   );
 
   const moveToNavigationTarget = useCallback(
@@ -221,21 +301,101 @@ export const useGlobalSearchController = <TSnapshot = unknown>({
     onExitNavigation?.();
   }, [onExitNavigation]);
 
-  const handleEscape = useCallback(() => {
+  const clearQuery = useCallback(() => {
+    composingRef.current = false;
+    draftQueryRef.current = '';
+    committedQueryRef.current = '';
+    queryCommitSchedulerRef.current?.cancel();
+    resetPresentationRef.current();
+    dispatch({ type: 'clear-query' });
+  }, []);
+
+  const commitQuery = useCallback((query: string) => {
+    if (query === committedQueryRef.current) {
+      return;
+    }
+
+    committedQueryRef.current = query;
+
+    if (query.length === 0) {
+      resetPresentationRef.current();
+    }
+
+    dispatch({ type: 'commit-query', query });
+  }, []);
+
+  commitQueryRef.current = commitQuery;
+
+  const changeDraftQuery = useCallback((query: string, nativeIsComposing = false) => {
+    draftQueryRef.current = query;
+    dispatch({ type: 'draft-query-changed', query });
+
+    if (isSearchCompositionActive(composingRef.current, nativeIsComposing)) {
+      queryCommitSchedulerRef.current?.cancel();
+      return;
+    }
+
+    if (query === committedQueryRef.current) {
+      queryCommitSchedulerRef.current?.cancel();
+      return;
+    }
+
+    if (query.length === 0) {
+      queryCommitSchedulerRef.current?.commitImmediately(query);
+      return;
+    }
+
+    queryCommitSchedulerRef.current?.schedule(query);
+  }, []);
+
+  const startComposition = useCallback(() => {
+    composingRef.current = true;
+    queryCommitSchedulerRef.current?.cancel();
+    dispatch({ type: 'composition-start' });
+  }, []);
+
+  const endComposition = useCallback((query: string) => {
+    composingRef.current = false;
+    draftQueryRef.current = query;
+    queryCommitSchedulerRef.current?.cancel();
+
+    if (query === committedQueryRef.current) {
+      dispatch({ type: 'composition-end', query });
+      return;
+    }
+
+    committedQueryRef.current = query;
+
+    if (query.length === 0) {
+      resetPresentationRef.current();
+    }
+
+    dispatch({ type: 'composition-end', query });
+  }, []);
+
+  const handleEscape = useCallback((nativeIsComposing = false) => {
+    if (isSearchCompositionActive(composingRef.current, nativeIsComposing)) {
+      return false;
+    }
+
     const searchEscapeAction = getSearchEscapeAction(state);
 
     if (!searchEscapeAction) {
       return false;
     }
 
-    dispatch(searchEscapeAction);
+    if (searchEscapeAction.type === 'clear-query') {
+      clearQuery();
+    } else {
+      dispatch(searchEscapeAction);
+    }
 
     if (searchEscapeAction.type !== 'close-and-reset') {
       inputRef.current?.focus();
     }
 
     return true;
-  }, [state]);
+  }, [clearQuery, state]);
 
   const selectCategory = useCallback((category: SearchCategory) => {
     dispatch({ type: 'select-category', category, lock: category !== 'all' });
@@ -243,6 +403,10 @@ export const useGlobalSearchController = <TSnapshot = unknown>({
 
   return {
     isOpen: state.isOpen,
+    isRefreshing: resultDisplay.isRefreshing,
+    isPreparing: resultDisplay.isPreparing,
+    isInitialSearching: resultDisplay.isInitialSearching,
+    latestCompletedQuery: resultDisplay.latestCompletedQuery,
     hasFloatingNavigation: Boolean(state.floatingNavigation),
     output,
     focusedResult,
@@ -260,20 +424,29 @@ export const useGlobalSearchController = <TSnapshot = unknown>({
     handleEscape,
     panelProps: {
       output,
-      query: state.query,
+      query: state.draftQuery,
+      isComposing: state.isComposing,
+      statusText: resultDisplay.statusText,
+      isRefreshing: resultDisplay.isRefreshing,
+      isInitialSearching: resultDisplay.isInitialSearching,
+      canInteractWithResults: resultDisplay.canInteractWithResults,
+      resultPresentationVersion: resultDisplay.resultPresentationVersion,
       selectedCategory: state.selectedCategory,
+      visibleCategory: resultDisplay.displayedCategory,
       categoryLockedByUser: state.categoryLockedByUser,
-      focusedItemId: state.focusedResultId,
-      hoveredItemId: state.hoveredResultId,
-      resultLimit: state.resultLimit,
-      scrollTop: state.scrollTop,
+      selectedItemId: displayedSelection.displayedSelectedItemId,
+      hoveredItemId: displayedSelection.displayedHoveredItemId,
+      resultLimit: state.resultLimitsByCategory[state.selectedCategory],
+      scrollTop: state.scrollTopByCategory[state.selectedCategory],
       lastOpenedResultId: state.lastOpenedResultId,
       inputRef,
-      onQueryChange: (query: string) => dispatch({ type: 'query-changed', query }),
-      onClearQuery: () => dispatch({ type: 'clear-query' }),
+      onQueryChange: changeDraftQuery,
+      onCompositionStart: startComposition,
+      onCompositionEnd: endComposition,
+      onClearQuery: clearQuery,
       onSelectCategory: selectCategory,
       onShowAll: () => dispatch({ type: 'select-category', category: 'all', lock: false }),
-      onFocusItem: (itemId: string) => dispatch({ type: 'focus-item', itemId }),
+      onSelectItem: (itemId: string) => dispatch({ type: 'select-item', itemId }),
       onHoverItem: (itemId: string) => dispatch({ type: 'hover-item', itemId }),
       onClearHover: () => dispatch({ type: 'clear-hover' }),
       onLoadMoreResults: (minimum?: number) =>

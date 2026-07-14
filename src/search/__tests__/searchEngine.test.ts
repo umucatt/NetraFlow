@@ -993,18 +993,21 @@ test('category filtering never changes automatically when query changes', () => 
 
   state = searchStateReducer(state, { type: 'open' });
   state = searchStateReducer(state, { type: 'select-category', category: 'history', lock: true });
-  state = searchStateReducer(state, { type: 'focus-item', itemId: 'search-result:history:h-cash-plus' });
+  state = searchStateReducer(state, { type: 'select-item', itemId: 'search-result:history:h-cash-plus' });
   state = searchStateReducer(state, { type: 'hover-item', itemId: 'search-result:history:h-credit-minus' });
   state = searchStateReducer(state, { type: 'load-more-results' });
-  state = searchStateReducer(state, { type: 'query-changed', query: '现金' });
+  state = searchStateReducer(state, { type: 'draft-query-changed', query: '现金' });
 
   assert.equal(state.selectedCategory, 'history');
   assert.equal(state.categoryLockedByUser, true);
-  assert.equal(state.focusedResultId, '');
-  assert.equal(state.hoveredResultId, '');
-  assert.equal(state.resultLimit, SEARCH_INITIAL_RESULT_LIMIT);
+  assert.equal(
+    state.selectedResultIdsByCategory.history,
+    'search-result:history:h-cash-plus'
+  );
+  assert.equal(state.hoveredResultId, 'search-result:history:h-credit-minus');
+  assert.equal(state.resultLimitsByCategory.history, SEARCH_INITIAL_RESULT_LIMIT);
 
-  state = searchStateReducer(state, { type: 'query-changed', query: '' });
+  state = searchStateReducer(state, { type: 'draft-query-changed', query: '' });
   assert.equal(state.selectedCategory, 'history');
 
   const escapeToAll = getSearchEscapeAction(state);
@@ -1034,12 +1037,15 @@ test('loading-more state preserves category and selection until the user chooses
 
   state = searchStateReducer(state, { type: 'open' });
   state = searchStateReducer(state, { type: 'select-category', category: 'account', lock: true });
-  state = searchStateReducer(state, { type: 'focus-item', itemId: 'search-result:account:g-cash:cash' });
+  state = searchStateReducer(state, { type: 'select-item', itemId: 'search-result:account:g-cash:cash' });
   state = searchStateReducer(state, { type: 'load-more-results', minimum: 145 });
 
   assert.equal(state.selectedCategory, 'account');
-  assert.equal(state.focusedResultId, 'search-result:account:g-cash:cash');
-  assert.equal(state.resultLimit >= 145, true);
+  assert.equal(
+    state.selectedResultIdsByCategory.account,
+    'search-result:account:g-cash:cash'
+  );
+  assert.equal(state.resultLimitsByCategory.account >= 145, true);
 });
 
 test('target navigation keeps existing account, history, snapshot, settings behavior', () => {
