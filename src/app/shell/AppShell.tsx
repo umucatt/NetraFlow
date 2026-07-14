@@ -7,6 +7,7 @@ export function AppShell({
   style,
   shellProps,
   hiddenControls,
+  focusRestoreRef,
   mainContent,
   mainContentRef,
   mainContentClassName,
@@ -29,7 +30,13 @@ export function AppShell({
     .join(' ');
 
   return (
-    <main className={shellClassName} {...shellProps} style={style}>
+    <main
+      ref={focusRestoreRef}
+      className={`${shellClassName} app-shell--focus-restore-target`}
+      tabIndex={-1}
+      {...shellProps}
+      style={style}
+    >
       {hiddenControls}
       <section
         ref={mainContentRef}

@@ -71,7 +71,6 @@ export type CreateMainContentRendererPropsOptions = {
     draggingGroupId: string;
     groupDropIndicator: DashboardOverviewProps['groupDropIndicator'];
     legendColorByName: DashboardOverviewProps['legendColorByName'];
-    productIconPath: string;
     productNameZh: string;
     productNameEn: string;
     productTagline: string;
@@ -177,7 +176,6 @@ export const createMainContentRendererProps = ({
         draggingGroupId: dashboard.draggingGroupId,
         groupDropIndicator: dashboard.groupDropIndicator,
         legendColorByName: dashboard.legendColorByName,
-        productIconPath: dashboard.productIconPath,
         productNameZh: dashboard.productNameZh,
         productNameEn: dashboard.productNameEn,
         productTagline: dashboard.productTagline,

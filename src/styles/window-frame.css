@@ -9,6 +9,10 @@
   background: var(--window-backdrop-bg);
 }
 
+.window-frame--linux {
+  grid-template-rows: minmax(0, 1fr);
+}
+
 .window-frame.is-maximized {
   border-radius: 0;
 }
@@ -60,6 +64,10 @@
   pointer-events: auto;
   user-select: none;
   -webkit-app-region: drag;
+}
+
+.window-frame--darwin .window-frame__titlebar {
+  padding-left: 78px;
 }
 
 .window-frame__titlebar::before,

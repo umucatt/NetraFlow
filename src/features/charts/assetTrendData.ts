@@ -192,30 +192,45 @@ export const deriveAssetTrendPoints = (
     }))
     .filter((entry) => entry.timestamp > 0)
     .sort((left, right) => right.timestamp - left.timestamp || left.index - right.index);
+  const earliestTimestampByAccountId = new Map<string, number>();
 
-  return pointDateKeys.map((date) => {
-    const state = new Map(currentState);
+  recordsByTimeDesc.forEach(({ record, timestamp }) => {
+    const current = earliestTimestampByAccountId.get(record.accountId);
+    if (current === undefined || timestamp < current) {
+      earliestTimestampByAccountId.set(record.accountId, timestamp);
+    }
+  });
+
+  const state = new Map(currentState);
+  const pointsByDate = new Map<string, TrendChartPoint>();
+  let recordIndex = 0;
+
+  [...pointDateKeys].reverse().forEach((date) => {
     const cutoff = getDateEndTimestamp(date);
 
-    recordsByTimeDesc.forEach((entry) => {
-      if (entry.timestamp > cutoff) {
-        rollbackHistoryRecordForTrend(
-          state,
-          groups,
-          entry.record,
-          recordsByTimeDesc.some(
-            (candidate) =>
-              candidate.record.accountId === entry.record.accountId &&
-              candidate.timestamp <= cutoff
-          )
-        );
-      }
-    });
+    while (
+      recordIndex < recordsByTimeDesc.length &&
+      recordsByTimeDesc[recordIndex]!.timestamp > cutoff
+    ) {
+      const entry = recordsByTimeDesc[recordIndex]!;
+      rollbackHistoryRecordForTrend(
+        state,
+        groups,
+        entry.record,
+        (earliestTimestampByAccountId.get(entry.record.accountId) ?? Infinity) <= cutoff
+      );
+      recordIndex += 1;
+    }
 
-    return {
+    pointsByDate.set(date, {
       date,
       kind: changeDateKeySet.has(date) ? 'change-date' : 'carry-forward',
       ...sumChartState(state)
-    };
+    });
+  });
+
+  return pointDateKeys.flatMap((date) => {
+    const point = pointsByDate.get(date);
+    return point ? [point] : [];
   });
 };

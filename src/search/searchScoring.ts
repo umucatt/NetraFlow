@@ -287,7 +287,9 @@ const getDirectTextMatch = (
   field: SearchIndexedTextField,
   term: SearchTerm,
   role: SearchTextFieldRole,
-  fieldWeight: number
+  fieldWeight: number,
+  includeHighlights: boolean,
+  allowFuzzy: boolean
 ) => {
   const { normalized, compact } = field.index;
 
@@ -303,7 +305,7 @@ const getDirectTextMatch = (
   if (normalized === term.normalized || compact === term.compact) {
     const kind = getKind('exact');
     const source = normalized === term.normalized ? 'normalized' : 'compact';
-    const range = inferredKind
+    const range = inferredKind || !includeHighlights
       ? null
       : mapIndexedRangeToOriginal(
           field,
@@ -333,7 +335,7 @@ const getDirectTextMatch = (
   if (normalizedPrefix || compactPrefix) {
     const kind = getKind('prefix');
     const source = normalizedPrefix ? 'normalized' : 'compact';
-    const range = inferredKind
+    const range = inferredKind || !includeHighlights
       ? null
       : mapIndexedRangeToOriginal(
           field,
@@ -373,7 +375,7 @@ const getDirectTextMatch = (
   if (bestIncludedAt >= 0) {
     const kind = getKind('contains');
     const rangeStart = includedSource === 'normalized' ? normalizedIndex : compactIndex;
-    const range = inferredKind
+    const range = inferredKind || !includeHighlights
       ? null
       : mapIndexedRangeToOriginal(
           field,
@@ -401,6 +403,10 @@ const getDirectTextMatch = (
     return null;
   }
 
+  if (!allowFuzzy) {
+    return null;
+  }
+
   const sequenceMatch = getSequentialMatchInfo(compact, term.compact);
 
   if (sequenceMatch) {
@@ -416,7 +422,13 @@ const getDirectTextMatch = (
       role,
       getMatchLabel('ordered'),
       field.index.original,
-      mapIndexedCharactersToOriginal(field, sequenceMatch.matchedIndexes, getHighlightStrength('ordered'))
+      includeHighlights
+        ? mapIndexedCharactersToOriginal(
+            field,
+            sequenceMatch.matchedIndexes,
+            getHighlightStrength('ordered')
+          )
+        : []
     );
   }
 
@@ -458,7 +470,8 @@ const getDirectNumericTextMatch = (
   field: SearchIndexedTextField,
   term: SearchTerm,
   role: SearchTextFieldRole,
-  fieldWeight: number
+  fieldWeight: number,
+  includeHighlights: boolean
 ) => {
   if (field.inferredKind || !term.isPureNumeric || !term.compact) {
     return null;
@@ -478,13 +491,15 @@ const getDirectNumericTextMatch = (
 
   const kind: SearchMatchKind =
     compact === term.compact ? 'exact' : compact.startsWith(term.compact) ? 'prefix' : 'contains';
-  const range = mapIndexedRangeToOriginal(
-    field,
-    'compact',
-    matchIndex,
-    term.compact.length,
-    getHighlightStrength(kind)
-  );
+  const range = includeHighlights
+    ? mapIndexedRangeToOriginal(
+        field,
+        'compact',
+        matchIndex,
+        term.compact.length,
+        getHighlightStrength(kind)
+      )
+    : null;
 
   return createSearchMatch(
     kind,
@@ -564,7 +579,11 @@ const getPinyinTextMatch = (
   ]);
 };
 
-const getTextFieldScore = (term: SearchTerm, fields: SearchIndexedTextField[]) =>
+const getTextFieldScore = (
+  term: SearchTerm,
+  fields: SearchIndexedTextField[],
+  includeHighlights: boolean
+) =>
   getBestSearchMatch(
     fields.flatMap((field) => {
       const value = field.value?.trim();
@@ -575,9 +594,17 @@ const getTextFieldScore = (term: SearchTerm, fields: SearchIndexedTextField[]) =
 
       const role = field.role ?? 'detail';
       const fieldWeight = getFieldWeight(field.weight);
+      const allowFuzzy = !term.isPureLetters || /[a-z]/i.test(field.index.compact);
 
       return [
-        getDirectTextMatch(field, term, role, fieldWeight),
+        getDirectTextMatch(
+          field,
+          term,
+          role,
+          fieldWeight,
+          includeHighlights,
+          allowFuzzy
+        ),
         term.isPureLetters && !field.inferredKind
           ? getPinyinTextMatch(field, term, role, fieldWeight)
           : null
@@ -585,7 +612,11 @@ const getTextFieldScore = (term: SearchTerm, fields: SearchIndexedTextField[]) =
     })
   );
 
-const getNumericTextFieldScore = (term: SearchTerm, fields: SearchIndexedTextField[]) =>
+const getNumericTextFieldScore = (
+  term: SearchTerm,
+  fields: SearchIndexedTextField[],
+  includeHighlights: boolean
+) =>
   getBestSearchMatch(
     fields.flatMap((field) => {
       const value = field.value?.trim();
@@ -597,7 +628,7 @@ const getNumericTextFieldScore = (term: SearchTerm, fields: SearchIndexedTextFie
       const role = field.role ?? 'detail';
       const fieldWeight = getFieldWeight(field.weight);
 
-      return [getDirectNumericTextMatch(field, term, role, fieldWeight)];
+      return [getDirectNumericTextMatch(field, term, role, fieldWeight, includeHighlights)];
     })
   );
 
@@ -815,13 +846,17 @@ const getRecencyBonus = (value: string | null | undefined) => {
   return 0;
 };
 
-const getTermMatch = (term: SearchTerm, candidate: SearchCandidate) =>
+const getTermMatch = (
+  term: SearchTerm,
+  candidate: SearchCandidate,
+  includeHighlights: boolean
+) =>
   getBestSearchMatch([
     term.isPureNumeric
-      ? getNumericTextFieldScore(term, candidate.textFields)
+      ? getNumericTextFieldScore(term, candidate.textFields, includeHighlights)
       : term.isNumericIntent
         ? null
-        : getTextFieldScore(term, candidate.textFields),
+        : getTextFieldScore(term, candidate.textFields, includeHighlights),
     getDateFieldScore(term, candidate.dateFields),
     getAmountFieldScore(term, candidate.amountFields)
   ]);
@@ -829,14 +864,16 @@ const getTermMatch = (term: SearchTerm, candidate: SearchCandidate) =>
 export const scoreSearchCandidate = (
   terms: SearchTerm[],
   candidate: SearchCandidate,
-  searchLogicMode: SearchLogicMode = 'infer'
+  searchLogicMode: SearchLogicMode = 'infer',
+  options: { includeHighlights?: boolean } = {}
 ) => {
   if (terms.length === 0) {
     return null;
   }
 
+  const includeHighlights = options.includeHighlights ?? true;
   const termMatches = terms.flatMap((term) => {
-    const match = getTermMatch(term, candidate);
+    const match = getTermMatch(term, candidate, includeHighlights);
 
     return match ? [{ ...match, term }] : [];
   });

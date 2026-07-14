@@ -139,7 +139,7 @@ const createPackageJson = (overrides: PackageJsonFixture = {}): PackageJsonFixtu
       win: {
         target: [{ target: 'nsis', arch: ['x64'] }],
         icon: 'public/icons/netraflow.ico',
-        artifactName: 'NetraFlow_${version}_Setup.${ext}',
+        artifactName: 'NetraFlow_${version}_${arch}_Setup.${ext}',
         signAndEditExecutable: false
       },
       nsis: {
@@ -184,9 +184,9 @@ const defaultExistingPaths = () =>
   ]);
 
 const defaultScriptSources = () => ({
-  installer: 'const expectedArtifact = `${productName}_${version}_Setup.exe`;',
+  installer: 'const expectedArtifact = `${productName}_${version}_x64_Setup.exe`;',
   portable:
-    'const bundleName = `${productName}_${version}`;\nzipPath = path.join(outputRoot, `${bundleName}_Portable.zip`);'
+    'const bundleName = `${productName}_${version}_x64`;\nzipPath = path.join(outputRoot, `${productName}_${version}_x64_Portable.zip`);'
 });
 
 const defaultGitInfo = (): GitInfoFixture => ({
@@ -413,16 +413,16 @@ test('release metadata keeps suffixes intact in titles assets and full release v
     releaseVersion: '0.9.8',
     isPrerelease: true,
     title: 'NetraFlow 0.9.8',
-    installerName: 'NetraFlow_0.9.8_Setup.exe',
-    portableName: 'NetraFlow_0.9.8_Portable.zip'
+    installerName: 'NetraFlow_0.9.8_x64_Setup.exe',
+    portableName: 'NetraFlow_0.9.8_x64_Portable.zip'
   });
   assert.deepEqual(createReleaseMetadataFromTag('v1.0.0-rc1'), {
     releaseTag: 'v1.0.0-rc1',
     releaseVersion: '1.0.0-rc1',
     isPrerelease: true,
     title: 'NetraFlow 1.0.0-rc1',
-    installerName: 'NetraFlow_1.0.0-rc1_Setup.exe',
-    portableName: 'NetraFlow_1.0.0-rc1_Portable.zip'
+    installerName: 'NetraFlow_1.0.0-rc1_x64_Setup.exe',
+    portableName: 'NetraFlow_1.0.0-rc1_x64_Portable.zip'
   });
   assert.equal(createReleaseMetadataFromTag('v1.0.0').isPrerelease, false);
 });

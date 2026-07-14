@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+
+if [ "${1:-}" != "configure" ]; then
+  exit 0
+fi
+
+enabled_file=/sys/module/apparmor/parameters/enabled
+profile=/etc/apparmor.d/opt.NetraFlow.netraflow
+
+if [ ! -r "$enabled_file" ] || [ "$(head -c 1 "$enabled_file" 2>/dev/null || true)" != "Y" ]; then
+  exit 0
+fi
+
+if ! command -v apparmor_parser >/dev/null 2>&1; then
+  exit 0
+fi
+
+apparmor_parser --replace "$profile"

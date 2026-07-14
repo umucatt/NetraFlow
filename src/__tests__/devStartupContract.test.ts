@@ -6,13 +6,21 @@ import test from 'node:test';
 import { readProjectFile } from './contractText';
 
 const DEV_PORT = '5174';
+const VITE_WATCH_IGNORES = [
+  'runtime',
+  'userdata',
+  '.demo',
+  'release',
+  'dist',
+  'dist-electron'
+] as const;
 
 test('development startup keeps Vite, wait-on, and Electron on the same strict port', () => {
   const viteConfigSource = readProjectFile('vite.config.ts');
   const packageJson = JSON.parse(readProjectFile('package.json')) as {
     scripts?: Record<string, string>;
   };
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const devLauncherSource = readProjectFile('scripts/dev.mjs');
 
   const devScript = packageJson.scripts?.dev ?? '';
@@ -22,6 +30,10 @@ test('development startup keeps Vite, wait-on, and Electron on the same strict p
 
   assert.match(viteConfigSource, /server:\s*\{[\s\S]*port:\s*5174/);
   assert.match(viteConfigSource, /server:\s*\{[\s\S]*strictPort:\s*true/);
+  VITE_WATCH_IGNORES.forEach((directory) => {
+    assert.equal(viteConfigSource.includes(`'**/${directory}/**'`), true);
+  });
+  assert.equal(/hmr:\s*false/.test(viteConfigSource), false);
   assert.equal(devScript, 'node scripts/dev.mjs');
   assert.equal(devRendererScript, 'vite');
   assert.equal(devLauncherSource.includes('const DEV_PORT = 5174;'), true);
@@ -60,7 +72,7 @@ test('development startup keeps Vite, wait-on, and Electron on the same strict p
 });
 
 test('theme bootstrap reads formal settings and state without storage writes', () => {
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const start = mainSource.indexOf('const readThemeBootstrapSettings = () => {');
   const end = mainSource.indexOf('const getSystemThemeForBootstrap', start);
   const themeSource = mainSource.slice(start, end);
@@ -75,7 +87,7 @@ test('theme bootstrap reads formal settings and state without storage writes', (
 });
 
 test('main exposes formal persistence IPC and removes old storage IPC', () => {
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const persistenceIpcSource = readProjectFile('electron/persistenceIpc.ts');
 
   assert.equal(mainSource.includes('registerPersistenceHandlers(persistenceStore, {'), true);
@@ -98,16 +110,23 @@ test('main exposes formal persistence IPC and removes old storage IPC', () => {
   });
 });
 
-test('main wires persistence roots from the same app root used by runtime paths', () => {
-  const mainSource = readProjectFile('electron/main.ts');
-  const rootDeclaration = mainSource.indexOf('const appRoot = getAppInstallRootPath();');
-  const persistenceRootCall = mainSource.indexOf('const persistenceRoots = createPersistenceEnvironmentRoots({');
+test('main creates one StorageLayout before wiring persistence and runtime paths', () => {
+  const mainSource = readProjectFile('electron/mainApplication.ts');
+  const layoutDeclaration = mainSource.indexOf('const storageLayout = createStorageLayout({');
+  const persistenceRootCall = mainSource.indexOf(
+    'const persistenceRoots = createPersistenceEnvironmentRoots(storageLayout);'
+  );
+  const runtimePathConfiguration = mainSource.indexOf('configureRuntimeUserDataPath();');
+  const readyHandler = mainSource.indexOf('app.whenReady().then(() => {');
 
-  assert.ok(rootDeclaration >= 0);
-  assert.ok(persistenceRootCall > rootDeclaration);
-  assert.equal(mainSource.includes('root: process.env.NETRAFLOW_PERSISTENCE_EXE_DIR'), true);
-  assert.equal(mainSource.includes(': appRoot,'), true);
-  assert.equal(mainSource.includes('execDir: process.env.NETRAFLOW_PERSISTENCE_EXE_DIR'), false);
-  assert.equal(mainSource.includes("path.join(getAppInstallRootPath(), RUNTIME_DIR_NAME)"), true);
+  assert.ok(layoutDeclaration >= 0);
+  assert.ok(persistenceRootCall > layoutDeclaration);
+  assert.ok(runtimePathConfiguration > persistenceRootCall);
+  assert.ok(readyHandler > runtimePathConfiguration);
+  assert.equal(mainSource.match(/createStorageLayout\(\{/g)?.length, 1);
+  assert.equal(mainSource.includes('persistenceRoot: process.env.NETRAFLOW_PERSISTENCE_EXE_DIR'), true);
+  assert.equal(mainSource.includes('appPath: app.getAppPath()'), true);
+  assert.equal(mainSource.includes("defaultUserDataPath: app.getPath('userData')"), true);
+  assert.equal(mainSource.includes("app.setPath('userData', storageLayout.runtime)"), true);
   assert.equal(mainSource.includes("path.join(app.getPath('appData'), APP_NAME)"), false);
 });

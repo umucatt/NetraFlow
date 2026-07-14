@@ -18,7 +18,6 @@ type UseAppDataLifecycleControllerOptions = {
   selectedExampleTemplateId: ExampleTemplateId;
   setSelectedExampleTemplateId: (templateId: ExampleTemplateId) => void;
   isExampleMode: boolean;
-  setIsExampleMode: (enabled: boolean) => void;
   defaultGlobalSettings: GlobalSettings;
   defaultAssetChartSettings: AssetChartSettings;
   defaultAutoBackupSettings: AutoBackupSettings;
@@ -43,14 +42,14 @@ type UseAppDataLifecycleControllerOptions = {
   exitExampleModeSession: () => boolean;
   writeTestDataToRealData: () => boolean;
   showConfirmationDialog: (request: AppCallbackConfirmationDialogRequest) => void;
-  markPendingFirstWelcomeAfterClearAll: () => void;
+  clearAllLocalDataAndQuit: () => void;
+  clearLinuxAppImageSandboxConsent?: () => Promise<void>;
 };
 
 export function useAppDataLifecycleController({
   selectedExampleTemplateId,
   setSelectedExampleTemplateId,
   isExampleMode,
-  setIsExampleMode,
   defaultGlobalSettings,
   defaultAssetChartSettings,
   defaultAutoBackupSettings,
@@ -70,7 +69,8 @@ export function useAppDataLifecycleController({
   exitExampleModeSession,
   writeTestDataToRealData,
   showConfirmationDialog,
-  markPendingFirstWelcomeAfterClearAll
+  clearAllLocalDataAndQuit,
+  clearLinuxAppImageSandboxConsent
 }: UseAppDataLifecycleControllerOptions) {
   const [resetConfirmation, setResetConfirmation] =
     useState<AppDataResetConfirmation>(null);
@@ -170,13 +170,6 @@ export function useAppDataLifecycleController({
     }
   };
 
-  const resetAllData = () => {
-    resetUserConfiguration();
-    setIsExampleMode(false);
-    resetAssetHistory(true);
-    markPendingFirstWelcomeAfterClearAll();
-  };
-
   const openResetConfirmation = (action: AppDataResetAction) => {
     if (isExampleMode) {
       return;
@@ -209,6 +202,7 @@ export function useAppDataLifecycleController({
     }
 
     if (action === 'settings') {
+      void clearLinuxAppImageSandboxConsent?.();
       resetUserConfiguration();
       return;
     }
@@ -218,7 +212,7 @@ export function useAppDataLifecycleController({
       return;
     }
 
-    resetAllData();
+    clearAllLocalDataAndQuit();
   };
 
   return {

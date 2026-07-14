@@ -1,24 +1,74 @@
-import type { LockScreenLayerProps } from './lockScreenTypes';
+import { useEffect, useRef } from 'react';
+import NetraFlowLogo from '../branding/NetraFlowLogo';
 import InlineErrorSlot from '../../components/InlineErrorSlot';
+import { isLockScreenPanelExiting, isLockScreenVisible } from './lockScreenLogic';
+import type { LockScreenLayerProps } from './lockScreenTypes';
 
 export function LockScreenLayer({
-  isLocked,
-  productIconPath,
+  state,
   password,
   error,
   isUnlocking,
   onPasswordChange,
-  onSubmit
+  onSubmit,
+  onPanelExitComplete
 }: LockScreenLayerProps) {
-  if (!isLocked) {
+  const hasCompletedExitRef = useRef(false);
+  const isExiting = isLockScreenPanelExiting(state);
+
+  useEffect(() => {
+    hasCompletedExitRef.current = false;
+  }, [state]);
+
+  useEffect(() => {
+    if (!isExiting) {
+      return;
+    }
+
+    const fallbackTimer = window.setTimeout(() => {
+      if (hasCompletedExitRef.current) {
+        return;
+      }
+
+      hasCompletedExitRef.current = true;
+      onPanelExitComplete();
+    }, 160);
+
+    return () => window.clearTimeout(fallbackTimer);
+  }, [isExiting, onPanelExitComplete]);
+
+  if (!isLockScreenVisible(state)) {
     return null;
   }
 
+  const completePanelExit = () => {
+    if (!isExiting || hasCompletedExitRef.current) {
+      return;
+    }
+
+    hasCompletedExitRef.current = true;
+    onPanelExitComplete();
+  };
+
   return (
-    <div className="lock-screen" role="dialog" aria-modal="true" aria-labelledby="lock-title">
-      <form className="lock-screen__panel" onSubmit={onSubmit}>
+    <div
+      className="lock-screen"
+      data-state={state}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="lock-title"
+    >
+      <form
+        className="lock-screen__panel"
+        onAnimationEnd={(event) => {
+          if (event.animationName === 'lock-screen-panel-exit') {
+            completePanelExit();
+          }
+        }}
+        onSubmit={onSubmit}
+      >
         <div className="lock-screen__brand">
-          <img src={productIconPath} alt="" aria-hidden="true" />
+          <NetraFlowLogo className="lock-screen__brand-logo" />
           <div>
             <p className="eyebrow">NetraFlow</p>
             <h2 id="lock-title">已锁定</h2>

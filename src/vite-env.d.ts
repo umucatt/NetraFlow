@@ -5,7 +5,11 @@ declare module '*.svg?raw' {
   export default content;
 }
 
+type DesktopPlatform = 'win32' | 'darwin' | 'linux';
+
 type ElectronWindowApi = {
+  normalAppFirstFrameReady?: () => void;
+  normalAppStartupStateResolved?: (state: string) => void;
   minimize: () => void;
   toggleMaximize: () => void;
   maximize: () => Promise<boolean>;
@@ -14,6 +18,10 @@ type ElectronWindowApi = {
   allowClose?: () => void;
   cancelCloseRequest?: () => void;
   forceClose?: () => void;
+  clearAllLocalDataAndQuit?: () => Promise<void>;
+  notifyClearingPageReady?: () => void;
+  onEnterClearingPage?: (callback: () => void) => () => void;
+  clearLinuxAppImageSandboxConsent?: () => Promise<void>;
   isMaximized: () => Promise<boolean>;
   openExternalUrl?: (url: string) => Promise<void>;
   openUserDataDirectory?: () => Promise<void>;
@@ -34,11 +42,22 @@ type ElectronWindowApi = {
     content: string;
   }) => Promise<{ filePath: string }>;
   onNetraFlowLock?: (listener: () => void) => () => void;
+  onNetraFlowOpenSettings?: (listener: () => void) => () => void;
+  setLockMenuState?: (state: {
+    rendererReady: boolean;
+    applicationLockAllowed: boolean;
+    passwordProtectionEnabled: boolean;
+    isLocked: boolean;
+    isUnlocking: boolean;
+  }) => void;
+  completeLockRequest?: () => void;
   onCloseRequest?: (listener: () => void) => () => void;
   onMaximizedChange: (listener: (isMaximized: boolean) => void) => () => void;
 };
 
 type NetraFlowPersistenceBridge = {
+  readSnapshot?: () => unknown;
+  commitInitializedSnapshot?: (documents: unknown) => unknown;
   readCoreDocument: () => unknown;
   writeCoreDocument: (
     document: unknown,
@@ -80,7 +99,20 @@ type NetraFlowPersistenceBridge = {
 interface Window {
   appInfo?: {
     name: string;
+    platform: DesktopPlatform;
     version?: string;
+    packageKind?: 'appimage' | 'other';
+    sandboxConsentBootstrap?: boolean;
+    chromiumSandboxEnabled?: boolean;
+    initialTheme?: 'light' | 'dark';
+    initialThemeStyle?: 'default' | 'nyaa';
+  };
+  sandboxBootstrap?: {
+    initialTheme: 'light' | 'dark';
+    onThemeChanged: (listener: (theme: 'light' | 'dark') => void) => () => void;
+    quit: () => Promise<void>;
+    consent: () => Promise<{ ok: boolean; message?: string }>;
+    firstFrameReady: () => void;
   };
   electronAPI: ElectronWindowApi;
   electronWindow?: ElectronWindowApi;

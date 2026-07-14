@@ -162,7 +162,7 @@ if (existsSync(unpackedNodeModulesDir)) {
   );
 }
 
-const expectedArtifact = `${productName}_${version}_Setup.exe`;
+const expectedArtifact = `${productName}_${version}_x64_Setup.exe`;
 const artifactPath = path.join(outputDir, expectedArtifact);
 
 if (!existsSync(artifactPath)) {

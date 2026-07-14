@@ -993,18 +993,21 @@ test('category filtering never changes automatically when query changes', () => 
 
   state = searchStateReducer(state, { type: 'open' });
   state = searchStateReducer(state, { type: 'select-category', category: 'history', lock: true });
-  state = searchStateReducer(state, { type: 'focus-item', itemId: 'search-result:history:h-cash-plus' });
+  state = searchStateReducer(state, { type: 'select-item', itemId: 'search-result:history:h-cash-plus' });
   state = searchStateReducer(state, { type: 'hover-item', itemId: 'search-result:history:h-credit-minus' });
   state = searchStateReducer(state, { type: 'load-more-results' });
-  state = searchStateReducer(state, { type: 'query-changed', query: '现金' });
+  state = searchStateReducer(state, { type: 'draft-query-changed', query: '现金' });
 
   assert.equal(state.selectedCategory, 'history');
   assert.equal(state.categoryLockedByUser, true);
-  assert.equal(state.focusedResultId, '');
-  assert.equal(state.hoveredResultId, '');
-  assert.equal(state.resultLimit, SEARCH_INITIAL_RESULT_LIMIT);
+  assert.equal(
+    state.selectedResultIdsByCategory.history,
+    'search-result:history:h-cash-plus'
+  );
+  assert.equal(state.hoveredResultId, 'search-result:history:h-credit-minus');
+  assert.equal(state.resultLimitsByCategory.history, SEARCH_INITIAL_RESULT_LIMIT);
 
-  state = searchStateReducer(state, { type: 'query-changed', query: '' });
+  state = searchStateReducer(state, { type: 'draft-query-changed', query: '' });
   assert.equal(state.selectedCategory, 'history');
 
   const escapeToAll = getSearchEscapeAction(state);
@@ -1034,12 +1037,15 @@ test('loading-more state preserves category and selection until the user chooses
 
   state = searchStateReducer(state, { type: 'open' });
   state = searchStateReducer(state, { type: 'select-category', category: 'account', lock: true });
-  state = searchStateReducer(state, { type: 'focus-item', itemId: 'search-result:account:g-cash:cash' });
+  state = searchStateReducer(state, { type: 'select-item', itemId: 'search-result:account:g-cash:cash' });
   state = searchStateReducer(state, { type: 'load-more-results', minimum: 145 });
 
   assert.equal(state.selectedCategory, 'account');
-  assert.equal(state.focusedResultId, 'search-result:account:g-cash:cash');
-  assert.equal(state.resultLimit >= 145, true);
+  assert.equal(
+    state.selectedResultIdsByCategory.account,
+    'search-result:account:g-cash:cash'
+  );
+  assert.equal(state.resultLimitsByCategory.account >= 145, true);
 });
 
 test('target navigation keeps existing account, history, snapshot, settings behavior', () => {
@@ -1070,6 +1076,121 @@ test('target navigation keeps existing account, history, snapshot, settings beha
     scrollBlock: null
   });
   assert.equal(getNextSearchNavigationTarget(cycle, historyTarget, 1)?.key, 'history:h-credit-minus');
+});
+
+test('bounded top-K matches full ordering, preserves counts, and hydrates only the result window', () => {
+  const full = runGlobalSearch(index, '2026');
+  const diagnostics = {
+    scanned: { account: 0, history: 0, snapshot: 0, settings: 0 },
+    hydrated: 0
+  };
+  const bounded = runGlobalSearch(index, '2026', {
+    resultLimit: 3,
+    diagnostics
+  });
+  const expanded = runGlobalSearch(index, '2026', { resultLimit: 6 });
+
+  assert.deepEqual(
+    bounded.allResults.map((result) => result.target.key),
+    full.allResults.slice(0, 3).map((result) => result.target.key)
+  );
+  assert.deepEqual(bounded.counts, full.counts);
+  assert.deepEqual(
+    expanded.allResults.slice(0, 3).map((result) => result.target.key),
+    bounded.allResults.map((result) => result.target.key)
+  );
+  assert.equal(new Set(expanded.allResults.map((result) => result.target.key)).size, expanded.allResults.length);
+  assert.equal(
+    diagnostics.hydrated,
+    Math.min(3, full.counts.account) +
+      Math.min(3, full.counts.history) +
+      Math.min(3, full.counts.snapshot) +
+      Math.min(3, full.counts.settings)
+  );
+  assert.deepEqual(diagnostics.scanned, {
+    account: index.accounts.length,
+    history: index.history.length,
+    snapshot: index.snapshots.length,
+    settings: index.settings.length
+  });
+});
+
+test('bounded search scans every category and empty query performs no scan', () => {
+  const diagnostics = {
+    scanned: { account: 0, history: 0, snapshot: 0, settings: 0 },
+    hydrated: 0
+  };
+  const bounded = runGlobalSearch(index, '搜索', {
+    resultLimit: 2,
+    diagnostics
+  });
+
+  assert.equal(bounded.settingsResults.length <= 2, true);
+  assert.deepEqual(diagnostics.scanned, {
+    account: index.accounts.length,
+    history: index.history.length,
+    snapshot: index.snapshots.length,
+    settings: index.settings.length
+  });
+
+  runGlobalSearch(index, '', { resultLimit: 2, diagnostics });
+  assert.deepEqual(diagnostics.scanned, {
+    account: 0,
+    history: 0,
+    snapshot: 0,
+    settings: 0
+  });
+  assert.equal(diagnostics.hydrated, 0);
+});
+
+test('one bounded query keeps true counts and independent Top-K windows for every category', () => {
+  const historyOnlyIndex = createGlobalSearchIndex(
+    [],
+    Array.from({ length: 120 }, (_, index): HistoryRecord => ({
+      id: `history-200-${index}`,
+      accountId: 'missing-account',
+      type: '修改',
+      groupName: '历史分组',
+      accountName: '历史账户',
+      beforeAmount: 0,
+      afterAmount: 200,
+      time: `2026-05-${String((index % 28) + 1).padStart(2, '0')}T10:00:00.000Z`
+    })),
+    [],
+    {
+      getAccountNatureLabel: (nature) => natureLabels[nature],
+      getHistoryTypeLabel: (type) => historyTypeLabels[type],
+      getBackupMethodLabel: (method) => backupMethodLabels[method],
+      getAccountMark: (account) => account.alias ?? account.name.slice(0, 1),
+      getHistoryChangeLabel: (record) =>
+        formatSignedMoney((record.afterAmount ?? 0) - (record.beforeAmount ?? 0)),
+      formatMoney: formatSignedMoney,
+      formatShortTime: formatDate,
+      formatPreciseBackupTime: formatDate,
+      settingsItems: []
+    }
+  );
+  const output = runGlobalSearch(historyOnlyIndex, '200', {
+    resultLimitsByCategory: {
+      all: 20,
+      account: 20,
+      history: 20,
+      snapshot: 20,
+      settings: 20
+    }
+  });
+
+  assert.equal(output.counts.all > 99, true);
+  assert.equal(output.counts.history > 99, true);
+  assert.equal(output.counts.account, 0);
+  assert.equal(output.counts.snapshot, 0);
+  assert.equal(output.counts.settings, 0);
+  assert.equal(output.allResults.length, 20);
+  assert.equal(output.historyResults.length, 20);
+  assert.deepEqual(
+    output.allResults.map((result) => result.target.key),
+    output.historyResults.map((result) => result.target.key)
+  );
 });
 
 test('mock-data pressure stays inside the search budget', () => {
@@ -1202,13 +1323,13 @@ test('large-data pressure covers mixed data and continuous input', () => {
   const searchQueries = ['', '现', '现金', '200', '+200', '20260512', '快照'];
   const continuousQueries = ['现', '现金', '现金 2', '现金 20', '现金 200'];
 
-  [10000, 20000].forEach((historyCount) => {
+  [10000, 20000, 48000].forEach((historyCount) => {
     const pressureIndex = createPressureIndex(historyCount);
     let maxSingleQueryDuration = 0;
 
     searchQueries.forEach((query) => {
       const start = performance.now();
-      const output = runGlobalSearch(pressureIndex, query);
+      const output = runGlobalSearch(pressureIndex, query, { resultLimit: 99 });
       const duration = performance.now() - start;
 
       maxSingleQueryDuration = Math.max(maxSingleQueryDuration, duration);
@@ -1226,12 +1347,28 @@ test('large-data pressure covers mixed data and continuous input', () => {
     const sequenceStart = performance.now();
 
     continuousQueries.forEach((query) => {
-      runGlobalSearch(pressureIndex, query);
+      runGlobalSearch(pressureIndex, query, { resultLimit: 99 });
     });
 
     const sequenceDuration = performance.now() - sequenceStart;
-    const singleQueryBudget = historyCount === 20000 ? 1200 : 800;
-    const sequenceBudget = historyCount === 20000 ? 3500 : 2400;
+    const singleQueryBudget = historyCount === 48000 ? 1500 : historyCount === 20000 ? 1200 : 800;
+    const sequenceBudget = historyCount === 48000 ? 5000 : historyCount === 20000 ? 3500 : 2400;
+
+    if (historyCount === 48000) {
+      const diagnostics = {
+        scanned: { account: 0, history: 0, snapshot: 0, settings: 0 },
+        hydrated: 0
+      };
+      const bounded = runGlobalSearch(pressureIndex, '现金', {
+        resultLimit: 99,
+        diagnostics
+      });
+
+      assert.equal(bounded.allResults.length <= 99, true);
+      assert.equal(diagnostics.hydrated <= 99 * 4, true);
+      assert.equal(diagnostics.scanned.history, pressureIndex.history.length);
+      assert.equal(diagnostics.scanned.account, pressureIndex.accounts.length);
+    }
 
     assert.ok(
       maxSingleQueryDuration < singleQueryBudget,

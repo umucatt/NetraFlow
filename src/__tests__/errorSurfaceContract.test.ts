@@ -6,7 +6,7 @@ import test from 'node:test';
 const projectRoot = process.cwd();
 
 const readProjectFile = (filePath: string) =>
-  readFileSync(path.join(projectRoot, filePath), 'utf8');
+  readFileSync(path.join(projectRoot, filePath), 'utf8').replace(/\r\n?/g, '\n');
 
 const normalizeAllowedDots = (text: string) =>
   text
@@ -72,10 +72,12 @@ test('close-time core read failure uses the fatal surface instead of force-closi
 });
 
 test('product single instance lock is product-wide and acquired before persistence setup', () => {
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const productLockSource = readProjectFile('electron/productInstanceLock.ts');
   const lockIndex = mainSource.indexOf('const gotProductInstanceLock = await productInstanceCoordinator.acquire();');
-  const rootsIndex = mainSource.indexOf('const persistenceRoots = createPersistenceEnvironmentRoots({');
+  const rootsIndex = mainSource.indexOf(
+    'const persistenceRoots = createPersistenceEnvironmentRoots(storageLayout);'
+  );
   const electronLockIndex = mainSource.indexOf('const gotSingleInstanceLock = app.requestSingleInstanceLock();');
 
   assert.ok(lockIndex >= 0);
@@ -85,10 +87,15 @@ test('product single instance lock is product-wide and acquired before persisten
   assert.ok(rootsIndex < electronLockIndex);
   assert.equal(productLockSource.includes('export const PRODUCT_INSTANCE_PIPE_PATH ='), true);
   assert.equal(productLockSource.includes('netraflow-com-netraflow-app-single-instance'), true);
-  assert.equal(productLockSource.includes("const PRODUCT_INSTANCE_MESSAGE = 'activate';"), true);
-  assert.equal(productLockSource.includes("if (error.code === 'EADDRINUSE')"), true);
-  assert.equal(productLockSource.includes('void notifyExisting().finally(() => resolve(false));'), true);
-  assert.equal(productLockSource.includes('currentServer.close(() => resolve());'), true);
+  assert.equal(
+    productLockSource.includes("const PRODUCT_INSTANCE_ACTIVATE_MESSAGE = 'activate';"),
+    true
+  );
+  assert.equal(productLockSource.includes("const PRODUCT_INSTANCE_LOCK_MESSAGE = 'lock';"), true);
+  assert.equal(productLockSource.includes("initial.code !== 'EADDRINUSE'"), true);
+  assert.equal(productLockSource.includes("existing.code !== 'ECONNREFUSED'"), true);
+  assert.equal(productLockSource.includes('removeVerifiedStaleSocket'), true);
+  assert.equal(productLockSource.includes('currentServer.close(async () =>'), true);
   assert.equal(mainSource.includes('void productInstanceCoordinator.release();'), true);
 });
 
@@ -345,7 +352,7 @@ test('ordinary core saves use one trailing coalescing timer and explicit flush b
 
 test('close-before uses a single renderer state machine and one-shot main allow close', () => {
   const appSource = readProjectFile('src/App.tsx');
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const closeBeforeControllerSource = readProjectFile('src/app/closeBeforeController.ts');
   const closeBeforeWindowSource = readProjectFile('electron/closeBeforeWindowState.ts');
   const preloadSource = readProjectFile('electron/preload.ts');
@@ -375,6 +382,48 @@ test('close-before uses a single renderer state machine and one-shot main allow 
   assert.equal(preloadSource.includes("cancelCloseRequest: () => ipcRenderer.send('window:cancel-close-request')"), true);
   assert.equal(viteEnvSource.includes('allowClose?: () => void;'), true);
   assert.equal(viteEnvSource.includes('cancelCloseRequest?: () => void;'), true);
+});
+
+test('macOS app quit waits for close approval and defers persistence cleanup until will-quit', () => {
+  const mainSource = readProjectFile('electron/mainApplication.ts');
+  const shutdownStateSource = readProjectFile('electron/appShutdownState.ts');
+  const beforeQuitStart = mainSource.indexOf("app.on('before-quit', (event) => {");
+  const willQuitStart = mainSource.indexOf("app.on('will-quit', () => {");
+  const beforeQuitSource = mainSource.slice(beforeQuitStart, willQuitStart);
+  const willQuitSource = mainSource.slice(
+    willQuitStart,
+    mainSource.indexOf("app.on('window-all-closed'", willQuitStart)
+  );
+
+  assert.ok(beforeQuitStart >= 0);
+  assert.ok(willQuitStart > beforeQuitStart);
+  assert.equal(shutdownStateSource.includes("| 'window-close-request'"), true);
+  assert.equal(shutdownStateSource.includes("| 'app-quit-request'"), true);
+  assert.equal(shutdownStateSource.includes("| 'app-quit-approved'"), true);
+  assert.equal(shutdownStateSource.includes("| 'destructive-shutdown'"), true);
+  assert.equal(mainSource.includes('const appShutdownState = createAppShutdownState();'), true);
+  assert.equal(beforeQuitSource.includes("process.platform !== 'darwin'"), true);
+  assert.equal(
+    beforeQuitSource.includes('appShutdownState.requestAppQuit(Boolean(targetWindow))'),
+    true
+  );
+  assert.equal(beforeQuitSource.includes("appQuitRequest === 'continue-quit'"), true);
+  assert.equal(beforeQuitSource.includes("appQuitRequest === 'start-close-approval'"), true);
+  assert.equal(beforeQuitSource.includes('event.preventDefault();'), true);
+  assert.equal(
+    beforeQuitSource.includes('closeBeforeWindows.requestRendererCloseApproval(targetWindow);'),
+    true
+  );
+  assert.equal(beforeQuitSource.includes('cleanupDemoOnAppQuit'), false);
+  assert.equal(willQuitSource.includes('cleanupDemoOnAppQuit();'), true);
+  assert.equal(mainSource.includes('appShutdownState.cancelCloseRequest();'), true);
+  assert.equal(mainSource.includes('appShutdownState.handleWindowClosed();'), true);
+  assert.equal(
+    mainSource.includes('if (shouldResumeAppQuit) {\n      setTimeout(() => {\n        app.quit();'),
+    true
+  );
+  assert.equal(mainSource.includes('const isAppQuitInProgress = ()'), true);
+  assert.equal(mainSource.includes('!isAppQuitInProgress()'), true);
 });
 
 test('core integrity dialog exposes only the allowed pending-save actions', () => {

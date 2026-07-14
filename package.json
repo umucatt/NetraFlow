@@ -1,6 +1,6 @@
 {
   "name": "netraflow",
-  "version": "0.9.9",
+  "version": "0.9.10",
   "private": true,
   "license": "GPL-3.0-only",
   "productName": "NetraFlow",
@@ -10,7 +10,6 @@
   "build": {
     "appId": "com.netraflow.app",
     "productName": "NetraFlow",
-    "icon": "public/icons/netraflow",
     "asar": true,
     "directories": {
       "output": "release/installer"
@@ -20,6 +19,7 @@
       "dist-electron/**/*",
       "public/**/*",
       "package.json",
+      "!**/netraflow.icns",
       "!**/userData/**",
       "!**/userdata/**",
       "!**/.demo/**",
@@ -55,6 +55,40 @@
         ]
       }
     ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "public/icons/netraflow.icns",
+      "extendInfo": {
+        "NSHumanReadableCopyright": ""
+      },
+      "artifactName": "NetraFlow_${version}_${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/icons/linux",
+      "category": "Utility",
+      "desktop": {
+        "entry": {
+          "StartupWMClass": "NetraFlow",
+          "Terminal": "false"
+        }
+      },
+      "artifactName": "NetraFlow_${version}_${arch}.${ext}"
+    },
     "win": {
       "target": [
         {
@@ -65,7 +99,7 @@
         }
       ],
       "icon": "public/icons/netraflow.ico",
-      "artifactName": "NetraFlow_${version}_Setup.${ext}",
+      "artifactName": "NetraFlow_${version}_${arch}_Setup.${ext}",
       "executableName": "NetraFlow",
       "signAndEditExecutable": false
     },
@@ -100,6 +134,11 @@
     "clean:release": "node scripts/clean-release.mjs",
     "dist:installer": "node scripts/package-installer.mjs",
     "dist:portable": "node scripts/package-portable.mjs",
+    "dist:mac": "node scripts/package-dmg.mjs",
+    "dist:linux": "node scripts/package-appimage.mjs",
+    "dist:deb": "node scripts/package-deb.mjs",
+    "generate:icons": "node scripts/generate-icons.mjs",
+    "generate:windows-icon": "node scripts/generate-windows-icon.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

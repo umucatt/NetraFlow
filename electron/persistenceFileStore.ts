@@ -51,6 +51,7 @@ export type PersistenceErrorCode =
   | 'PERSISTENCE_SNAPSHOT_ENCRYPT_FAILED'
   | 'PERSISTENCE_SNAPSHOT_DECRYPT_FAILED'
   | 'PERSISTENCE_CORE_EXTERNAL_MODIFIED'
+  | 'PERSISTENCE_SHUTTING_DOWN'
   | 'PERSISTENCE_READ_FAILED'
   | 'PERSISTENCE_READ_INVALID'
   | 'PERSISTENCE_SCHEMA_INVALID'
@@ -782,7 +783,7 @@ const writeDocument = (
 
 export const createPersistenceStore = ({
   root,
-  paths = createPersistencePaths(root),
+  paths: inputPaths,
   adapter = defaultPersistenceFileAdapter,
   logger
 }: {
@@ -791,6 +792,12 @@ export const createPersistenceStore = ({
   adapter?: PersistenceFileAdapter;
   logger?: PersistenceLogger;
 }): PersistenceStore => {
+  const paths = inputPaths ?? (root ? createPersistencePaths(root) : undefined);
+
+  if (!paths) {
+    throw new Error('A persistence root or explicit persistence paths are required.');
+  }
+
   let coreSession: CoreCryptoSession | null = null;
   let lastCoreFileFingerprint: CoreFileFingerprint | null | undefined;
 

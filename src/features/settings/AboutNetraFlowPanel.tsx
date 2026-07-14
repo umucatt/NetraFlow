@@ -1,11 +1,11 @@
 import type { PointerEvent } from 'react';
+import NetraFlowLogo from '../../app/branding/NetraFlowLogo';
 import bilibiliIcon from '../../assets/Bilibili_tv_a.svg';
 import { NfGithubIcon } from '../../assets/icons';
 import NfSvgIcon from '../../components/NfSvgIcon';
 
 export type AboutNetraFlowPanelProps = {
   appVersion: string;
-  productIconPath: string;
   productNameZh: string;
   productNameEn: string;
   onOpenBilibili: () => void;
@@ -16,7 +16,6 @@ export type AboutNetraFlowPanelProps = {
 
 function AboutNetraFlowPanel({
   appVersion,
-  productIconPath,
   productNameZh,
   productNameEn,
   onOpenBilibili,
@@ -24,10 +23,29 @@ function AboutNetraFlowPanel({
   onStartVersionLongPress,
   onClearVersionLongPress
 }: AboutNetraFlowPanelProps) {
+  const showSandboxStatus =
+    window.appInfo?.platform === 'linux' &&
+      window.appInfo?.packageKind === 'appimage' &&
+      window.appInfo?.sandboxConsentBootstrap !== true &&
+      window.appInfo?.chromiumSandboxEnabled === false;
+
+  const clearSandboxConsent = async () => {
+    try {
+      await window.electronAPI?.clearLinuxAppImageSandboxConsent?.();
+      window.dispatchEvent(new CustomEvent('netraflow:toast', {
+        detail: { message: '下次启动将重新尝试启用沙盒', tone: 'info' }
+      }));
+    } catch {
+      window.dispatchEvent(new CustomEvent('netraflow:toast', {
+        detail: { message: '无法清除兼容模式授权', tone: 'error' }
+      }));
+    }
+  };
+
   return (
     <section className="about-netraflow">
       <div className="about-netraflow__summary">
-        <img src={productIconPath} alt="净流图标" />
+        <NetraFlowLogo className="about-netraflow__logo" />
         <div>
           <h2>{productNameZh}</h2>
           <p>{productNameEn}</p>
@@ -81,6 +99,16 @@ function AboutNetraFlowPanel({
           </button>
         </div>
       </section>
+
+      {showSandboxStatus ? (
+        <button
+          type="button"
+          className="about-netraflow__sandbox-status"
+          onClick={() => void clearSandboxConsent()}
+        >
+          Chromium 沙盒未启用
+        </button>
+      ) : null}
 
     </section>
   );

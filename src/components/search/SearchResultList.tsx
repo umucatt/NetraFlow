@@ -5,7 +5,7 @@ import SearchResultItem from './SearchResultItem';
 type SearchResultListProps = {
   output: GlobalSearchOutput;
   visibleCategory: SearchCategory;
-  focusedItemId: string;
+  selectedItemId: string;
   hoveredItemId: string;
   resultLimit: number;
   lastOpenedResultId: string;
@@ -20,7 +20,7 @@ type SearchResultListProps = {
 function SearchResultList({
   output,
   visibleCategory,
-  focusedItemId,
+  selectedItemId,
   hoveredItemId,
   resultLimit,
   lastOpenedResultId,
@@ -34,6 +34,7 @@ function SearchResultList({
   const allResults = getSearchResultsForCategory(output, visibleCategory);
   const visibleResults = allResults.slice(0, resultLimit);
   const activeSearchCount = allResults.length;
+  const activeItemId = hoveredItemId || selectedItemId;
   const emptyText =
     output.searchLogicMode === 'strict'
       ? '没有找到命中结果，可在全局设置中开启推断匹配'
@@ -56,8 +57,7 @@ function SearchResultList({
           <SearchResultItem
             key={result.target.key}
             result={result}
-            selected={focusedItemId === itemId}
-            hovered={hoveredItemId === itemId}
+            active={activeItemId === itemId}
             recentlyOpened={lastOpenedResultId === result.target.key}
             registerItemRef={registerItemRef}
             onSelectItem={onSelectItem}

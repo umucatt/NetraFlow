@@ -6,6 +6,16 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 type ReleaseNotesModule = {
+  createBundleReleaseNotesText: (options: {
+    manifest: {
+      version: string;
+      tag: string;
+      commit: string;
+      manifests: Array<{ platform: string; signing?: string }>;
+      assets: Array<{ name: string; size: number; sha256: string }>;
+    };
+    changelogSection: string;
+  }) => string;
   createReleaseNotesText: (options: { changelogText: string; version: string }) => string;
   extractChangelogVersionSection: (options: {
     changelogText: string;
@@ -243,4 +253,31 @@ test('release notes ignore lower-level headings that look like versions', async 
 
   assert.equal(section.body.includes('### 0.9.9'), true);
   assert.equal(section.body.endsWith('* Nested body heading.'), true);
+});
+
+test('bundle release notes list five hashes signing status and GitHub source archives', async () => {
+  const { createBundleReleaseNotesText } = await loadReleaseNotesLogic();
+  const names = [
+    'NetraFlow_0.9.9_x64_Setup.exe',
+    'NetraFlow_0.9.9_x64_Portable.zip',
+    'NetraFlow_0.9.9_arm64.dmg',
+    'NetraFlow_0.9.9_x64.AppImage',
+    'NetraFlow_0.9.9_x64.deb'
+  ];
+  const notes = createBundleReleaseNotesText({
+    manifest: {
+      version: '0.9.9',
+      tag: 'v0.9.9',
+      commit: 'a'.repeat(40),
+      manifests: [{ platform: 'macos', signing: 'no Developer ID signing; not notarized' }],
+      assets: names.map((name, index) => ({ name, size: index + 1, sha256: String(index).repeat(64) }))
+    },
+    changelogSection: '### Changed\n\n* Release body.'
+  });
+  for (const name of names) assert.equal(notes.includes(name), true);
+  assert.equal((notes.match(/SHA-256/g) ?? []).length, 5);
+  assert.match(notes, /Tag: `v0\.9\.9`/);
+  assert.match(notes, /Commit: `a{40}`/);
+  assert.match(notes, /no Developer ID signing; not notarized/);
+  assert.match(notes, /provided automatically by GitHub/);
 });

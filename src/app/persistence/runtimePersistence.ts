@@ -69,6 +69,18 @@ export type RuntimePersistenceSnapshot = {
     integrityWarning?: string;
     integrityFailure?: 'internal' | 'continuity';
   };
+  documentExists: {
+    core: boolean;
+    settings: boolean;
+    state: boolean;
+    security: boolean;
+  };
+  documentStatus?: {
+    core: 'missing' | 'valid' | 'invalid';
+    settings: 'missing' | 'valid' | 'invalid';
+    state: 'missing' | 'valid' | 'invalid';
+    security: 'missing' | 'valid' | 'invalid';
+  };
 };
 
 export type RuntimePersistenceEnvironmentTransition = {
@@ -155,6 +167,14 @@ const ensurePersistenceSnapshot = (value: unknown): RuntimePersistenceSnapshot =
   }
 
   const snapshot = value as Record<string, unknown>;
+  const documentStatus =
+    typeof snapshot.documentStatus === 'object' && snapshot.documentStatus !== null
+      ? snapshot.documentStatus as RuntimePersistenceSnapshot['documentStatus']
+      : undefined;
+
+  if (documentStatus && Object.values(documentStatus).some((status) => status === 'invalid')) {
+    throw new Error('Failed to read persistence snapshot: PERSISTENCE_SNAPSHOT_INVALID');
+  }
 
   if (!isCoreDocument(snapshot.core)) {
     throw new Error('Invalid core document returned by persistence bridge.');
@@ -180,7 +200,17 @@ const ensurePersistenceSnapshot = (value: unknown): RuntimePersistenceSnapshot =
     coreProtection:
       typeof snapshot.coreProtection === 'object' && snapshot.coreProtection !== null
         ? snapshot.coreProtection as RuntimePersistenceSnapshot['coreProtection']
-        : { enabled: false, locked: false }
+        : { enabled: false, locked: false },
+    documentExists:
+      typeof snapshot.documentExists === 'object' && snapshot.documentExists !== null
+        ? {
+            core: (snapshot.documentExists as Record<string, unknown>).core === true,
+            settings: (snapshot.documentExists as Record<string, unknown>).settings === true,
+            state: (snapshot.documentExists as Record<string, unknown>).state === true,
+            security: (snapshot.documentExists as Record<string, unknown>).security === true
+          }
+        : { core: true, settings: true, state: true, security: true },
+    ...(documentStatus ? { documentStatus } : {})
   };
 };
 
@@ -227,6 +257,22 @@ const ensureEnvironmentTransition = (
 
 export const readRuntimePersistenceSnapshot = (): RuntimePersistenceSnapshot => {
   const bridge = getBridge();
+  if (bridge?.readSnapshot) {
+    const result = bridge.readSnapshot();
+
+    if (
+      typeof result !== 'object' ||
+      result === null ||
+      !('ok' in result) ||
+      (result as { ok?: unknown }).ok !== true ||
+      !('snapshot' in result)
+    ) {
+      throw new Error('Failed to read persistence snapshot: PERSISTENCE_SNAPSHOT_INVALID');
+    }
+
+    return ensurePersistenceSnapshot((result as { snapshot: unknown }).snapshot);
+  }
+
   const coreResult = bridge?.readCoreDocument
     ? ensureReadResult(bridge.readCoreDocument())
     : {
@@ -268,28 +314,71 @@ export const readRuntimePersistenceSnapshot = (): RuntimePersistenceSnapshot => 
     throw new Error('Invalid core document returned by persistence bridge.');
   }
 
+  const settingsResult = bridge?.readSettingsDocument
+    ? ensureReadResult(bridge.readSettingsDocument())
+    : { ok: true as const, exists: false, document: createDefaultSettingsDocument() };
+  const stateResult = bridge?.readStateDocument
+    ? ensureReadResult(bridge.readStateDocument())
+    : { ok: true as const, exists: false, document: createDefaultStateDocument() };
+  const securityResult = bridge?.readSecurityDocument
+    ? ensureReadResult(bridge.readSecurityDocument())
+    : { ok: true as const, exists: false, document: createDefaultSecurityDocument() };
+
+  const readResolvedDocument = <T>(
+    kind: 'settings' | 'state' | 'security',
+    result: PersistenceReadResult,
+    isDocument: (value: unknown) => value is T
+  ) => {
+    if (!result.ok) throw new Error(`Failed to read ${kind} document: ${result.code}`);
+    if ('locked' in result || !isDocument(result.document)) {
+      throw new Error(`Invalid ${kind} document returned by persistence bridge.`);
+    }
+    return result.document;
+  };
+
   return {
     core,
-    settings: readDocument({
-      kind: 'settings',
-      fallback: createDefaultSettingsDocument,
-      read: bridge?.readSettingsDocument,
-      isDocument: isSettingsDocument
-    }),
-    state: readDocument({
-      kind: 'state',
-      fallback: createDefaultStateDocument,
-      read: bridge?.readStateDocument,
-      isDocument: isStateDocument
-    }),
-    security: readDocument({
-      kind: 'security',
-      fallback: createDefaultSecurityDocument,
-      read: bridge?.readSecurityDocument,
-      isDocument: isSecurityDocument
-    }),
-    coreProtection
+    settings: readResolvedDocument('settings', settingsResult, isSettingsDocument),
+    state: readResolvedDocument('state', stateResult, isStateDocument),
+    security: readResolvedDocument('security', securityResult, isSecurityDocument),
+    coreProtection,
+    documentExists: {
+      core: coreResult.exists,
+      settings: settingsResult.ok && settingsResult.exists,
+      state: stateResult.ok && stateResult.exists,
+      security: securityResult.ok && securityResult.exists
+    }
   };
+};
+
+export const commitInitializedPersistenceSnapshot = ({
+  core,
+  state
+}: {
+  core: CoreDocument;
+  state: StateDocument;
+}): RuntimePersistenceSnapshot => {
+  if (!isCoreDocument(core) || !isStateDocument(state)) {
+    throw new Error('Initialized persistence snapshot failed renderer validation.');
+  }
+
+  const bridge = requireBridge();
+  if (!bridge.commitInitializedSnapshot) {
+    throw new Error('Initialized persistence snapshot bridge is not available.');
+  }
+
+  const result = bridge.commitInitializedSnapshot({ core, state });
+  if (
+    typeof result !== 'object' ||
+    result === null ||
+    !('ok' in result) ||
+    (result as { ok?: unknown }).ok !== true ||
+    !('snapshot' in result)
+  ) {
+    throw new Error('Failed to commit initialized persistence snapshot.');
+  }
+
+  return ensurePersistenceSnapshot((result as { snapshot: unknown }).snapshot);
 };
 
 export const readCoreDocument = (): CoreDocument => {

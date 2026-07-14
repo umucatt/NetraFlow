@@ -108,6 +108,10 @@ export const createExpectedManifest = (outRoot, sourceFiles) =>
     }));
 
 const withJsExtension = (specifier) => {
+  if (specifier.startsWith('.') && specifier.endsWith('.svg?raw')) {
+    return `${specifier.slice(0, -'?raw'.length)}.raw.js`;
+  }
+
   if (!specifier.startsWith('.') || path.extname(specifier)) {
     return specifier;
   }
@@ -179,6 +183,7 @@ export const cleanTmpRoot = (tmpRoot) => {
 
 export const transpileSourceFiles = (outRoot, sourceFiles, manifest) => {
   const manifestBySource = new Map(manifest.map((entry) => [entry.sourceFile, entry]));
+  const writtenRawSvgModules = new Set();
   let transpiledCount = 0;
 
   for (const sourceFile of sourceFiles) {
@@ -193,6 +198,39 @@ export const transpileSourceFiles = (outRoot, sourceFiles, manifest) => {
         filePath: sourceFile,
         cause: error
       });
+    }
+
+    for (const match of source.matchAll(/from\s+["'](\.[^"']+\.svg\?raw)["']/g)) {
+      const rawSpecifier = match[1];
+      const svgSourceFile = path.resolve(
+        path.dirname(sourceFile),
+        rawSpecifier.slice(0, -'?raw'.length)
+      );
+      const relativeSvgPath = path.relative(rootDir, svgSourceFile);
+
+      if (relativeSvgPath.startsWith('..') || path.isAbsolute(relativeSvgPath)) {
+        throw new TestRunnerError('Raw SVG import resolves outside the project root.', {
+          phase: 'transpile',
+          filePath: svgSourceFile
+        });
+      }
+
+      const rawModuleFile = path.join(outRoot, `${relativeSvgPath}.raw.js`);
+
+      if (!writtenRawSvgModules.has(rawModuleFile)) {
+        try {
+          const svgSource = readFileSync(svgSourceFile, 'utf8');
+          mkdirSync(path.dirname(rawModuleFile), { recursive: true });
+          writeFileSync(rawModuleFile, `export default ${JSON.stringify(svgSource)};\n`, 'utf8');
+          writtenRawSvgModules.add(rawModuleFile);
+        } catch (error) {
+          throw new TestRunnerError('Failed to create a raw SVG test module.', {
+            phase: 'transpile',
+            filePath: svgSourceFile,
+            cause: error
+          });
+        }
+      }
     }
 
     const transpiled = ts.transpileModule(source, {

@@ -3,6 +3,35 @@
 @import './styles/window-frame.css';
 @import './styles/app-shell.css';
 
+.destructive-clearing-page {
+  width: 100vw;
+  height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--app-bg);
+  color: var(--text-main);
+}
+
+.destructive-clearing-page__status {
+  display: flex;
+  align-items: baseline;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.destructive-clearing-page__dots::after {
+  display: inline-block;
+  width: 1.5em;
+  content: '.';
+  animation: destructive-clearing-dots 1.2s steps(1, end) infinite;
+}
+
+@keyframes destructive-clearing-dots {
+  0% { content: '.'; }
+  33% { content: '..'; }
+  66% { content: '...'; }
+}
+
 .toast-viewport {
   position: fixed;
   right: 0;
@@ -10,7 +39,7 @@
   z-index: 120;
   display: grid;
   justify-items: end;
-  width: 188px;
+  width: max-content;
   max-width: calc(100vw - 44px);
   pointer-events: none;
 }
@@ -18,7 +47,7 @@
 .toast-viewport__item {
   display: grid;
   place-items: center;
-  width: 188px;
+  width: max-content;
   max-width: calc(100vw - 44px);
   min-height: 42px;
   padding: 10px 14px;
@@ -34,7 +63,13 @@
   line-height: 1.38;
   text-align: center;
   overflow-wrap: break-word;
+  white-space: nowrap;
   animation: nf-toast-edge-lifecycle 2500ms ease-out forwards;
+}
+
+.sandbox-compatibility-gate {
+  min-height: 100%;
+  background: var(--app-bg);
 }
 
 @keyframes nf-toast-edge-lifecycle {
@@ -1728,13 +1763,19 @@
   align-items: center;
 }
 
+.asset-overview__brand-logo {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+}
+
 .about-netraflow__summary > div {
   display: grid;
   align-content: center;
   gap: 2px;
 }
 
-.about-netraflow__summary > img {
+.about-netraflow__summary > .netraflow-logo {
   width: 64px;
   height: 64px;
   display: block;
@@ -1828,6 +1869,24 @@
 .about-netraflow__info-icon {
   width: 20px;
   height: 20px;
+}
+
+.about-netraflow__sandbox-status {
+  justify-self: start;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.about-netraflow__sandbox-status:hover,
+.about-netraflow__sandbox-status:focus-visible {
+  color: var(--text-main);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .settings-navigation-panel {
@@ -2284,6 +2343,28 @@
   box-shadow: var(--shadow-popover);
 }
 
+.password-editor-dialog__fields {
+  display: grid;
+  gap: 16px;
+}
+
+.password-editor-dialog__new-password {
+  display: grid;
+  gap: 7px;
+}
+
+.password-editor-dialog__strength,
+.password-protection-disable-dialog__description {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.password-protection-disable-dialog__description {
+  margin-bottom: 14px;
+  font-size: 0.94rem;
+}
+
 .modal-message {
   display: grid;
   gap: 8px;
@@ -2551,16 +2632,12 @@
 
 .lock-screen {
   position: fixed;
-  top: var(--titlebar-height);
-  right: 0;
-  bottom: 0;
-  left: 0;
+  inset: 0;
   z-index: 9500;
   display: grid;
   place-items: center;
   padding: var(--workspace-padding);
-  background: var(--lock-bg);
-  backdrop-filter: blur(12px);
+  background: var(--app-bg);
 }
 
 .lock-screen__panel {
@@ -2572,6 +2649,38 @@
   padding: 24px;
   background: var(--panel-bg-strong);
   box-shadow: var(--shadow-card);
+  animation: lock-screen-panel-enter 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.lock-screen[data-state='unlock-exiting'] .lock-screen__panel {
+  animation: lock-screen-panel-exit 100ms ease-in both;
+}
+
+@keyframes lock-screen-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes lock-screen-panel-exit {
+  to {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lock-screen__panel,
+  .lock-screen[data-state='unlock-exiting'] .lock-screen__panel {
+    animation-duration: 1ms;
+    animation-delay: 0ms;
+  }
 }
 
 .lock-screen__brand {
@@ -2581,7 +2690,7 @@
   align-items: center;
 }
 
-.lock-screen__brand img {
+.lock-screen__brand .netraflow-logo {
   width: 48px;
   height: 48px;
   display: block;
@@ -2936,6 +3045,36 @@ h1 {
   padding-right: 2px;
 }
 
+.search-results__content {
+  display: grid;
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+}
+
+.search-results__content[data-result-entering='true'] {
+  animation: search-results-enter 140ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes search-results-enter {
+  from {
+    opacity: 0.72;
+    transform: translateY(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-results__content[data-result-entering='true'] {
+    animation: none;
+  }
+}
+
 .search-section {
   display: grid;
   grid-auto-rows: max-content;
@@ -2989,7 +3128,9 @@ h1 {
   border-radius: var(--radius-card);
   padding: 9px 10px;
   background: var(--surface-muted);
+  background-clip: padding-box;
   color: var(--text-main);
+  overflow: hidden;
   cursor: pointer;
   font: inherit;
   text-align: left;
@@ -3000,24 +3141,19 @@ h1 {
 }
 
 .search-result-button:hover,
+.search-result-button--active,
 .search-result-button:focus-visible {
   border-color: var(--accent-border);
   background: var(--accent-bg);
-  box-shadow: 0 8px 20px rgba(52, 43, 30, 0.08);
+  box-shadow: inset 0 0 0 1px var(--accent-border);
   outline: none;
-}
-
-.search-result-button--focused {
-  border-color: var(--accent-border);
-  background: var(--accent-bg);
-  box-shadow: 0 0 0 3px var(--accent-bg);
 }
 
 .search-result-button--inferred {
   background: color-mix(in srgb, var(--surface-muted) 82%, var(--surface-bg));
 }
 
-.search-result-button--inferred.search-result-button--focused,
+.search-result-button--inferred.search-result-button--active,
 .search-result-button--inferred:hover,
 .search-result-button--inferred:focus-visible {
   border-color: color-mix(in srgb, var(--accent-border) 70%, var(--border-soft));

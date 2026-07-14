@@ -59,6 +59,7 @@ import {
   createRuntimeGlobalSettings,
   createSecurityDocumentFromRuntime,
   createSettingsDocumentFromRuntime,
+  commitInitializedPersistenceSnapshot,
   acknowledgeCoreIntegrityIssue,
   disableCoreProtection,
   enableCoreProtection,
@@ -118,7 +119,9 @@ import {
 } from './app/snapshotSecurityDialogs';
 import {
   FirstWelcomeLayer,
+  classifyStartupDataState,
   normalizeFirstWelcomeState,
+  resolveStartupDestination,
   shouldShowFirstWelcome,
   type FirstWelcomeStage,
   type FirstWelcomeState,
@@ -234,6 +237,10 @@ import {
 import { useSnapshotBackupController } from './features/backup/useSnapshotBackupController';
 import { useSecuritySettingsController } from './features/security/useSecuritySettingsController';
 import { useUserSettingsFileController } from './features/userSettings/useUserSettingsFileController';
+import {
+  resolveNormalAppFirstFrameState,
+  useNormalAppFirstFrameReady
+} from './app/normalAppFirstFrame';
 
 import {
   getAccountDisplayMark,
@@ -272,6 +279,7 @@ import {
   resolveSearchNavigationTarget
 } from './search/searchNavigationLogic';
 import { useGlobalSearchController } from './search/useGlobalSearchController';
+import type { SearchIndexConfig } from './search/searchIndexConfig';
 
 import type {
   Account,
@@ -298,7 +306,6 @@ import type {
 } from './features/charts';
 import type { ExampleTemplateId } from './exampleData';
 import type {
-  CreateSearchIndexOptions,
   SearchNavigationTarget
 } from './search/searchTypes';
 import type {
@@ -432,8 +439,6 @@ const PRODUCT_NAME_ZH = '净流';
 
 const PRODUCT_TAGLINE = '资产变化记录工具';
 
-const PRODUCT_ICON_PATH = 'icons/netraflow.ico';
-
 const APP_VERSION =
 
   typeof packageInfo.version === 'string' && packageInfo.version.trim()
@@ -506,6 +511,13 @@ const startupPersistenceState = (() => {
         coreProtection: {
           enabled: false,
           locked: false
+        },
+        documentExists: { core: false, settings: false, state: false, security: false },
+        documentStatus: {
+          core: 'missing' as const,
+          settings: 'missing' as const,
+          state: 'missing' as const,
+          security: 'missing' as const
         }
       },
       error
@@ -519,6 +531,15 @@ const startupAppData = createAppDataFromCoreDocument(startupPersistenceSnapshot.
 const startupFirstWelcomeState = normalizeFirstWelcomeState(
   startupPersistenceSnapshot.state.firstWelcome
 );
+const startupDestination = resolveStartupDestination({
+  coreExists: startupPersistenceSnapshot.documentExists.core,
+  stateExists: startupPersistenceSnapshot.documentExists.state,
+  firstWelcome: startupFirstWelcomeState,
+  locked: startupPersistenceSnapshot.coreProtection.locked,
+  dataState: startupPersistenceSnapshot.documentStatus
+    ? classifyStartupDataState(startupPersistenceSnapshot.documentStatus)
+    : undefined
+});
 const startupGlobalSettings = createRuntimeGlobalSettings(
   startupPersistenceSnapshot.settings,
   startupPersistenceSnapshot.state,
@@ -1185,6 +1206,8 @@ function App() {
     return <StartupPersistenceErrorScreen error={startupPersistenceError} />;
   }
 
+  const appFocusRestoreRef = useRef<HTMLElement | null>(null);
+
   const mainContentRef = useRef<HTMLElement | null>(null);
 
   const leftLayerPanelRef = useRef<HTMLElement | null>(null);
@@ -1246,8 +1269,17 @@ function App() {
   const stateDocumentRef = useRef<StateDocument>(startupPersistenceSnapshot.state);
 
   const securityDocumentRef = useRef<SecurityDocument>(startupPersistenceSnapshot.security);
+  const persistenceDocumentExistsRef = useRef(startupPersistenceSnapshot.documentExists);
 
   const persistenceGenerationRef = useRef(0);
+
+  const applyUnlockedPersistenceSnapshotRef = useRef<
+    (snapshot: RuntimePersistenceSnapshot) => void
+  >(() => undefined);
+
+  const wasLockedRef = useRef(startupPersistenceSnapshot.coreProtection.locked);
+
+  const destructiveShutdownRef = useRef(false);
 
   const coreSaveCoordinatorRef = useRef<CoreSaveCoordinator<AppData> | null>(null);
 
@@ -1270,7 +1302,7 @@ function App() {
 
   const [firstWelcomeStage, setFirstWelcomeStage] = useState<FirstWelcomeStage>(() =>
 
-    shouldShowFirstWelcome(startupFirstWelcomeState) ? 'welcome' : null
+    startupDestination === 'onboarding' ? 'welcome' : null
 
   );
 
@@ -1313,6 +1345,7 @@ function App() {
   const renderPersistenceGeneration = persistenceGenerationRef.current;
 
   const isCurrentPersistenceGeneration = () =>
+    !destructiveShutdownRef.current &&
     renderPersistenceGeneration === persistenceGenerationRef.current;
 
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(getSystemTheme);
@@ -1396,6 +1429,18 @@ function App() {
     useState<GlobalSettingsSection>('appearance');
 
   const { toastMessages, showToast, dismissToast } = useToastController();
+
+  useEffect(() => {
+    const handleToast = (event: Event) => {
+      const detail = (event as CustomEvent<{ message?: unknown; tone?: unknown }>).detail;
+      if (typeof detail?.message !== 'string') {
+        return;
+      }
+      showToast(detail.message, detail.tone === 'error' || detail.tone === 'success' ? detail.tone : 'info');
+    };
+    window.addEventListener('netraflow:toast', handleToast);
+    return () => window.removeEventListener('netraflow:toast', handleToast);
+  }, [showToast]);
 
   const showCoreIntegrityPrompt = (pendingSave: AppCoreSaveRequest | null) => {
     closeConfirmationDialog();
@@ -2254,35 +2299,22 @@ function App() {
 
 
 
+    if (!persistenceDocumentExistsRef.current.core) {
+      writeCoreDocument(createCoreDocumentFromAppData(appData));
+      persistenceDocumentExistsRef.current = {
+        ...persistenceDocumentExistsRef.current,
+        core: true
+      };
+    }
+
     persistStateDocument((currentDocument) => ({
       ...currentDocument,
       firstWelcome: normalizeFirstWelcomeState(nextState)
     }));
-
-    setFirstWelcomeState(nextState);
-
-    setFirstWelcomeStage(null);
-
-  };
-
-
-
-  const markPendingFirstWelcomeAfterClearAll = () => {
-
-    const nextState: FirstWelcomeState = {
-
-      completed: false,
-
-      pendingAfterClearAll: true
-
+    persistenceDocumentExistsRef.current = {
+      ...persistenceDocumentExistsRef.current,
+      state: true
     };
-
-
-
-    persistStateDocument((currentDocument) => ({
-      ...currentDocument,
-      firstWelcome: normalizeFirstWelcomeState(nextState)
-    }));
 
     setFirstWelcomeState(nextState);
 
@@ -2585,6 +2617,7 @@ function App() {
     unlockError,
     setUnlockError,
     isUnlocking,
+    lockScreenState,
     passwordEditorMode,
     oldPasswordInput,
     setOldPasswordInput,
@@ -2621,15 +2654,17 @@ function App() {
     updateAutoLockMinutesInput,
     resetInvalidAutoLockMinutesInput,
     unlockApp,
+    completeUnlockTransition,
     resetSecurityState
   } = useSecuritySettingsController({
     globalSettings,
+    applicationLockAllowed: firstWelcomeStage === null,
     initialCoreProtectionLocked: startupPersistenceSnapshot.coreProtection.locked,
     autoBackupEnabled: autoBackupSettings.enabled,
     getCurrentCoreDocument: () =>
       createCoreDocumentFromAppData({ groups: assetGroups, accounts, history }),
     unlockCoreDocument: (password) => {
-      unlockCoreDocument(password);
+      applyUnlockedPersistenceSnapshotRef.current(unlockCoreDocument(password));
     },
     enableCoreProtection,
     changeCorePassword,
@@ -2641,6 +2676,20 @@ function App() {
     showCoreIntegrityDialog: showCoreIntegrityActionPrompt,
     showToast
   });
+
+  useEffect(() => {
+    if (!wasLockedRef.current || isLocked) {
+      wasLockedRef.current = isLocked;
+      return;
+    }
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      appFocusRestoreRef.current?.focus({ preventScroll: true });
+    });
+
+    wasLockedRef.current = false;
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [isLocked]);
 
   const { exportUserSettings, importUserSettings } = useUserSettingsFileController({
     globalSettings,
@@ -3173,7 +3222,8 @@ function App() {
       coreProtection: {
         enabled: false,
         locked: false
-      }
+      },
+      documentExists: { core: true, settings: true, state: true, security: true }
     };
   };
 
@@ -3194,6 +3244,7 @@ function App() {
     settingsDocumentRef.current = snapshot.settings;
     stateDocumentRef.current = snapshot.state;
     securityDocumentRef.current = snapshot.security;
+    persistenceDocumentExistsRef.current = snapshot.documentExists;
 
     setAppData(nextAppData);
     setAssetChartSettings(snapshot.settings.assetChart);
@@ -3206,12 +3257,33 @@ function App() {
       false
     );
     setFirstWelcomeState(nextFirstWelcomeState);
-    setFirstWelcomeStage(shouldShowFirstWelcome(nextFirstWelcomeState) ? 'welcome' : null);
+    const destination = resolveStartupDestination({
+      coreExists: snapshot.documentExists.core,
+      stateExists: snapshot.documentExists.state,
+      firstWelcome: nextFirstWelcomeState,
+      locked: snapshot.coreProtection.locked,
+      dataState: snapshot.documentStatus
+        ? classifyStartupDataState(snapshot.documentStatus)
+        : undefined
+    });
+    if (destination === 'invalid') {
+      setRuntimePersistenceError(
+        new Error('Failed to apply persistence snapshot: PERSISTENCE_SNAPSHOT_INVALID')
+      );
+      return;
+    }
+    setFirstWelcomeStage(destination === 'onboarding' ? 'welcome' : null);
     setIsExampleMode(nextIsExampleMode);
 
     if (!nextIsExampleMode) {
       latestRealAppDataRef.current = cloneAppData(nextAppData);
     }
+  };
+
+  applyUnlockedPersistenceSnapshotRef.current = (snapshot) => {
+    persistenceGenerationRef.current += 1;
+    resetDataViews();
+    applyRuntimePersistenceSnapshot(snapshot, false);
   };
 
   const showDemoLifecycleFailure = (error: unknown) => {
@@ -3302,17 +3374,24 @@ function App() {
     }
 
     const nextAppData = createTestDataInRealAppData(createExampleData);
+    const nextState = normalizeStateDocument({
+      ...stateDocumentRef.current,
+      firstWelcome: { completed: true, pendingAfterClearAll: false }
+    });
 
-    return saveAppDataWithExternalModificationCheck(
-      nextAppData,
-      { allowEmptyHistoryOverwrite: true },
-      () => {
-        latestRealAppDataRef.current = cloneAppData(nextAppData);
-        setAppData(nextAppData);
-        setIsExampleMode(false);
-      },
-      { flush: true }
-    );
+    try {
+      coreSaveCoordinator.acknowledgePendingSaveWithoutPersisting();
+      const snapshot = commitInitializedPersistenceSnapshot({
+        core: createCoreDocumentFromAppData(nextAppData),
+        state: nextState
+      });
+      applyRuntimePersistenceSnapshot(snapshot, false);
+      return true;
+    } catch (error) {
+      console.error('[NetraFlow test data] Failed to commit initialized snapshot.', error);
+      setRuntimePersistenceError(error);
+      return false;
+    }
   };
 
   const writeExtremeTestDataToRealData = () => {
@@ -3321,17 +3400,49 @@ function App() {
     }
 
     const nextAppData = createExtremeTestDataInRealAppData(createExtremeExampleData);
+    const nextState = normalizeStateDocument({
+      ...stateDocumentRef.current,
+      firstWelcome: { completed: true, pendingAfterClearAll: false }
+    });
 
-    return saveAppDataWithExternalModificationCheck(
-      nextAppData,
-      { allowEmptyHistoryOverwrite: true },
-      () => {
-        latestRealAppDataRef.current = cloneAppData(nextAppData);
-        setAppData(nextAppData);
-        setIsExampleMode(false);
-      },
-      { flush: true }
-    );
+    try {
+      coreSaveCoordinator.acknowledgePendingSaveWithoutPersisting();
+      const snapshot = commitInitializedPersistenceSnapshot({
+        core: createCoreDocumentFromAppData(nextAppData),
+        state: nextState
+      });
+      applyRuntimePersistenceSnapshot(snapshot, false);
+      return true;
+    } catch (error) {
+      console.error('[NetraFlow test data] Failed to commit initialized snapshot.', error);
+      setRuntimePersistenceError(error);
+      return false;
+    }
+  };
+
+  const clearAllLocalDataAndQuit = () => {
+    if (destructiveShutdownRef.current) {
+      return;
+    }
+
+    destructiveShutdownRef.current = true;
+    persistenceGenerationRef.current += 1;
+    coreSaveCoordinator.beginDestructiveShutdown();
+    resetSecurityState();
+    window.dispatchEvent(new Event('netraflow-enter-clearing-page'));
+
+    const api = window.electronAPI ?? window.electronWindow;
+
+    if (!api?.clearAllLocalDataAndQuit) {
+      console.error('[NetraFlow cleanup] Destructive cleanup bridge is unavailable.');
+      forceCloseApp();
+      return;
+    }
+
+    void api.clearAllLocalDataAndQuit().catch((error) => {
+      console.error('[NetraFlow cleanup] Failed to clear all local data.', error);
+      forceCloseApp();
+    });
   };
 
 
@@ -3353,7 +3464,6 @@ function App() {
     selectedExampleTemplateId,
     setSelectedExampleTemplateId,
     isExampleMode,
-    setIsExampleMode,
     defaultGlobalSettings: DEFAULT_GLOBAL_SETTINGS,
     defaultAssetChartSettings: DEFAULT_ASSET_CHART_SETTINGS,
     defaultAutoBackupSettings: DEFAULT_AUTO_BACKUP_SETTINGS,
@@ -3384,7 +3494,9 @@ function App() {
     exitExampleModeSession,
     writeTestDataToRealData,
     showConfirmationDialog,
-    markPendingFirstWelcomeAfterClearAll
+    clearAllLocalDataAndQuit,
+    clearLinuxAppImageSandboxConsent: () =>
+      window.electronAPI?.clearLinuxAppImageSandboxConsent?.() ?? Promise.resolve()
   });
 
 
@@ -5088,6 +5200,14 @@ function App() {
 
   };
 
+  useEffect(() => {
+    const api = window.electronAPI ?? window.electronWindow;
+
+    return api?.onNetraFlowOpenSettings?.(() => {
+      openGlobalSettings();
+    });
+  }, [openGlobalSettings]);
+
   const openExampleDataSettingsFromHome = () => {
 
     const navigation = getExampleModeBadgeSettingsNavigation(isExampleMode);
@@ -6023,17 +6143,26 @@ function App() {
     backupRenderKey: backupRecords.length
   });
 
-  const searchIndexOptions = useMemo<CreateSearchIndexOptions>(
+  const searchIndexConfig = useMemo<SearchIndexConfig>(
     () => ({
-      getAccountNatureLabel,
-      getHistoryTypeLabel,
-      getBackupMethodLabel,
-      getAccountMark,
-      getHistoryChangeLabel: (record) => getAmountChange(record).label,
-      formatMoney,
-      formatShortTime: formatHistoryRecordDate,
-      formatPreciseBackupTime,
-      settingsItems: GLOBAL_SETTINGS_SEARCH_ITEMS
+      locale: 'zh-CN',
+      currency: 'CNY',
+      accountNatureLabels: {
+        asset: getAccountNatureLabel('asset'),
+        receivable: getAccountNatureLabel('receivable'),
+        liability: getAccountNatureLabel('liability')
+      },
+      historyTypeLabels: {
+        创建: getHistoryTypeLabel('创建'),
+        删除: getHistoryTypeLabel('删除'),
+        修改: getHistoryTypeLabel('修改'),
+        归档: getHistoryTypeLabel('归档'),
+        重新启用: getHistoryTypeLabel('重新启用')
+      },
+      backupMethodLabels: {
+        manual: getBackupMethodLabel('manual'),
+        auto: getBackupMethodLabel('auto')
+      }
     }),
     []
   );
@@ -6042,7 +6171,8 @@ function App() {
     groups,
     historyRecords: sortedHistory,
     backupRecords,
-    createIndexOptions: searchIndexOptions,
+    searchIndexConfig,
+    settingsItems: GLOBAL_SETTINGS_SEARCH_ITEMS,
     searchLogicMode: globalSettings.searchLogicMode,
     createNavigationSnapshot: createSearchNavigationSnapshot,
     restoreNavigationSnapshot: restoreSearchNavigationSnapshot,
@@ -6051,6 +6181,12 @@ function App() {
   });
 
   globalSearchControllerRef.current = globalSearch;
+
+  useEffect(() => {
+    if (isLocked) {
+      globalSearch.closeSearch();
+    }
+  }, [globalSearch.closeSearch, isLocked]);
 
   const mainPageKey = flashNote.isOpen
 
@@ -6972,14 +7108,10 @@ function App() {
 
 
       if (globalSearch.isOpen) {
-
-        event.preventDefault();
-
-        event.stopPropagation();
-
-
-
-        globalSearch.handleEscape();
+        if (globalSearch.handleEscape(event.isComposing)) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
 
 
 
@@ -7125,7 +7257,6 @@ function App() {
     selectedExampleTemplateId,
     isExampleMode,
     appVersion: window.appInfo?.version ?? APP_VERSION,
-    productIconPath: PRODUCT_ICON_PATH,
     productNameZh: PRODUCT_NAME_ZH,
     productNameEn: PRODUCT_NAME_EN,
     autoLockMinutesInput,
@@ -7204,7 +7335,6 @@ function App() {
       draggingGroupId,
       groupDropIndicator,
       legendColorByName: homeGroupLegendColorByName,
-      productIconPath: PRODUCT_ICON_PATH,
       productNameZh: PRODUCT_NAME_ZH,
       productNameEn: PRODUCT_NAME_EN,
       productTagline: PRODUCT_TAGLINE,
@@ -7506,8 +7636,7 @@ function App() {
   });
 
   const lockScreenLayerProps = createLockScreenLayerProps({
-    isLocked,
-    productIconPath: PRODUCT_ICON_PATH,
+    state: lockScreenState,
     password: unlockPasswordInput,
     error: unlockError,
     isUnlocking,
@@ -7515,8 +7644,18 @@ function App() {
       setUnlockPasswordInput(value);
       setUnlockError('');
     },
-    onSubmit: unlockApp
+    onSubmit: unlockApp,
+    onPanelExitComplete: completeUnlockTransition
   });
+
+  useNormalAppFirstFrameReady(
+    resolveNormalAppFirstFrameState({
+      initializing: runtimePersistenceError !== null,
+      onboarding: firstWelcomeStage !== null,
+      locked: isLocked
+    }),
+    isGlobalSettingsOpen
+  );
 
 
 
@@ -7529,9 +7668,10 @@ function App() {
 
   return (
 
+    <>
     <WindowFrame
-      productIconPath={PRODUCT_ICON_PATH}
       productName={window.appInfo?.name ?? PRODUCT_NAME_EN}
+      contentInert={isLocked}
       data-theme-mode={globalSettings.themeMode}
       data-theme={resolvedTheme}
       data-resolved-theme={resolvedTheme}
@@ -7562,6 +7702,7 @@ function App() {
             />
           </>
         )}
+        focusRestoreRef={appFocusRestoreRef}
         mainContentRef={mainContentRef}
         mainContentClassName={mainPanelClassName}
         mainContentAriaDisabled={isSecuritySettingsPageDisabled}
@@ -7842,9 +7983,6 @@ function App() {
         onChooseStoryRoute={chooseFirstWelcomeStoryRoute}
       />
 
-      <LockScreenLayer {...lockScreenLayerProps} />
-
-
       {isSecretConsoleOpen ? (
         <SecretConsoleLayer
           ref={secretConsoleInputRef}
@@ -7861,6 +7999,8 @@ function App() {
       </AppShell>
 
     </WindowFrame>
+    <LockScreenLayer {...lockScreenLayerProps} />
+    </>
 
   );
 

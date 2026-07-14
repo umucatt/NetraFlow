@@ -1,8 +1,10 @@
 export { FirstWelcomeLayer } from './FirstWelcomeLayer';
 export {
   DEFAULT_FIRST_WELCOME_STATE,
+  classifyStartupDataState,
   normalizeFirstWelcomeState,
-  shouldShowFirstWelcome
+  shouldShowFirstWelcome,
+  resolveStartupDestination
 } from './firstWelcomeStateLogic';
 export type {
   FirstWelcomeBackdropProps,
@@ -10,4 +12,4 @@ export type {
   FirstWelcomeStage,
   FirstWelcomeStoryRoute
 } from './firstWelcomeLayerTypes';
-export type { FirstWelcomeState } from './firstWelcomeStateLogic';
+export type { FirstWelcomeState, StartupDataState } from './firstWelcomeStateLogic';

@@ -1,28 +1,8 @@
-import { type CSSProperties, type FormEvent, type KeyboardEvent } from 'react';
+import { type FormEvent, type KeyboardEvent } from 'react';
 import DialogShell from '../../components/dialogs/DialogShell';
 import InlineErrorSlot from '../../components/InlineErrorSlot';
 
 type PasswordEditorMode = 'setup' | 'edit';
-
-const backdropStyle: CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  display: 'grid',
-  placeItems: 'center',
-  padding: 24,
-  background: 'var(--modal-backdrop)'
-};
-
-const cardStyle: CSSProperties = {
-  width: 'min(420px, 100%)',
-  maxHeight: '84vh',
-  overflowY: 'auto',
-  borderRadius: 'var(--radius-page)',
-  padding: 24,
-  background: 'var(--panel-bg-strong)',
-  color: 'var(--text-main)',
-  boxShadow: 'var(--shadow-popover)'
-};
 
 type PasswordEditorDialogProps = {
   mode: PasswordEditorMode;
@@ -115,10 +95,7 @@ function PasswordEditorDialog({
     <DialogShell
       as="form"
       title={isEditingExistingPassword ? '修改登录密码' : '设置登录密码'}
-      titleStyle={{ margin: '0 0 18px', fontSize: '1.35rem', lineHeight: 1.2 }}
-      backdropClassName="modal-backdrop"
-      backdropStyle={backdropStyle}
-      cardStyle={cardStyle}
+      className="modal-card password-editor-dialog"
       onClose={onCancel}
       onKeyDown={handleDialogKeyDown}
       onSubmit={onSubmit}
@@ -141,58 +118,73 @@ function PasswordEditorDialog({
         </>
       )}
     >
-      {isEditingExistingPassword ? (
-        <label className="right-panel-label" style={{ marginTop: 14 }}>
-          旧密码
+      <div className="password-editor-dialog__fields">
+        {isEditingExistingPassword ? (
+          <label className="right-panel-label">
+            旧密码
+            <input
+              autoFocus
+              type="password"
+              autoComplete="current-password"
+              value={oldPassword}
+              className={oldPasswordError ? 'input--error' : undefined}
+              aria-invalid={oldPasswordError ? true : undefined}
+              aria-describedby={oldPasswordError ? 'password-editor-old-error' : undefined}
+              onChange={(event) => onOldPasswordChange(event.target.value)}
+            />
+            {oldPasswordError ? (
+              <InlineErrorSlot id="password-editor-old-error" message={oldPasswordError} />
+            ) : null}
+          </label>
+        ) : null}
+
+        <div className="password-editor-dialog__new-password">
+          <label className="right-panel-label">
+            新密码
+            <input
+              autoFocus={!isEditingExistingPassword}
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              className={newPasswordError ? 'input--error' : undefined}
+              aria-invalid={newPasswordError ? true : undefined}
+              aria-describedby={newPasswordError ? 'password-editor-new-error' : undefined}
+              onChange={(event) => onNewPasswordChange(event.target.value)}
+            />
+            {newPasswordError ? (
+              <InlineErrorSlot id="password-editor-new-error" message={newPasswordError} />
+            ) : null}
+          </label>
+          {newPassword ? (
+            <p className="password-editor-dialog__strength">
+              {estimatePasswordTryLevel(newPassword)}
+            </p>
+          ) : null}
+        </div>
+
+        <label className="right-panel-label">
+          确认新密码
           <input
-            autoFocus
             type="password"
-            autoComplete="current-password"
-            value={oldPassword}
-            className={oldPasswordError ? 'input--error' : undefined}
-            aria-invalid={oldPasswordError ? true : undefined}
-            aria-describedby="password-editor-old-error"
-            onChange={(event) => onOldPasswordChange(event.target.value)}
+            autoComplete="new-password"
+            value={confirmPassword}
+            className={confirmPasswordError ? 'input--error' : undefined}
+            aria-invalid={confirmPasswordError ? true : undefined}
+            aria-describedby={confirmPasswordError ? 'password-editor-confirm-error' : undefined}
+            onChange={(event) => onConfirmPasswordChange(event.target.value)}
           />
-          <InlineErrorSlot id="password-editor-old-error" message={oldPasswordError} />
+          {confirmPasswordError ? (
+            <InlineErrorSlot
+              id="password-editor-confirm-error"
+              message={confirmPasswordError}
+            />
+          ) : null}
         </label>
-      ) : null}
 
-      <label className="right-panel-label" style={{ marginTop: 14 }}>
-        新密码
-        <input
-          autoFocus={!isEditingExistingPassword}
-          type="password"
-          autoComplete="new-password"
-          value={newPassword}
-          className={newPasswordError ? 'input--error' : undefined}
-          aria-invalid={newPasswordError ? true : undefined}
-          aria-describedby="password-editor-new-error"
-          onChange={(event) => onNewPasswordChange(event.target.value)}
-        />
-        <InlineErrorSlot id="password-editor-new-error" message={newPasswordError} />
-      </label>
-      {newPassword ? (
-        <p style={{ margin: '8px 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-          {estimatePasswordTryLevel(newPassword)}
-        </p>
-      ) : null}
-
-      <label className="right-panel-label" style={{ marginTop: 14 }}>
-        确认新密码
-        <input
-          type="password"
-          autoComplete="new-password"
-          value={confirmPassword}
-          className={confirmPasswordError ? 'input--error' : undefined}
-          aria-invalid={confirmPasswordError ? true : undefined}
-          aria-describedby="password-editor-confirm-error"
-          onChange={(event) => onConfirmPasswordChange(event.target.value)}
-        />
-        <InlineErrorSlot id="password-editor-confirm-error" message={confirmPasswordError} />
-      </label>
-
-      <InlineErrorSlot id="password-editor-form-error" message={formError} />
+        {formError ? (
+          <InlineErrorSlot id="password-editor-form-error" message={formError} />
+        ) : null}
+      </div>
     </DialogShell>
   );
 }

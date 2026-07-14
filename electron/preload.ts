@@ -25,6 +25,7 @@ type PersistenceErrorCode =
   | 'PERSISTENCE_SNAPSHOT_ENCRYPT_FAILED'
   | 'PERSISTENCE_SNAPSHOT_DECRYPT_FAILED'
   | 'PERSISTENCE_CORE_EXTERNAL_MODIFIED'
+  | 'PERSISTENCE_SHUTTING_DOWN'
   | 'PERSISTENCE_READ_FAILED'
   | 'PERSISTENCE_READ_INVALID'
   | 'PERSISTENCE_SCHEMA_INVALID'
@@ -86,11 +87,62 @@ const unwrapPersistenceWriteResponse = (response: PersistenceWriteResponse) => {
   }
 };
 
+const isLinuxAppImage =
+  process.platform === 'linux' && process.env.NF_PACKAGE_KIND === 'appimage';
+const isSandboxConsentBootstrap =
+  isLinuxAppImage &&
+  (process.argv.includes('--nf-sandbox-consent-bootstrap') ||
+    (process.argv.includes('--no-sandbox') &&
+      process.env.NF_UNSANDBOXED_AUTHORIZED !== '1')) &&
+  process.env.NF_BOOTSTRAP_COMPLETE !== '1';
+const isUnsandboxedAppImage = isLinuxAppImage && process.argv.includes('--no-sandbox');
+
 contextBridge.exposeInMainWorld('appInfo', {
-  name: 'NetraFlow'
+  name: 'NetraFlow',
+  platform: process.platform,
+  packageKind: isLinuxAppImage ? 'appimage' : 'other',
+  sandboxConsentBootstrap: isSandboxConsentBootstrap,
+  chromiumSandboxEnabled: !isUnsandboxedAppImage,
+  initialTheme: (() => {
+    const value = process.argv.find((argument) => argument.startsWith('--nf-initial-theme='))
+      ?.slice('--nf-initial-theme='.length);
+    return value === 'dark' ? 'dark' : value === 'light' ? 'light' : undefined;
+  })(),
+  initialThemeStyle: (() => {
+    const value = process.argv.find((argument) =>
+      argument.startsWith('--nf-initial-theme-style=')
+    )?.slice('--nf-initial-theme-style='.length);
+    return value === 'default' ? 'default' : value === 'nyaa' ? 'nyaa' : undefined;
+  })()
 });
 
+if (isSandboxConsentBootstrap) {
+  type BootstrapTheme = 'light' | 'dark';
+  const themeArgument = process.argv.find((argument) => argument.startsWith('--nf-bootstrap-theme='));
+  const themeValue = themeArgument?.slice('--nf-bootstrap-theme='.length);
+  const initialTheme: BootstrapTheme = themeValue === 'dark' ? 'dark' : 'light';
+  contextBridge.exposeInMainWorld('sandboxBootstrap', {
+    initialTheme,
+    onThemeChanged: (listener: (theme: BootstrapTheme) => void) => {
+      const handleThemeChanged = (_event: IpcRendererEvent, theme: unknown) => {
+        if (theme === 'light' || theme === 'dark') listener(theme);
+      };
+      ipcRenderer.on('sandbox-bootstrap:theme-changed', handleThemeChanged);
+      return () => ipcRenderer.removeListener('sandbox-bootstrap:theme-changed', handleThemeChanged);
+    },
+    quit: () => ipcRenderer.invoke('sandbox-bootstrap:quit') as Promise<void>,
+    consent: () => ipcRenderer.invoke('sandbox-bootstrap:consent') as Promise<{
+      ok: boolean;
+      message?: string;
+    }>,
+    firstFrameReady: () => ipcRenderer.send('bootstrap-first-frame-ready')
+  });
+} else {
+
 const electronAPI = {
+  normalAppStartupStateResolved: (state: string) =>
+    ipcRenderer.send('normal-app-startup-state-resolved', state),
+  normalAppFirstFrameReady: () => ipcRenderer.send('normal-app-first-frame-ready'),
   minimize: () => ipcRenderer.send('window:minimize'),
   toggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
   maximize: () => ipcRenderer.invoke('window:maximize') as Promise<boolean>,
@@ -99,6 +151,16 @@ const electronAPI = {
   allowClose: () => ipcRenderer.send('window:allow-close'),
   cancelCloseRequest: () => ipcRenderer.send('window:cancel-close-request'),
   forceClose: () => ipcRenderer.send('window:force-close'),
+  clearAllLocalDataAndQuit: () =>
+    ipcRenderer.invoke('app:clear-all-local-data-and-quit') as Promise<void>,
+  notifyClearingPageReady: () => ipcRenderer.send('app:clearing-page-ready'),
+  onEnterClearingPage: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('netraflow-enter-clearing-page', listener);
+    return () => ipcRenderer.removeListener('netraflow-enter-clearing-page', listener);
+  },
+  clearLinuxAppImageSandboxConsent: () =>
+    ipcRenderer.invoke('app:clear-linux-appimage-sandbox-consent') as Promise<void>,
   isMaximized: () => ipcRenderer.invoke('window:is-maximized') as Promise<boolean>,
   openExternalUrl: (url: string) =>
     ipcRenderer.invoke('app:open-external-url', url) as Promise<void>,
@@ -121,6 +183,29 @@ const electronAPI = {
     return () => {
       ipcRenderer.removeListener('netraflow-lock', handleNetraFlowLock);
     };
+  },
+  onNetraFlowOpenSettings: (listener: () => void) => {
+    const handleNetraFlowOpenSettings = () => {
+      listener();
+    };
+
+    ipcRenderer.on('netraflow-open-settings', handleNetraFlowOpenSettings);
+
+    return () => {
+      ipcRenderer.removeListener('netraflow-open-settings', handleNetraFlowOpenSettings);
+    };
+  },
+  setLockMenuState: (state: {
+    rendererReady: boolean;
+    applicationLockAllowed: boolean;
+    passwordProtectionEnabled: boolean;
+    isLocked: boolean;
+    isUnlocking: boolean;
+  }) => {
+    ipcRenderer.send('app:lock-menu-state', state);
+  },
+  completeLockRequest: () => {
+    ipcRenderer.send('app:lock-request-complete');
   },
   onCloseRequest: (listener: () => void) => {
     const handleCloseRequest = () => {
@@ -147,6 +232,12 @@ const electronAPI = {
 };
 
 const netraflowPersistence = {
+  readSnapshot: () =>
+    unwrapPersistenceResponse(ipcRenderer.sendSync('persistence:read-snapshot') as unknown),
+  commitInitializedSnapshot: (documents: unknown) =>
+    unwrapPersistenceResponse(
+      ipcRenderer.sendSync('persistence:commit-initialized-snapshot', documents) as unknown
+    ),
   readCoreDocument: () =>
     unwrapPersistenceResponse(ipcRenderer.sendSync('persistence:read-core') as unknown),
   writeCoreDocument: (document: unknown, options?: CoreWriteOptions) =>
@@ -248,3 +339,4 @@ const netraflowPersistence = {
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
 contextBridge.exposeInMainWorld('electronWindow', electronAPI);
 contextBridge.exposeInMainWorld('netraflowPersistence', netraflowPersistence);
+}

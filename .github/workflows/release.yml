@@ -1,0 +1,236 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+      - "v*.*.*-*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      commit: ${{ steps.release.outputs.commit }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+    steps:
+      - name: Checkout tag commit
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate version tag and commit
+        id: release
+        run: node scripts/prepare-release.mjs
+      - name: Strict release check
+        env:
+          NETRAFLOW_RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: npm run release:check -- --strict
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Verify build outputs
+        run: node scripts/verify-build-outputs.mjs
+
+  build-windows:
+    needs: prepare
+    runs-on: windows-latest
+    steps:
+      - name: Checkout tag commit
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify checkout identity
+        run: node scripts/verify-checkout.mjs "${{ needs.prepare.outputs.commit }}"
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Build Windows installer
+        run: npm run dist:installer
+      - name: Build Windows portable ZIP
+        run: npm run dist:portable
+      - name: Verify installer VersionInfo
+        shell: pwsh
+        run: |
+          $path = Get-ChildItem -LiteralPath release/installer -Recurse -File -Filter "NetraFlow_${{ needs.prepare.outputs.version }}_x64_Setup.exe"
+          if ($path.Count -ne 1) { throw "Expected one Windows installer, found $($path.Count)." }
+          $versionInfo = $path[0].VersionInfo
+          if ($versionInfo.ProductName -ne "NetraFlow") { throw "Installer ProductName is invalid." }
+          if ($versionInfo.ProductVersion -notlike "${{ needs.prepare.outputs.version }}*") { throw "Installer ProductVersion is invalid: $($versionInfo.ProductVersion)" }
+      - name: Verify and stage Windows artifacts
+        run: node scripts/verify-release-artifacts.mjs --mode windows --input release --output release-artifacts/windows --version "${{ needs.prepare.outputs.version }}" --tag "${{ needs.prepare.outputs.tag }}" --commit "${{ needs.prepare.outputs.commit }}"
+      - name: Upload Windows internal artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: netraflow-release-windows-x64
+          path: release-artifacts/windows
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  build-macos:
+    needs: prepare
+    runs-on: macos-14
+    steps:
+      - name: Checkout tag commit
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify checkout identity
+        run: node scripts/verify-checkout.mjs "${{ needs.prepare.outputs.commit }}"
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Build Apple Silicon DMG
+        run: npm run dist:mac
+      - name: Verify DMG and app bundle
+        run: node scripts/verify-macos-artifact.mjs
+      - name: Verify and stage macOS artifact
+        run: node scripts/verify-release-artifacts.mjs --mode macos --input release/macos --output release-artifacts/macos --version "${{ needs.prepare.outputs.version }}" --tag "${{ needs.prepare.outputs.tag }}" --commit "${{ needs.prepare.outputs.commit }}" --macos-signing "no Developer ID signing; not notarized"
+      - name: Upload macOS internal artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: netraflow-release-macos-arm64
+          path: release-artifacts/macos
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  build-linux:
+    needs: prepare
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout tag commit
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify checkout identity
+        run: node scripts/verify-checkout.mjs "${{ needs.prepare.outputs.commit }}"
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Build Linux AppImage
+        run: npm run dist:linux
+      - name: Build Linux DEB
+        run: npm run dist:deb
+      - name: Verify Linux packages
+        run: node scripts/verify-linux-artifacts.mjs
+      - name: Verify and stage Linux artifacts
+        run: node scripts/verify-release-artifacts.mjs --mode linux --input release/linux --output release-artifacts/linux --version "${{ needs.prepare.outputs.version }}" --tag "${{ needs.prepare.outputs.tag }}" --commit "${{ needs.prepare.outputs.commit }}"
+      - name: Upload Linux internal artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: netraflow-release-linux-x64
+          path: release-artifacts/linux
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  publish-release:
+    needs:
+      - prepare
+      - build-windows
+      - build-macos
+      - build-linux
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout tag commit
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Verify checkout identity
+        run: node scripts/verify-checkout.mjs "${{ needs.prepare.outputs.commit }}"
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Download Windows internal artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: netraflow-release-windows-x64
+          path: release-internal/downloads/windows
+      - name: Download macOS internal artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: netraflow-release-macos-arm64
+          path: release-internal/downloads/macos
+      - name: Download Linux internal artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: netraflow-release-linux-x64
+          path: release-internal/downloads/linux
+      - name: Verify final five-file bundle
+        id: bundle
+        run: node scripts/verify-release-artifacts.mjs --mode bundle --input release-internal/downloads --output release-bundle --manifest-output release-internal/bundle-manifest.json --version "${{ needs.prepare.outputs.version }}" --tag "${{ needs.prepare.outputs.tag }}" --commit "${{ needs.prepare.outputs.commit }}"
+      - name: Create release notes with SHA-256
+        id: notes
+        run: node scripts/create-release-notes.mjs --manifest "${{ steps.bundle.outputs.bundle_manifest_path }}" --output release-internal/release-notes.md
+      - name: Ensure Release does not already exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; refusing to modify or replace it." >&2
+            exit 1
+          fi
+      - name: Create one draft Release with five assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          IS_PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+        run: |
+          args=(--title "NetraFlow $RELEASE_VERSION" --draft --notes-file release-internal/release-notes.md)
+          if [ "$IS_PRERELEASE" = "true" ]; then args+=(--prerelease); fi
+          if ! gh release create "$RELEASE_TAG" \
+            "release-bundle/NetraFlow_${RELEASE_VERSION}_x64_Setup.exe" \
+            "release-bundle/NetraFlow_${RELEASE_VERSION}_x64_Portable.zip" \
+            "release-bundle/NetraFlow_${RELEASE_VERSION}_arm64.dmg" \
+            "release-bundle/NetraFlow_${RELEASE_VERSION}_x64.AppImage" \
+            "release-bundle/NetraFlow_${RELEASE_VERSION}_x64.deb" \
+            "${args[@]}"; then
+            echo "Release creation or upload failed. A partial draft may exist; inspect it manually. This workflow does not delete Releases, assets, or tags." >&2
+            exit 1
+          fi

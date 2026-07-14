@@ -1,6 +1,7 @@
 /// <reference types="node" />
 
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import test from 'node:test';
 
@@ -132,9 +133,9 @@ test('global settings security and about copy match the current release text', (
   };
 
   assert.equal(settingsPageSource.includes('是否开启登陆密码保护'), true);
-  assert.equal(packageJson.version, '0.9.9');
-  assert.equal(packageLockJson.version, '0.9.9');
-  assert.equal(packageLockJson.packages?.['']?.version, '0.9.9');
+  assert.equal(packageJson.version, '0.9.10');
+  assert.equal(packageLockJson.version, '0.9.10');
+  assert.equal(packageLockJson.packages?.['']?.version, '0.9.10');
   assert.equal(appSource.includes('APP_VERSION'), true);
   assert.equal(appSource.includes('0.9.1'), false);
   assert.equal(aboutPanelSource.includes('获取信息'), true);
@@ -315,7 +316,7 @@ test('page surfaces and right panel page frames stay scoped', () => {
 
 test('about GitHub link uses the shared external IPC allowlist without user-facing failure toast', () => {
   const appSource = readProjectFile('src/App.tsx');
-  const electronMainSource = readProjectFile('electron/main.ts');
+  const electronMainSource = readProjectFile('electron/mainApplication.ts');
   const openGithubBlock = appSource.slice(
     appSource.indexOf('const openGithubReleases'),
     appSource.indexOf('const formatMoney')
@@ -655,6 +656,19 @@ test('global search includes manual settings category without old result contain
   assert.equal(searchItemSource.includes("settings: '设置项'"), false);
   assert.equal(searchItemSource.includes('search-result-mark--icon'), false);
   assert.match(stylesSource, /\.search-results\s*\{[^}]*grid-auto-rows: max-content;[^}]*align-content: start;[^}]*\}/s);
+  assert.match(
+    stylesSource,
+    /\.search-results__content\[data-result-entering='true'\]\s*\{[^}]*animation: search-results-enter 140ms cubic-bezier\(0\.2, 0, 0, 1\);[^}]*\}/s
+  );
+  assert.match(
+    stylesSource,
+    /@keyframes search-results-enter\s*\{[\s\S]*opacity: 0\.72;[\s\S]*translateY\(3px\)[\s\S]*opacity: 1;[\s\S]*translateY\(0\)/
+  );
+  assert.match(
+    stylesSource,
+    /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.search-results__content\[data-result-entering='true'\]\s*\{[^}]*animation: none;/s
+  );
+  assert.equal(searchPanelSource.includes('key={resultPresentationVersion}'), true);
   assert.match(stylesSource, /\.search-section__list\s*\{[^}]*grid-auto-rows: max-content;[^}]*align-content: start;[^}]*\}/s);
   assert.match(stylesSource, /\.search-result-button\s*\{[^}]*align-self: start;[^}]*min-height: 60px;[^}]*\}/s);
   assert.equal(searchListSource.includes('AssetStructurePanel'), false);
@@ -766,11 +780,18 @@ test('theme bootstrap resolves first frame before React mounts', () => {
     'src/app/globalSettings/globalSettingsLogic.ts'
   );
   const indexSource = readProjectFile('index.html');
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
+  const startupThemeSource = readProjectFile('electron/startupTheme.ts');
   const bootstrapSource = indexSource.slice(
     indexSource.indexOf('(function ()'),
     indexSource.indexOf('</script>')
   );
+  const inlineScriptMatch = indexSource.match(/<script>([\s\S]*?)<\/script>/);
+
+  assert.ok(inlineScriptMatch);
+  const inlineScriptHash = createHash('sha256')
+    .update(inlineScriptMatch[1].replace(/\r\n?/g, '\n'))
+    .digest('base64');
 
   assert.equal(globalSettingsLogicSource.includes("themeMode: 'system'"), true);
   assert.equal(indexSource.indexOf('<script>') < indexSource.indexOf('<script type="module"'), true);
@@ -780,8 +801,10 @@ test('theme bootstrap resolves first frame before React mounts', () => {
     true
   );
   assert.equal(indexSource.includes('window.localStorage'), false);
+  assert.equal(indexSource.includes(`'sha256-${inlineScriptHash}'`), true);
   assert.equal(bootstrapSource.includes("var defaultThemeMode = 'system';"), true);
   assert.equal(bootstrapSource.includes("var defaultThemeStyle = 'default';"), true);
+  assert.equal(bootstrapSource.includes('window.appInfo'), false);
   assert.equal(bootstrapSource.includes("window.matchMedia('(prefers-color-scheme: dark)').matches"), true);
   assert.equal(bootstrapSource.includes("value === 'light' || value === 'dark' || value === 'system'"), true);
   assert.equal(bootstrapSource.includes("value === 'default' || value === 'nyaa'"), true);
@@ -798,28 +821,30 @@ test('theme bootstrap resolves first frame before React mounts', () => {
   assert.equal(bootstrapSource.includes('root.dataset.theme = resolvedTheme;'), true);
   assert.equal(bootstrapSource.includes('root.dataset.resolvedTheme = resolvedTheme;'), true);
   assert.equal(bootstrapSource.includes('root.dataset.themeStyle = themeStyle;'), true);
+  assert.equal(bootstrapSource.includes('windowSurface'), false);
   assert.equal(
     bootstrapSource.includes("root.style.setProperty('color-scheme', resolvedTheme);"),
     true
   );
   assert.equal(bootstrapSource.includes("'background-color'"), true);
   assert.equal(bootstrapSource.includes('getPrebootBackgroundColor(resolvedTheme, themeStyle)'), true);
+  assert.equal(readProjectFile('src/styles/foundation.css').includes('data-window-surface'), false);
   assert.equal(mainSource.includes("nativeTheme.shouldUseDarkColors ? 'dark' : 'light'"), true);
   assert.equal(mainSource.includes('persistenceStore.readSettingsDocument()'), true);
   assert.equal(mainSource.includes('persistenceStore.readStateDocument()'), true);
   assert.equal(mainSource.includes('const globalSettings = isPlainObject(settings.global)'), true);
   assert.equal(mainSource.includes('const personalization = isPlainObject(state.personalization)'), true);
-  assert.equal(mainSource.includes('value === \'light\' || value === \'dark\' || value === \'system\''), true);
-  assert.equal(mainSource.includes('value === \'default\' || value === \'nyaa\''), true);
-  assert.equal(mainSource.includes('const nyaaThemeUnlocked = value.nyaaThemeUnlocked === true;'), true);
+  assert.equal(startupThemeSource.includes("value === 'light' || value === 'dark' || value === 'system'"), true);
+  assert.equal(startupThemeSource.includes("value === 'default' || value === 'nyaa'"), true);
+  assert.equal(startupThemeSource.includes('const nyaaThemeUnlocked = value.nyaaThemeUnlocked === true;'), true);
   assert.equal(
-    mainSource.includes("themeMode === 'system' ? getSystemThemeForBootstrap() : themeMode"),
+    startupThemeSource.includes("settings.themeMode === 'system' ? systemTheme : settings.themeMode"),
     true
   );
-  assert.equal(mainSource.includes('backgroundColor: getBrowserWindowBackgroundColor()'), true);
+  assert.equal(mainSource.includes('backgroundColor: initialTheme.backgroundColor'), true);
   ['#f6f3ea', '#171a1f', '#fff6fa', '#18141b'].forEach((color) => {
     assert.equal(bootstrapSource.includes(color), true);
-    assert.equal(mainSource.includes(color), true);
+    assert.equal(startupThemeSource.includes(color), true);
   });
   assert.equal(appSource.includes('root.dataset.themeMode = globalSettings.themeMode;'), true);
   assert.equal(appSource.includes('root.dataset.resolvedTheme = resolvedTheme;'), true);
@@ -845,7 +870,8 @@ test('formal persistence owns renderer data and old storage bridge is removed', 
   const rollupControllerSource = readProjectFile(
     'src/features/rollupImport/useRollupImportController.ts'
   );
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
+  const storageLayoutSource = readProjectFile('electron/storageLayout.ts');
   const preloadSource = readProjectFile('electron/preload.ts');
   const indexSource = readProjectFile('index.html');
   const saveAppDataSource = appSource.slice(
@@ -882,25 +908,26 @@ test('formal persistence owns renderer data and old storage bridge is removed', 
   assert.equal(preloadSource.includes("contextBridge.exposeInMainWorld('netraflowStorage'"), false);
   assert.equal(preloadSource.includes("'nf-storage:"), false);
   assert.equal(mainSource.includes('storage.json'), false);
-  assert.equal(mainSource.includes("const USERDATA_DIR_NAME = 'userdata';"), true);
-  assert.equal(mainSource.includes("const RUNTIME_DIR_NAME = 'runtime';"), true);
+  assert.equal(storageLayoutSource.includes("const USERDATA_DIR_NAME = 'userdata';"), true);
+  assert.equal(storageLayoutSource.includes("const RUNTIME_DIR_NAME = 'runtime';"), true);
   assert.equal(mainSource.includes("const WINDOWS_ACCOUNT_MARKER_FILE_NAME = '.windows-account';"), false);
-  assert.equal(mainSource.includes('const getNfUserDataRootPath = () => {'), true);
-  assert.equal(mainSource.includes('return persistenceRoots.realRoot;'), true);
-  assert.equal(mainSource.includes('createPersistenceEnvironmentRoots({'), true);
+  assert.equal(mainSource.includes('const storageLayout = createStorageLayout({'), true);
+  assert.equal(mainSource.includes('createPersistenceEnvironmentRoots(storageLayout)'), true);
   assert.equal(mainSource.includes('NETRAFLOW_PERSISTENCE_EXE_DIR'), true);
   assert.equal(mainSource.includes('NETRAFLOW_USERDATA_ROOT'), true);
+  assert.equal(mainSource.includes('NETRAFLOW_RUNTIME_ROOT'), true);
   assert.equal(mainSource.includes('NETRAFLOW_DEMO_ROOT'), true);
-  assert.equal(mainSource.includes("path.join(getAppInstallRootPath(), RUNTIME_DIR_NAME)"), true);
-  assert.equal(mainSource.includes('const getNfRuntimeUserDataPath = () => getNfRuntimeRootPath();'), true);
+  assert.equal(mainSource.includes("app.setPath('userData', storageLayout.runtime)"), true);
+  assert.equal(mainSource.includes("app.setPath('sessionData', storageLayout.sessionData)"), true);
   assert.equal(mainSource.includes('getWindowsAccountKey'), false);
   assert.equal(mainSource.includes('getWindowsAccountIdentity'), false);
   assert.equal(mainSource.includes('writeWindowsAccountMarkers'), false);
   assert.equal(mainSource.includes('WINDOWS_ACCOUNT_MARKER_FILE_NAME'), false);
   assert.equal(mainSource.includes('node:crypto'), false);
   assert.equal(mainSource.includes('node:os'), false);
-  assert.equal(mainSource.includes('const getDevProjectRootPath = () => app.getAppPath();'), true);
-  assert.equal(mainSource.includes('return getDevProjectRootPath();'), true);
+  assert.equal(mainSource.includes('appPath: app.getAppPath()'), true);
+  assert.equal(storageLayoutSource.includes('if (!isPackaged)'), true);
+  assert.equal(storageLayoutSource.includes('return platformPath.resolve(appPath);'), true);
   assert.equal(mainSource.includes("path.join(app.getPath('appData'), APP_NAME)"), false);
   assert.equal(mainSource.includes("path.join(app.getPath('appData'), APP_NAME.toLowerCase())"), false);
   assert.equal(mainSource.includes('getLegacyPortableUserDataPath()'), false);
@@ -917,7 +944,7 @@ test('formal persistence owns renderer data and old storage bridge is removed', 
 });
 
 test('Electron renderer sandbox keeps the preload bridge boundary narrow', () => {
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const preloadSource = readProjectFile('electron/preload.ts');
   const typesSource = readProjectFile('src/vite-env.d.ts');
   const rendererBridgeSource = [
@@ -948,7 +975,8 @@ test('Electron renderer sandbox keeps the preload bridge boundary narrow', () =>
   assert.equal(preloadSource.includes("contextBridge.exposeInMainWorld('ipcRenderer'"), false);
   assert.equal(preloadSource.includes("contextBridge.exposeInMainWorld('electron'"), false);
   assert.equal(preloadSource.includes('remote'), false);
-  assert.equal(preloadSource.includes('process.'), false);
+  assert.equal(preloadSource.includes('platform: process.platform'), true);
+  assert.equal(preloadSource.match(/process\./g)?.length, 11);
   assert.equal(preloadSource.includes("require('electron')"), true);
   assert.equal(preloadSource.includes("require('node:"), false);
   assert.equal(preloadSource.includes('window.require'), false);
@@ -958,6 +986,61 @@ test('Electron renderer sandbox keeps the preload bridge boundary narrow', () =>
   assert.equal(rendererBridgeSource.includes('ipcRenderer'), false);
   assert.equal(typesSource.includes('ipcRenderer'), false);
   assert.equal(typesSource.includes('Electron.IpcRenderer'), false);
+});
+
+test('desktop platforms keep Windows custom controls separate from native macOS and Linux frames', () => {
+  const mainSource = readProjectFile('electron/mainApplication.ts');
+  const windowPlatformOptionsSource = readProjectFile('electron/windowPlatformOptions.ts');
+  const preloadSource = readProjectFile('electron/preload.ts');
+  const viteEnvSource = readProjectFile('src/vite-env.d.ts');
+  const windowFrameSource = readProjectFile('src/app/windowFrame/WindowFrame.tsx');
+  const windowTitleBarSource = readProjectFile('src/app/windowFrame/WindowTitleBar.tsx');
+  const windowFrameStyles = readProjectFile('src/styles/window-frame.css');
+
+  assert.equal(windowPlatformOptionsSource.includes("if (platform === 'win32')"), true);
+  assert.equal(windowPlatformOptionsSource.includes('frame: false'), true);
+  assert.equal(windowPlatformOptionsSource.includes("if (platform === 'darwin')"), true);
+  assert.equal(windowPlatformOptionsSource.includes("titleBarStyle: 'hiddenInset'"), true);
+  assert.equal(mainSource.includes('trafficLightPosition'), false);
+  assert.equal(mainSource.includes('transparent:'), false);
+  assert.equal(mainSource.includes('vibrancy:'), false);
+  assert.equal(mainSource.includes('...getPlatformWindowOptions({'), true);
+  assert.equal(windowPlatformOptionsSource.includes("'public/icons/linux/512x512.png'"), true);
+  assert.equal(preloadSource.includes('platform: process.platform'), true);
+  assert.equal(viteEnvSource.includes("type DesktopPlatform = 'win32' | 'darwin' | 'linux';"), true);
+  assert.equal(windowFrameSource.includes("const platform = window.appInfo?.platform ?? 'win32';"), true);
+  assert.equal(
+    windowFrameSource.includes('areCustomWindowControlsVisible(platform)'),
+    true
+  );
+  assert.equal(windowFrameSource.includes('isCustomWindowTitleBarVisible(platform)'), true);
+  assert.equal(windowFrameSource.includes('{showTitleBar ? ('), true);
+  assert.equal(windowFrameSource.includes('navigator.userAgent'), false);
+  assert.equal(windowFrameSource.includes('process.platform'), false);
+  assert.equal(
+    windowTitleBarSource.includes('showWindowControls ? <WindowControls {...controller} /> : null'),
+    true
+  );
+  assert.equal(windowFrameStyles.includes('.window-frame--darwin .window-frame__titlebar'), true);
+  assert.equal(windowFrameStyles.includes('padding-left: 78px;'), true);
+  assert.match(windowFrameStyles, /\.window-frame--linux\s*\{\s*grid-template-rows: minmax\(0, 1fr\);\s*\}/);
+  assert.equal(windowFrameStyles.includes('clip-path'), false);
+  assert.doesNotMatch(windowFrameStyles, /\.window-frame--linux\s*\{[^}]*border-radius/s);
+  assert.match(
+    windowFrameStyles,
+    /\.window-frame__backdrop\s*\{[^}]*position: absolute;[^}]*inset: 0;[^}]*background: var\(--window-backdrop-bg\);[^}]*\}/s
+  );
+  assert.equal(
+    windowFrameSource.indexOf('<WindowBackdrop />') <
+      windowFrameSource.indexOf('<WindowTitleBar'),
+    true
+  );
+  assert.equal(
+    windowFrameSource.indexOf('<WindowBackdrop />') >
+      windowFrameSource.indexOf('<div className={frameClassName}'),
+    true
+  );
+  assert.equal(windowFrameStyles.includes('.window-frame--win32'), false);
 });
 
 test('page position memory copy and settings search keywords stay wired', () => {
@@ -1145,7 +1228,8 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
   const confirmDialogSource = readProjectFile('src/components/dialogs/ConfirmDialog.tsx');
   const dialogShellSource = readProjectFile('src/components/dialogs/DialogShell.tsx');
   const stylesSource = readProjectStyles();
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
+  const storageLayoutSource = readProjectFile('electron/storageLayout.ts');
   const afterPackSource = readProjectFile('scripts/after-pack-installer.mjs');
   const packageInstallerScriptSource = readProjectFile('scripts/package-installer.mjs');
   const resourcePatchSource = readProjectFile('scripts/patch-executable-resources.mjs');
@@ -1176,6 +1260,11 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
         executableName?: string;
         target?: unknown;
         signAndEditExecutable?: boolean;
+      };
+      linux?: {
+        icon?: string;
+        artifactName?: string;
+        target?: unknown;
       };
       nsis?: {
         oneClick?: boolean;
@@ -1224,11 +1313,14 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
     filter: ['LICENSE.NotoSansCJK.txt', 'LICENSE.NotoSansSymbols2.txt']
   });
   assert.equal(packageJson.build?.win?.icon, 'public/icons/netraflow.ico');
-  assert.equal(packageJson.build?.win?.artifactName, 'NetraFlow_${version}_Setup.${ext}');
+  assert.equal(packageJson.build?.win?.artifactName, 'NetraFlow_${version}_${arch}_Setup.${ext}');
   assert.equal(packageJson.build?.win?.executableName, 'NetraFlow');
   assert.equal(packageJson.build?.win?.signAndEditExecutable, false);
   assert.equal(JSON.stringify(packageJson.build?.win?.target).includes('"target":"nsis"'), true);
   assert.equal(JSON.stringify(packageJson.build?.win?.target).includes('"x64"'), true);
+  assert.equal(packageJson.build?.linux?.icon, 'public/icons/linux');
+  assert.equal(JSON.stringify(packageJson.build?.linux?.target).includes('"target":"AppImage"'), true);
+  assert.equal(JSON.stringify(packageJson.build?.linux?.target).includes('"x64"'), true);
   assert.equal(packageJson.build?.nsis?.oneClick, false);
   assert.equal(packageJson.build?.nsis?.perMachine, false);
   assert.equal(packageJson.build?.nsis?.selectPerMachineByDefault, undefined);
@@ -1260,32 +1352,28 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
   assert.equal(mainSource.includes("process.env.NETRAFLOW_PORTABLE === '1'"), true);
   assert.equal(mainSource.includes("path.join(app.getAppPath(), 'portable.flag')"), true);
   assert.equal(mainSource.includes("path.join(process.resourcesPath, 'portable.flag')"), true);
-  assert.equal(mainSource.includes("const USERDATA_DIR_NAME = 'userdata';"), true);
-  assert.equal(mainSource.includes("const RUNTIME_DIR_NAME = 'runtime';"), true);
-  assert.equal(mainSource.includes("const SESSION_DATA_DIR_NAME = 'sessionData';"), true);
-  assert.equal(mainSource.includes("const CACHE_DIR_NAME = 'cache';"), true);
-  assert.equal(mainSource.includes("const LOGS_DIR_NAME = 'logs';"), true);
-  assert.equal(mainSource.includes("const CRASH_DUMPS_DIR_NAME = 'crashDumps';"), true);
-  assert.equal(mainSource.includes('const getAppInstallRootPath = () =>'), true);
-  assert.equal(mainSource.includes('const getPortableRootPath = () =>'), true);
-  assert.equal(mainSource.includes('const getDevProjectRootPath = () => app.getAppPath();'), true);
-  assert.equal(mainSource.includes('return isPortableBuild() ? getPortableRootPath() : getPackagedInstallRootPath();'), true);
-  assert.equal(mainSource.includes('const getNfUserDataRootPath = () => {'), true);
-  assert.equal(mainSource.includes('return persistenceRoots.realRoot;'), true);
-  assert.equal(mainSource.includes('createPersistenceEnvironmentRoots({'), true);
-  assert.equal(mainSource.includes('path.join(getAppInstallRootPath(), RUNTIME_DIR_NAME)'), true);
-  assert.equal(mainSource.includes('path.join(getNfRuntimeRootPath(), SESSION_DATA_DIR_NAME)'), true);
-  assert.equal(mainSource.includes('path.join(getNfRuntimeRootPath(), CACHE_DIR_NAME)'), true);
-  assert.equal(mainSource.includes('path.join(getNfRuntimeRootPath(), CRASH_DUMPS_DIR_NAME)'), true);
+  assert.equal(storageLayoutSource.includes("const USERDATA_DIR_NAME = 'userdata';"), true);
+  assert.equal(storageLayoutSource.includes("const RUNTIME_DIR_NAME = 'runtime';"), true);
+  assert.equal(storageLayoutSource.includes("const SESSION_DATA_DIR_NAME = 'sessionData';"), true);
+  assert.equal(storageLayoutSource.includes("const CACHE_DIR_NAME = 'cache';"), true);
+  assert.equal(storageLayoutSource.includes("const LOGS_DIR_NAME = 'logs';"), true);
+  assert.equal(storageLayoutSource.includes("const CRASH_DUMPS_DIR_NAME = 'crashDumps';"), true);
+  assert.equal(storageLayoutSource.includes("if (platform === 'win32')"), true);
+  assert.equal(storageLayoutSource.includes('platformPath.dirname(execPath)'), true);
+  assert.equal(storageLayoutSource.includes("platform === 'darwin' || platform === 'linux'"), true);
+  assert.equal(mainSource.includes('const storageLayout = createStorageLayout({'), true);
+  assert.equal(mainSource.includes('createPersistenceEnvironmentRoots(storageLayout)'), true);
+  assert.equal(mainSource.includes("app.setPath('cache', storageLayout.cache)"), true);
+  assert.equal(mainSource.includes("app.setPath('crashDumps', storageLayout.crashDumps)"), true);
   assert.equal(mainSource.includes('const getLegacyPortableUserDataPath = () =>'), false);
   assert.equal(mainSource.includes("path.join(path.dirname(process.execPath), LEGACY_PORTABLE_USER_DATA_DIR_NAME)"), false);
   assert.equal(mainSource.includes('if (app.isPackaged) {\n    stageLegacyLocalStorageIfNeeded(runtimeUserDataPath);\n  }'), false);
-  assert.equal(mainSource.includes('mkdirSync(userDataRootPath, { recursive: true });'), true);
-  assert.equal(mainSource.includes("app.setPath('userData', runtimeUserDataPath);"), true);
-  assert.equal(mainSource.includes("app.setPath('sessionData', sessionDataPath);"), true);
-  assert.equal(mainSource.includes("app.setPath('cache', cachePath);"), true);
-  assert.equal(mainSource.includes("app.setPath('crashDumps', crashDumpsPath);"), true);
-  assert.equal(mainSource.includes('app.setAppLogsPath(logsPath);'), true);
+  assert.equal(mainSource.includes('mkdirSync(storageLayout.userdata, { recursive: true });'), true);
+  assert.equal(mainSource.includes("app.setPath('userData', storageLayout.runtime);"), true);
+  assert.equal(mainSource.includes("app.setPath('sessionData', storageLayout.sessionData);"), true);
+  assert.equal(mainSource.includes("app.setPath('cache', storageLayout.cache);"), true);
+  assert.equal(mainSource.includes("app.setPath('crashDumps', storageLayout.crashDumps);"), true);
+  assert.equal(mainSource.includes('app.setAppLogsPath(storageLayout.logs);'), true);
   assert.equal(mainSource.includes("app.setPath('userData', path.join(path.dirname(process.execPath), 'userData'))"), false);
   assert.equal(mainSource.includes("path.join(app.getPath('userData'), 'logs', 'main.log')"), false);
   assert.equal(mainSource.includes("path.join(app.getPath('logs'), 'main.log')"), true);
@@ -1310,7 +1398,7 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
   assert.equal(packageInstallerScriptSource.includes("path.join(unpackedResourcesDir, 'app')"), true);
   assert.equal(packageInstallerScriptSource.includes("path.join(unpackedResourcesDir, 'app.asar.unpacked', 'node_modules')"), true);
   assert.equal(packageInstallerScriptSource.includes("'builder-debug.yml', 'latest.yml'"), true);
-  assert.equal(packageInstallerScriptSource.includes('`${productName}_${version}_Setup.exe`'), true);
+  assert.equal(packageInstallerScriptSource.includes('`${productName}_${version}_x64_Setup.exe`'), true);
   assert.equal(/node:child_process|spawnSync|powershell|cmd(?:\.exe)?|icacls|ExecWait|nsExec::|\.ps1|\.cmd|\.bat/i.test(packageInstallerScriptSource), false);
 });
 
@@ -1362,15 +1450,16 @@ test('toast controller and viewport use one fixed bottom-right edge slide style'
   assert.match(toastViewportBlock, /bottom: 30px;/);
   assert.match(toastViewportBlock, /z-index: 120;/);
   assert.match(toastViewportBlock, /justify-items: end;/);
-  assert.match(toastViewportBlock, /width: 188px;/);
+  assert.match(toastViewportBlock, /width: max-content;/);
   assert.match(toastViewportBlock, /max-width: calc\(100vw - 44px\);/);
   assert.match(toastViewportBlock, /pointer-events: none;/);
 
   assert.match(toastItemBlock, /place-items: center;/);
-  assert.match(toastItemBlock, /width: 188px;/);
+  assert.match(toastItemBlock, /width: max-content;/);
   assert.match(toastItemBlock, /max-width: calc\(100vw - 44px\);/);
   assert.match(toastItemBlock, /text-align: center;/);
   assert.match(toastItemBlock, /overflow-wrap: break-word;/);
+  assert.match(toastItemBlock, /white-space: nowrap;/);
   assert.match(toastItemBlock, /border-right: 0;/);
   assert.match(toastItemBlock, /border-radius: var\(--radius-section\) 0 0 var\(--radius-section\);/);
   assert.match(toastItemBlock, /background: color-mix\(in srgb, var\(--panel-bg-strong\) 92%, var\(--surface-muted\)\);/);
@@ -1380,8 +1469,8 @@ test('toast controller and viewport use one fixed bottom-right edge slide style'
   assert.equal(toastViewportSource.includes('minWidth'), false);
   assert.equal(toastViewportBlock.includes('min-width: 132px;'), false);
   assert.equal(toastItemBlock.includes('min-width: 132px;'), false);
-  assert.equal(toastViewportBlock.includes('width: fit-content;'), false);
-  assert.equal(toastItemBlock.includes('width: fit-content;'), false);
+  assert.equal(toastViewportBlock.includes('width: 188px;'), false);
+  assert.equal(toastItemBlock.includes('width: 188px;'), false);
   assert.equal(toastViewportBlock.includes('min(320px, calc(100vw - 44px))'), false);
   assert.equal(toastItemBlock.includes('min(320px, calc(100vw - 44px))'), false);
   assert.equal(toastItemBlock.includes('rgba(22, 163, 74'), false);
@@ -1811,20 +1900,21 @@ test('portable Windows package script creates an isolated zip bundle without ins
   const packageJson = JSON.parse(readProjectFile('package.json')) as {
     scripts?: { 'dist:portable'?: string };
   };
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
+  const storageLayoutSource = readProjectFile('electron/storageLayout.ts');
   const portableScriptSource = readProjectFile('scripts/package-portable.mjs');
 
   assert.equal(packageJson.scripts?.['dist:portable'], 'node scripts/package-portable.mjs');
   assert.equal(portableScriptSource.includes("prepareVersionedReleaseDir('portable', version)"), true);
-  assert.equal(portableScriptSource.includes('`${bundleName}_Portable.zip`'), true);
+  assert.equal(portableScriptSource.includes('`${productName}_${version}_x64_Portable.zip`'), true);
   assert.equal(portableScriptSource.includes('writeFileSync(portableFlagPath'), true);
   assert.equal(mainSource.includes("path.join(app.getAppPath(), 'portable.flag')"), true);
   assert.equal(mainSource.includes("path.join(process.resourcesPath, 'app', 'portable.flag')"), false);
   assert.equal(mainSource.includes("path.join(app.getPath('appData'), APP_NAME)"), false);
-  assert.equal(mainSource.includes('const getNfUserDataRootPath = () => {'), true);
-  assert.equal(mainSource.includes('return persistenceRoots.realRoot;'), true);
-  assert.equal(mainSource.includes('createPersistenceEnvironmentRoots({'), true);
-  assert.equal(mainSource.includes("path.join(getAppInstallRootPath(), RUNTIME_DIR_NAME)"), true);
+  assert.equal(mainSource.includes('isPortable: isPortableBuild()'), true);
+  assert.equal(storageLayoutSource.includes('isPortable intentionally does not alter'), true);
+  assert.equal(mainSource.includes('createPersistenceEnvironmentRoots(storageLayout)'), true);
+  assert.equal(mainSource.includes("app.setPath('userData', storageLayout.runtime)"), true);
   assert.equal(mainSource.includes('getWindowsAccountKey'), false);
   assert.equal(mainSource.includes('.windows-account'), false);
   assert.equal(mainSource.includes("path.join(path.dirname(process.execPath), LEGACY_PORTABLE_USER_DATA_DIR_NAME)"), false);
@@ -1921,7 +2011,7 @@ test('release packaging scripts use versioned output folders and safe release cl
     resourcePatchSource
   ].join('\n');
 
-  assert.equal(packageJson.version, '0.9.9');
+  assert.equal(packageJson.version, '0.9.10');
   assert.equal(packageJson.scripts?.['clean:release'], 'node scripts/clean-release.mjs');
   assert.equal(packageJson.scripts?.['dist:installer'], 'node scripts/package-installer.mjs');
   assert.equal(packageJson.scripts?.['dist:portable'], 'node scripts/package-portable.mjs');
@@ -1981,14 +2071,14 @@ test('release packaging scripts use versioned output folders and safe release cl
   assert.equal(installerScriptSource.includes("path.join(unpackedResourcesDir, 'app.asar.unpacked', 'node_modules')"), true);
   assert.equal(installerScriptSource.includes("'builder-debug.yml', 'latest.yml'"), true);
   assert.equal(installerScriptSource.includes('if (!isDiagnosticsRun)'), true);
-  assert.equal(installerScriptSource.includes('`${productName}_${version}_Setup.exe`'), true);
+  assert.equal(installerScriptSource.includes('`${productName}_${version}_x64_Setup.exe`'), true);
   assert.equal(installerScriptSource.includes('unexpectedInstallerArtifacts'), true);
   assert.equal(installerScriptSource.includes('`${productName}_${version}_1_Setup.exe`'), false);
   assert.equal(portableScriptSource.includes("prepareVersionedReleaseDir('portable', version)"), true);
   assert.equal(portableScriptSource.includes("Platform.WINDOWS.createTarget(['dir'], Arch.x64)"), true);
   assert.equal(portableScriptSource.includes("packagedAppDir = path.join(stagingOutputDir, 'win-unpacked')"), true);
-  assert.equal(portableScriptSource.includes('const bundleName = `${productName}_${version}`;'), true);
-  assert.equal(portableScriptSource.includes('`${bundleName}_Portable.zip`'), true);
+  assert.equal(portableScriptSource.includes('const bundleName = `${productName}_${version}_x64`;'), true);
+  assert.equal(portableScriptSource.includes('`${productName}_${version}_x64_Portable.zip`'), true);
   assert.equal(portableScriptSource.includes('`${productName}_${version}_Portable.zip`'), false);
   assert.equal(portableScriptSource.includes('`${productName}_${version}_1`'), false);
   assert.equal(resourcePatchSource.includes("node_modules', 'electron-winstaller', 'vendor', 'rcedit.exe'"), true);
@@ -2072,7 +2162,7 @@ test('Windows executable icon resources use the local mature rcedit path only', 
 });
 
 test('Windows taskbar lock uses Jump List IPC without tray or background hiding', () => {
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const productLockSource = readProjectFile('electron/productInstanceLock.ts');
   const preloadSource = readProjectFile('electron/preload.ts');
   const appSource = readProjectFile('src/App.tsx');
@@ -2080,6 +2170,11 @@ test('Windows taskbar lock uses Jump List IPC without tray or background hiding'
     'src/features/security/useSecuritySettingsController.tsx'
   );
   const rendererLockSource = `${appSource}\n${securityControllerSource}`;
+  const rendererLockHandlerStart = securityControllerSource.indexOf('api.onNetraFlowLock(() => {');
+  const rendererLockHandlerSource = securityControllerSource.slice(
+    rendererLockHandlerStart,
+    securityControllerSource.indexOf('\n  }, [', rendererLockHandlerStart)
+  );
   const typesSource = readProjectFile('src/vite-env.d.ts');
 
   assert.equal(mainSource.includes('new Tray'), false);
@@ -2091,12 +2186,19 @@ test('Windows taskbar lock uses Jump List IPC without tray or background hiding'
   assert.equal(mainSource.includes("process.platform !== 'darwin'"), true);
   assert.equal(mainSource.includes('app.quit();'), true);
   assert.equal(mainSource.includes('app.setUserTasks(['), true);
+  assert.equal(mainSource.includes('const cleared = app.setUserTasks([])'), true);
+  assert.equal(mainSource.includes('if (!cleared)'), true);
+  assert.equal(mainSource.includes('const registered = app.setUserTasks(['), true);
+  assert.equal(mainSource.includes('if (!registered)'), true);
   assert.equal(mainSource.includes("title: '锁定'"), true);
   assert.equal(mainSource.includes("description: '锁定 NetraFlow'"), true);
   assert.equal(mainSource.includes("const lockArguments = app.isPackaged ? '--lock'"), true);
   assert.equal(mainSource.includes('`"${app.getAppPath()}" --lock`'), true);
   assert.equal(mainSource.includes('arguments: lockArguments'), true);
-  assert.equal(mainSource.includes('iconPath: app.isPackaged ? process.execPath : getAppIconPath()'), true);
+  assert.match(
+    mainSource,
+    /iconPath: app\.isPackaged\s*\? process\.execPath\s*: getAppIconPath\(\{/
+  );
   assert.equal(mainSource.includes('app.requestSingleInstanceLock()'), true);
   assert.equal(mainSource.includes("app.on('second-instance'"), true);
   assert.equal(mainSource.includes('createProductInstanceCoordinator'), true);
@@ -2105,7 +2207,8 @@ test('Windows taskbar lock uses Jump List IPC without tray or background hiding'
   assert.equal(mainSource.includes('productInstanceCoordinator.release()'), true);
   assert.equal(productLockSource.includes('PRODUCT_INSTANCE_PIPE_PATH'), true);
   assert.equal(productLockSource.includes('netraflow-com-netraflow-app-single-instance'), true);
-  assert.equal(productLockSource.includes("if (error.code === 'EADDRINUSE')"), true);
+  assert.equal(productLockSource.includes("initial.code !== 'EADDRINUSE'"), true);
+  assert.equal(productLockSource.includes("existing.code !== 'ECONNREFUSED'"), true);
   assert.equal(mainSource.includes("argv.includes('--lock')"), true);
   assert.equal(mainSource.includes("targetWindow.webContents.send('netraflow-lock')"), true);
   assert.equal(preloadSource.includes('onNetraFlowLock'), true);
@@ -2119,7 +2222,16 @@ test('Windows taskbar lock uses Jump List IPC without tray or background hiding'
     true
   );
   assert.equal(rendererLockSource.includes('lockCoreDocument();'), true);
-  assert.equal(rendererLockSource.includes('setIsLocked(true);'), true);
+  assert.equal(rendererLockSource.includes("setLockScreenState('locked');"), true);
+  assert.equal(mainSource.includes("webContents.on('before-input-event'"), true);
+  assert.equal(mainSource.includes('globalShortcut'), false);
+  assert.equal(mainSource.includes('requestRendererLockCommand'), true);
+  assert.equal(mainSource.includes('rendererPasswordProtectionEnabled'), true);
+  assert.equal(mainSource.includes('rendererIsLocked'), true);
+  assert.equal(mainSource.includes('rendererIsUnlocking'), true);
+  assert.equal(mainSource.includes("ipcMain.on('app:lock-request-complete'"), true);
+  assert.equal(rendererLockHandlerSource.includes("showToast('未启用登录密码保护', 'info')"), true);
+  assert.equal(rendererLockHandlerSource.includes('请先启用登录密码保护'), false);
   assert.equal(rendererLockSource.includes('unlockCoreDocument(unlockPasswordInput);'), true);
   assert.equal(rendererLockSource.includes('verifyPassword('), false);
   assert.equal(rendererLockSource.includes('globalSettings.passwordHash'), false);
@@ -2828,7 +2940,7 @@ test('popup and system prompt copy removes sentence periods without touching dot
   const rollupControllerSource = readProjectFile(
     'src/features/rollupImport/useRollupImportController.ts'
   );
-  const mainSource = readProjectFile('electron/main.ts');
+  const mainSource = readProjectFile('electron/mainApplication.ts');
   const packageJson = JSON.parse(readProjectFile('package.json')) as { version?: string };
 
   const popupSources = [
@@ -2897,7 +3009,7 @@ test('popup and system prompt copy removes sentence periods without touching dot
     ),
     false
   );
-  assert.equal(packageJson.version, '0.9.9');
+  assert.equal(packageJson.version, '0.9.10');
   assert.equal(
     userSettingsLogicSource.includes(
       'netraflow-settings-${year}${month}${day}-${hour}${minute}${second}.netraflow-settings.json'
@@ -2915,7 +3027,7 @@ test('release documentation keeps packaging notes scoped to changelog', () => {
 
   assert.equal(zhReadmeSource.includes('README_EN.md'), true);
   assert.equal(enReadmeSource.includes('README.md'), true);
-  assert.equal(combinedReadmeSource.includes('docs/assets/netraflow-icon.png'), true);
+  assert.equal(combinedReadmeSource.includes('src/assets/brand/netraflow-logo.svg'), true);
   assert.equal(changelogSource.includes('## 0.9.2'), true);
   assert.equal(changelogSource.includes('## 0.9.3'), true);
   assert.equal(combinedReadmeSource.includes('0.9.3'), false);

@@ -17,70 +17,34 @@ import {
   createPersistenceEnvironmentRoots,
   preflightDemoDirectory
 } from './persistenceEnvironment.js';
+import { createStorageLayout } from './storageLayout.js';
 
 const createRoots = (t: TestContext) => {
-  const execDir = mkdtempSync(path.join(tmpdir(), 'netraflow-demo-env-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'netraflow-demo-env-'));
 
   t.after(() => {
-    rmSync(execDir, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
   });
 
-  return createPersistenceEnvironmentRoots({
-    execDir,
-    execPath: path.join(execDir, 'NetraFlow.exe')
+  const layout = createStorageLayout({
+    platform: process.platform,
+    isPackaged: false,
+    isPortable: false,
+    execPath: path.join(root, process.platform === 'win32' ? 'NetraFlow.exe' : 'netraflow'),
+    appPath: root,
+    defaultUserDataPath: path.join(root, 'ignored-platform-userdata')
   });
+
+  return createPersistenceEnvironmentRoots(layout);
 };
 
-test('demo roots resolve as sibling demo and userdata directories under exe dir', (t) => {
+test('persistence environment consumes real and demo roots from StorageLayout', (t) => {
   const roots = createRoots(t);
 
-  assert.equal(roots.root, roots.execDir);
-  assert.equal(roots.realRoot, path.join(roots.execDir, 'userdata'));
-  assert.equal(roots.demoRoot, path.join(roots.execDir, '.demo'));
+  assert.equal(roots.realRoot, path.join(roots.root, 'userdata'));
+  assert.equal(roots.demoRoot, path.join(roots.root, '.demo'));
   assert.equal(roots.demoRoot.startsWith(roots.realRoot), false);
   assert.deepEqual(assertSafeDemoRoot(roots), { ok: true });
-});
-
-test('development persistence roots use app root instead of Electron binary directory', () => {
-  const appRoot = path.join('D:', 'project', 'NF_dev');
-  const electronExecPath = path.join(
-    appRoot,
-    'node_modules',
-    'electron',
-    'dist',
-    'electron.exe'
-  );
-  const roots = createPersistenceEnvironmentRoots({
-    root: appRoot,
-    execPath: electronExecPath
-  });
-  const electronDistFragment = path.join('node_modules', 'electron', 'dist');
-
-  assert.equal(roots.realRoot, path.join(path.resolve(appRoot), 'userdata'));
-  assert.equal(roots.demoRoot, path.join(path.resolve(appRoot), '.demo'));
-  assert.equal(roots.realRoot.includes(electronDistFragment), false);
-  assert.equal(roots.demoRoot.includes(electronDistFragment), false);
-  assert.deepEqual(assertSafeDemoRoot(roots), { ok: true });
-});
-
-test('packaged persistence roots keep using the executable directory', () => {
-  const execPath = path.join('C:', 'Program Files', 'NetraFlow', 'NetraFlow.exe');
-  const roots = createPersistenceEnvironmentRoots({ execPath });
-  const exeDir = path.dirname(execPath);
-
-  assert.equal(roots.root, path.resolve(exeDir));
-  assert.equal(roots.realRoot, path.join(path.resolve(exeDir), 'userdata'));
-  assert.equal(roots.demoRoot, path.join(path.resolve(exeDir), '.demo'));
-});
-
-test('portable persistence roots remain based on the portable executable directory', () => {
-  const execPath = path.join('E:', 'Apps', 'NetraFlow_0.9.8', 'NetraFlow.exe');
-  const roots = createPersistenceEnvironmentRoots({ execPath });
-  const exeDir = path.dirname(execPath);
-
-  assert.equal(roots.root, path.resolve(exeDir));
-  assert.equal(roots.realRoot, path.join(path.resolve(exeDir), 'userdata'));
-  assert.equal(roots.demoRoot, path.join(path.resolve(exeDir), '.demo'));
 });
 
 test('demo preflight deletes stale demo and verifies writable directory', (t) => {
@@ -104,10 +68,10 @@ test('demo preflight deletes stale demo and verifies writable directory', (t) =>
 test('demo cleanup refuses dangerous paths before recursive removal', (t) => {
   const roots = createRoots(t);
   const unsafeCases = [
-    { ...roots, demoRoot: roots.execDir },
+    { ...roots, demoRoot: roots.root },
     { ...roots, demoRoot: roots.realRoot },
     { ...roots, demoRoot: path.join(roots.realRoot, '.demo') },
-    { ...roots, demoRoot: path.dirname(roots.execDir) }
+    { ...roots, demoRoot: path.dirname(roots.root) }
   ];
 
   for (const unsafeRoots of unsafeCases) {

@@ -3,6 +3,7 @@ import type { ChangeEvent, FormEvent, RefObject } from 'react';
 import type { ArchivedAccountsLayerProps } from '../archivedAccountsLayer';
 import type { HistoryBackupLayerProps } from '../historyBackupLayer';
 import type { LockScreenLayerProps } from '../lockScreen';
+import type { LockScreenState } from '../lockScreen';
 import type { QuickEntryPickerLayerProps } from '../quickEntryLayer';
 import type { ResetDangerDialogLayerProps } from '../resetDangerDialog';
 import type { SearchOverlayLayerProps } from '../searchOverlay';
@@ -261,13 +262,13 @@ export const createResetDangerDialogLayerProps = (
 ): ResetDangerDialogLayerProps => props;
 
 export type CreateLockScreenLayerPropsOptions = {
-  isLocked: boolean;
-  productIconPath: string;
+  state: LockScreenState;
   password: string;
   error: string;
   isUnlocking: boolean;
   onPasswordChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onPanelExitComplete: () => void;
 };
 
 export const createLockScreenLayerProps = (
