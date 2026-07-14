@@ -128,7 +128,7 @@ jobs:
           retention-days: 7
           compression-level: 0
 
-  build-linux:
+  build-linux-appimage:
     needs: prepare
     runs-on: ubuntu-22.04
     steps:
@@ -150,17 +150,50 @@ jobs:
         run: npm run build
       - name: Build Linux AppImage
         run: npm run dist:linux
-      - name: Build Linux DEB
-        run: npm run dist:deb
-      - name: Verify Linux packages
-        run: node scripts/verify-linux-artifacts.mjs
-      - name: Verify and stage Linux artifacts
-        run: node scripts/verify-release-artifacts.mjs --mode linux --input release/linux --output release-artifacts/linux --version "${{ needs.prepare.outputs.version }}" --tag "${{ needs.prepare.outputs.tag }}" --commit "${{ needs.prepare.outputs.commit }}"
-      - name: Upload Linux internal artifact
+      - name: Verify Linux AppImage
+        run: node scripts/verify-linux-artifacts.mjs --mode appimage
+      - name: Verify and stage Linux AppImage
+        run: node scripts/verify-release-artifacts.mjs --mode linux-appimage --input release/linux --output release-artifacts/linux-appimage --version "${{ needs.prepare.outputs.version }}" --tag "${{ needs.prepare.outputs.tag }}" --commit "${{ needs.prepare.outputs.commit }}"
+      - name: Upload Linux AppImage internal artifact
         uses: actions/upload-artifact@v4
         with:
-          name: netraflow-release-linux-x64
-          path: release-artifacts/linux
+          name: netraflow-release-linux-appimage-x64
+          path: release-artifacts/linux-appimage
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  build-linux-deb:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout tag commit
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify checkout identity
+        run: node scripts/verify-checkout.mjs "${{ needs.prepare.outputs.commit }}"
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Build Linux DEB
+        run: npm run dist:deb
+      - name: Verify Linux DEB
+        run: node scripts/verify-linux-artifacts.mjs --mode deb
+      - name: Verify and stage Linux DEB
+        run: node scripts/verify-release-artifacts.mjs --mode linux-deb --input release/linux --output release-artifacts/linux-deb --version "${{ needs.prepare.outputs.version }}" --tag "${{ needs.prepare.outputs.tag }}" --commit "${{ needs.prepare.outputs.commit }}"
+      - name: Upload Linux DEB internal artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: netraflow-release-linux-deb-x64
+          path: release-artifacts/linux-deb
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
@@ -170,7 +203,8 @@ jobs:
       - prepare
       - build-windows
       - build-macos
-      - build-linux
+      - build-linux-appimage
+      - build-linux-deb
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -195,11 +229,16 @@ jobs:
         with:
           name: netraflow-release-macos-arm64
           path: release-internal/downloads/macos
-      - name: Download Linux internal artifact
+      - name: Download Linux AppImage internal artifact
         uses: actions/download-artifact@v4
         with:
-          name: netraflow-release-linux-x64
-          path: release-internal/downloads/linux
+          name: netraflow-release-linux-appimage-x64
+          path: release-internal/downloads/linux-appimage
+      - name: Download Linux DEB internal artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: netraflow-release-linux-deb-x64
+          path: release-internal/downloads/linux-deb
       - name: Verify final five-file bundle
         id: bundle
         run: node scripts/verify-release-artifacts.mjs --mode bundle --input release-internal/downloads --output release-bundle --manifest-output release-internal/bundle-manifest.json --version "${{ needs.prepare.outputs.version }}" --tag "${{ needs.prepare.outputs.tag }}" --commit "${{ needs.prepare.outputs.commit }}"

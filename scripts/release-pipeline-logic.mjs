@@ -20,16 +20,15 @@ export const getReleaseArtifactNames = (version) => ({
     `NetraFlow_${version}_x64_Portable.zip`
   ],
   macos: [`NetraFlow_${version}_arm64.dmg`],
-  linux: [
-    `NetraFlow_${version}_x64.AppImage`,
-    `NetraFlow_${version}_x64.deb`
-  ]
+  'linux-appimage': [`NetraFlow_${version}_x64.AppImage`],
+  'linux-deb': [`NetraFlow_${version}_x64.deb`]
 });
 
 const platformArchitecture = {
   windows: 'x64',
   macos: 'arm64',
-  linux: 'x64'
+  'linux-appimage': 'x64',
+  'linux-deb': 'x64'
 };
 
 const formalAssetPattern = /^NetraFlow_.+\.(?:exe|zip|dmg|AppImage|deb)$/;
@@ -152,11 +151,18 @@ export const verifyAndCollectReleaseBundle = ({
   assertVersionTagCommit({ version, tag, commit });
   assertSafeFreshDirectory(outputDir, 'Release bundle output');
   const files = walkFiles(inputDir);
-  const manifestPaths = files.filter((filePath) => /^manifest-(windows|macos|linux)\.json$/.test(path.basename(filePath)));
-  if (manifestPaths.length !== 3) throw new Error(`Release bundle requires exactly three manifests; found ${manifestPaths.length}.`);
+  const expectedPlatforms = ['windows', 'macos', 'linux-appimage', 'linux-deb'];
+  const manifestPaths = files.filter((filePath) => /^manifest-.+\.json$/.test(path.basename(filePath)));
+  if (manifestPaths.length !== expectedPlatforms.length) {
+    throw new Error(`Release bundle requires exactly four manifests; found ${manifestPaths.length}.`);
+  }
 
   const manifests = manifestPaths.map(readManifest);
-  for (const platform of ['windows', 'macos', 'linux']) {
+  for (const platform of expectedPlatforms) {
+    const expectedManifestName = `manifest-${platform}.json`;
+    if (!manifestPaths.some((manifestPath) => path.basename(manifestPath) === expectedManifestName)) {
+      throw new Error(`Release bundle requires ${expectedManifestName}.`);
+    }
     const matching = manifests.filter((manifest) => manifest.platform === platform);
     if (matching.length !== 1) throw new Error(`Release bundle requires one ${platform} manifest; found ${matching.length}.`);
   }

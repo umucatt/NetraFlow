@@ -50,18 +50,34 @@ test('release workflow only accepts version tag pushes and has one guarded publi
   assert.match(source, /group: release-\$\{\{ github\.ref \}\}/);
   assert.match(source, /cancel-in-progress: false/);
 
-  for (const job of ['prepare:', 'build-windows:', 'build-macos:', 'build-linux:', 'publish-release:']) {
+  for (const job of ['prepare:', 'build-windows:', 'build-macos:', 'build-linux-appimage:', 'build-linux-deb:', 'publish-release:']) {
     assert.equal(source.includes(`  ${job}`), true, `Missing ${job}`);
   }
-  for (const job of ['build-windows', 'build-macos', 'build-linux']) {
-    const block = section(source, `  ${job}:`, job === 'build-windows' ? '\n  build-macos:' : job === 'build-macos' ? '\n  build-linux:' : '\n  publish-release:');
+  const buildJobs = [
+    ['build-windows', '\n  build-macos:'],
+    ['build-macos', '\n  build-linux-appimage:'],
+    ['build-linux-appimage', '\n  build-linux-deb:'],
+    ['build-linux-deb', '\n  publish-release:']
+  ];
+  for (const [job, end] of buildJobs) {
+    const block = section(source, `  ${job}:`, end);
     assert.match(block, /needs: prepare/);
     assert.equal(block.includes('contents: write'), false);
     assert.equal(block.includes('gh release create'), false);
     assert.match(block, /verify-checkout\.mjs/);
   }
+  const appImage = section(source, '  build-linux-appimage:', '\n  build-linux-deb:');
+  assert.match(appImage, /runs-on: ubuntu-22\.04/);
+  assert.match(appImage, /npm run dist:linux/);
+  assert.match(appImage, /verify-linux-artifacts\.mjs --mode appimage/);
+  assert.equal(appImage.includes('dist:deb'), false);
+  const deb = section(source, '  build-linux-deb:', '\n  publish-release:');
+  assert.match(deb, /runs-on: ubuntu-24\.04/);
+  assert.match(deb, /npm run dist:deb/);
+  assert.match(deb, /verify-linux-artifacts\.mjs --mode deb/);
+  assert.equal(deb.includes('dist:linux'), false);
   const publish = section(source, '  publish-release:');
-  assert.match(publish, /needs:\n\s+- prepare\n\s+- build-windows\n\s+- build-macos\n\s+- build-linux/);
+  assert.match(publish, /needs:\n\s+- prepare\n\s+- build-windows\n\s+- build-macos\n\s+- build-linux-appimage\n\s+- build-linux-deb/);
   assert.match(publish, /permissions:\n\s+contents: write/);
   assert.equal((source.match(/contents: write/g) ?? []).length, 1);
   assert.equal((source.match(/gh release create/g) ?? []).length, 1);
@@ -72,6 +88,12 @@ test('release workflow only accepts version tag pushes and has one guarded publi
   assert.equal(publish.includes('gh release delete'), false);
   assert.equal(publish.includes('git tag'), false);
   assert.equal(publish.includes('git push'), false);
+  for (const artifact of [
+    'netraflow-release-windows-x64',
+    'netraflow-release-macos-arm64',
+    'netraflow-release-linux-appimage-x64',
+    'netraflow-release-linux-deb-x64'
+  ]) assert.equal(publish.includes(artifact), true, `Publisher does not download ${artifact}`);
 });
 
 test('release workflow stages manifests internally and uploads exactly five named Release assets', () => {
@@ -95,4 +117,7 @@ test('release workflow stages manifests internally and uploads exactly five name
   }
   assert.match(source, /Create release notes with SHA-256/);
   assert.match(source, /bundle-manifest\.json/);
+  for (const manifest of ['manifest-windows.json', 'manifest-macos.json', 'manifest-linux-appimage.json', 'manifest-linux-deb.json']) {
+    assert.equal(source.includes(manifest), false, `Internal manifest must not be named as a Release upload: ${manifest}`);
+  }
 });
