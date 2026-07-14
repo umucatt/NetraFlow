@@ -22,7 +22,7 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const packageJson = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
 const productName = packageJson.productName ?? 'NetraFlow';
 const version = packageJson.version ?? '0.0.0';
-const bundleName = `${productName}_${version}`;
+const bundleName = `${productName}_${version}_x64`;
 let folderName = '';
 let outputRoot = '';
 let portableRootDir = '';
@@ -413,7 +413,7 @@ for (const requiredPath of [
 assertPackagedRendererLoader(builtMainPath);
 ({ folderName, outputDir: outputRoot } = prepareVersionedReleaseDir('portable', version));
 portableRootDir = path.join(outputRoot, bundleName);
-zipPath = path.join(outputRoot, `${bundleName}_Portable.zip`);
+zipPath = path.join(outputRoot, `${productName}_${version}_x64_Portable.zip`);
 appExePath = path.join(portableRootDir, `${productName}.exe`);
 resourcesDir = path.join(portableRootDir, 'resources');
 appAsarPath = path.join(resourcesDir, 'app.asar');

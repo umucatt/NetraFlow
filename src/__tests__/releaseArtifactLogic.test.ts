@@ -125,10 +125,10 @@ const createZip = (zipPath: string, entries: Array<{ name: string; content?: str
 };
 
 const installerPathFor = (rootDir: string, version = '0.9.6', folder = version) =>
-  path.join(rootDir, 'release', 'installer', folder, `NetraFlow_${version}_Setup.exe`);
+  path.join(rootDir, 'release', 'installer', folder, `NetraFlow_${version}_x64_Setup.exe`);
 
 const portablePathFor = (rootDir: string, version = '0.9.6', folder = version) =>
-  path.join(rootDir, 'release', 'portable', folder, `NetraFlow_${version}_Portable.zip`);
+  path.join(rootDir, 'release', 'portable', folder, `NetraFlow_${version}_x64_Portable.zip`);
 
 const createValidArtifacts = (rootDir: string, version = '0.9.6') => {
   const installerPath = installerPathFor(rootDir, version);
@@ -136,8 +136,8 @@ const createValidArtifacts = (rootDir: string, version = '0.9.6') => {
 
   writeFixtureFile(installerPath, 16);
   createZip(portablePath, [
-    { name: `NetraFlow_${version}/NetraFlow.exe` },
-    { name: `NetraFlow_${version}/resources/app.asar` }
+    { name: `NetraFlow_${version}_x64/NetraFlow.exe` },
+    { name: `NetraFlow_${version}_x64/resources/app.asar` }
   ]);
 
   return { installerPath, portablePath };
@@ -163,11 +163,11 @@ test('artifact verifier finds single installer and portable artifacts in version
 
   const summary = verifyReleaseArtifacts({ rootDir, version: '0.9.6', minSizeBytes: 1 });
 
-  assert.equal(summary.installerPath.endsWith('NetraFlow_0.9.6_Setup.exe'), true);
-  assert.equal(summary.portablePath.endsWith('NetraFlow_0.9.6_Portable.zip'), true);
+  assert.equal(summary.installerPath.endsWith('NetraFlow_0.9.6_x64_Setup.exe'), true);
+  assert.equal(summary.portablePath.endsWith('NetraFlow_0.9.6_x64_Portable.zip'), true);
   assert.deepEqual(
     summary.assets.map((asset) => asset.name),
-    ['NetraFlow_0.9.6_Setup.exe', 'NetraFlow_0.9.6_Portable.zip']
+    ['NetraFlow_0.9.6_x64_Setup.exe', 'NetraFlow_0.9.6_x64_Portable.zip']
   );
 
   const checksumSummary = writeSha256Sums({ rootDir, artifactSummary: summary });
@@ -176,8 +176,8 @@ test('artifact verifier finds single installer and portable artifacts in version
 
   assert.equal(checksumSummary.checksumRelativePath, 'release/SHA256SUMS.txt');
   assert.equal(checksumLines.length, 2);
-  assert.match(checksumLines[0], /^[a-f0-9]{64}  NetraFlow_0\.9\.6_Setup\.exe$/);
-  assert.match(checksumLines[1], /^[a-f0-9]{64}  NetraFlow_0\.9\.6_Portable\.zip$/);
+  assert.match(checksumLines[0], /^[a-f0-9]{64}  NetraFlow_0\.9\.6_x64_Setup\.exe$/);
+  assert.match(checksumLines[1], /^[a-f0-9]{64}  NetraFlow_0\.9\.6_x64_Portable\.zip$/);
   assert.equal(checksumText.includes(rootDir), false);
   assert.equal(checksumText.endsWith('\n'), true);
 
@@ -194,7 +194,7 @@ test('artifact verifier rejects installer sidecar artifacts', async (t) => {
 
   createValidArtifacts(rootDir);
   writeFixtureFile(
-    path.join(rootDir, 'release', 'installer', '0.9.6', 'NetraFlow_0.9.6_Setup.exe.extra'),
+    path.join(rootDir, 'release', 'installer', '0.9.6', 'NetraFlow_0.9.6_x64_Setup.exe.extra'),
     8
   );
 
@@ -229,10 +229,10 @@ test('artifact verifier preserves release suffixes in installer and portable ass
 
   assert.deepEqual(
     summary.assets.map((asset) => asset.name),
-    ['NetraFlow_0.9.8-rc1_Setup.exe', 'NetraFlow_0.9.8-rc1_Portable.zip']
+    ['NetraFlow_0.9.8-rc1_x64_Setup.exe', 'NetraFlow_0.9.8-rc1_x64_Portable.zip']
   );
-  assert.equal(summary.installerName, 'NetraFlow_0.9.8-rc1_Setup.exe');
-  assert.equal(summary.portableName, 'NetraFlow_0.9.8-rc1_Portable.zip');
+  assert.equal(summary.installerName, 'NetraFlow_0.9.8-rc1_x64_Setup.exe');
+  assert.equal(summary.portableName, 'NetraFlow_0.9.8-rc1_x64_Portable.zip');
 });
 
 test('artifact verifier rejects missing and wrong-version artifacts', async (t) => {
