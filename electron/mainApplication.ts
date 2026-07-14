@@ -49,6 +49,7 @@ import {
   recoverInterruptedSnapshotTransaction,
   runPersistenceSnapshotTransaction
 } from './persistenceSnapshotTransaction.js';
+import { writeInitializedPersistenceSnapshotDocuments } from './initializedPersistenceSnapshot.js';
 import {
   createResetTransaction,
   createRuntimePendingMarker,
@@ -469,19 +470,10 @@ const commitInitializedPersistenceSnapshot = (documents: unknown) => {
 
   const writeResult = runPersistenceSnapshotTransaction(
     store.paths,
-    () => {
-      const coreWrite = store.writeCoreDocument(documents.core, {
-        allowExternalCoreOverwrite: true
-      });
-      if (!coreWrite.ok) {
-        return createLifecycleError(coreWrite.code, coreWrite.message);
-      }
-
-      const stateWrite = store.writeStateDocument(documents.state);
-      return stateWrite.ok
-        ? { ok: true as const }
-        : createLifecycleError(stateWrite.code, stateWrite.message);
-    },
+    () => writeInitializedPersistenceSnapshotDocuments(store, {
+      core: documents.core,
+      state: documents.state
+    }),
     (result) => result.ok
   );
   if (!writeResult.ok) {
@@ -490,11 +482,11 @@ const commitInitializedPersistenceSnapshot = (documents: unknown) => {
 
   const snapshot = readPersistenceSnapshotFromStore(store);
   if (!snapshot.ok) {
-    if (previousCore.exists && !('locked' in previousCore)) {
-      store.writeCoreDocument(previousCore.document, { allowExternalCoreOverwrite: true });
-    }
     if (previousState.exists) {
       store.writeStateDocument(previousState.document);
+    }
+    if (previousCore.exists && !('locked' in previousCore)) {
+      store.writeCoreDocument(previousCore.document, { allowExternalCoreOverwrite: true });
     }
     return snapshot;
   }

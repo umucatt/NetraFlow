@@ -148,3 +148,14 @@ test('duplicate close while a request is active does not create a second prompt 
 
   assert.deepEqual(calls, ['upgrade-prompt']);
 });
+
+test('close without an integrity warning or pending core save is allowed immediately', () => {
+  const { calls, controller, state } = createHarness();
+  state.integrityWarning = false;
+  state.pendingSave = false;
+
+  controller.requestClose();
+
+  assert.deepEqual(calls, ['allow-close']);
+  assert.equal(controller.getState(), 'allowed');
+});
