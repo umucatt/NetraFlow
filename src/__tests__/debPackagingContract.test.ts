@@ -22,9 +22,9 @@ const prerm = readText('build', 'linux', 'deb', 'prerm');
 test('DEB metadata and artifact identity are exact and versioned from package.json', async () => {
   const logic = await import(debLogicUrl);
   const control = logic.createDebControl({ version: packageJson.version, installedSizeKiB: 123 });
-  assert.equal(packageJson.version, '0.9.9');
+  assert.equal(packageJson.version, '0.9.10');
   assert.match(control, /^Package: netraflow$/m);
-  assert.match(control, /^Version: 0\.9\.9$/m);
+  assert.match(control, /^Version: 0\.9\.10$/m);
   assert.match(control, /^Architecture: amd64$/m);
   assert.match(control, /^Maintainer: umucatt <62979687\+umucatt@users\.noreply\.github\.com>$/m);
   assert.match(control, /^Homepage: https:\/\/github\.com\/umucatt\/NetraFlow$/m);

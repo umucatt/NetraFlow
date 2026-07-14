@@ -1,199 +1,239 @@
 <p align="center">
-  <img src="public/icons/netraflow.svg" alt="NetraFlow icon" width="128" />
+  <img src="src/assets/brand/netraflow-logo.svg" alt="NetraFlow" width="128" />
 </p>
 
 <h1 align="center">NetraFlow</h1>
 
-<p align="center">
-  A local asset change tracking application
-</p>
+<p align="center">A local desktop tool for tracking asset changes</p>
 
 <p align="center">
   <a href="README.md">简体中文</a> · <strong>English</strong>
 </p>
 
-## Overview
+## Project Overview
 
-NetraFlow (净流) is a local asset change tracking desktop application, primarily for Windows. It helps users record account balances, asset changes, and historical movement over time. It is designed for people who want to keep asset data on their own machine, maintain it manually, and review changes by date.
+NetraFlow is a local desktop tool for tracking changes in personal assets. It is designed for manually maintaining asset and liability accounts, recording balance and net-worth changes, and reviewing those changes over time through history views and charts.
 
-The application is built with Electron, React, TypeScript, and Vite, with npm used for dependency management, development, testing, and packaging.
+This project was developed with assistance from Codex and is my first project, created primarily to meet a personal need.
 
-## Features
+## Main Features
 
-- Manage asset and liability account types, plus the accounts under each type.
-- Record account creation, balance edits, deletion, archiving, reactivation, and other history.
-- Review home asset stats, asset allocation, asset trends, and account-level charts.
-- Use single-account quick entry and Flash Note to fill balances or net-worth changes across multiple dates.
-- Import externally summarized JSON after local account matching and risk review.
-- Search accounts, history records, snapshot records, and settings with global search.
-- Export and import manual snapshots, configure automatic snapshots, and encrypt new snapshots with the login password that was active when the snapshot was created.
-- Configure theme, charts, search, data backup, and security-related settings.
+- Manage asset and liability categories and their accounts
+- Record balances, net worth, and historical changes
+- Review asset allocation, trends, and account details
+- Add data across multiple dates with Quick Entry and Flash Note
+- Import prepared summary data
+- Search accounts, history records, snapshots, and settings
+- Create manual and automatic snapshots
+- Protect local data with a login password
+- Store important backups as encrypted snapshots
+- Configure themes, charts, backups, and security options
+- Explore the app in Example Mode without affecting real data
 
 ## Download and Installation
 
-Regular users should download published builds from [GitHub Releases](https://github.com/umucatt/NetraFlow/releases).
+Regular users can download release builds from [GitHub Releases](https://github.com/umucatt/NetraFlow/releases).
 
-Windows builds provide two artifact types:
+NetraFlow provides 64-bit desktop builds. The macOS build is available only for Apple Silicon.
 
-- Setup: `NetraFlow_<version>_Setup.exe`, for installation through an installer wizard.
-- Portable: `NetraFlow_<version>_Portable.zip`, unzip it and run `NetraFlow.exe`.
+| Platform | Architecture | Format | Filename |
+| --- | --- | --- | --- |
+| Windows | x64 | Installer | `NetraFlow_<version>_x64_Setup.exe` |
+| Windows | x64 | Portable | `NetraFlow_<version>_x64_Portable.zip` |
+| macOS | Apple Silicon arm64 | DMG | `NetraFlow_<version>_arm64.dmg` |
+| Linux | x64 | AppImage | `NetraFlow_<version>_x64.AppImage` |
+| Linux | x64 | DEB | `NetraFlow_<version>_x64.deb` |
 
-The Setup uninstaller checks local user-data deletion by default. If the user clears that option, `userdata/` is kept under the original installation directory, and reinstalling to the same directory continues to read the retained data. Portable data also lives under the extracted directory, so deleting the whole extracted directory deletes the data unless it has been backed up first.
+### Windows
 
-Current Windows builds are not code signed. Windows or security software may show a source warning on first launch, so verify that the file came from this repository's Releases page before continuing.
+Use the setup wizard to install the installer build.
 
-## Basic Usage
+For the portable build, extract the archive and run `NetraFlow.exe`. No installation is required.
 
-1. Create asset or liability account types, then add accounts under those types.
-2. Enter balances and changes through account actions, single-account quick entry, or Flash Note.
-3. Review changes from the home page, asset overview, account details, and history.
-4. Use charts to inspect asset allocation, asset trends, and account trends.
-5. Export snapshots before larger edits or imports, and restore from a snapshot when needed.
-6. When using summary import, review the JSON format, account matching results, and import risks before writing data locally.
+### macOS
+
+Open the DMG, drag NetraFlow into the Applications folder, and launch it from there.
+
+### Linux
+
+AppImage:
+
+```bash
+chmod +x NetraFlow_<version>_x64.AppImage
+./NetraFlow_<version>_x64.AppImage
+```
+
+DEB:
+
+```bash
+sudo apt install ./NetraFlow_<version>_x64.deb
+```
+
+Installing the DEB package requires package-management privileges. Normal use of NetraFlow does not require administrator or root privileges.
 
 ## Data and Privacy
 
-NetraFlow stores current data locally. It does not provide cloud sync and does not automatically upload asset data. Users can back up data through manual snapshots and automatic snapshots.
+NetraFlow is a local tool. Accounts, history records, settings, snapshots, and other content are stored in NetraFlow's data directory on the device.
 
-In 0.9.9, current local data still uses four formal JSON files: `core.json` stores account types, accounts, and history records, and is encrypted with the login password after login password protection is enabled; `settings.json` stores automatic snapshot, chart, and normal global preferences; `state.json` stores snapshot records, import records, first-welcome state, and theme-unlock runtime state; `security.json` stores only reconstructable behavior settings such as auto-lock timing and forced snapshot encryption. `security.json` does not store login passwords, password hashes, snapshot passwords, keys, or any parameter required to decrypt existing files.
+User data is stored in `userdata/`, while caches, logs, and other runtime files are stored in `runtime/`. Each platform uses its own local location, which is managed by the application.
 
-Both Setup and Portable builds store user data in `userdata/` under the application directory by default. Runtime caches, logs, and Electron profile data are stored in `runtime/` under the application directory. The development runtime and userdata are isolated from the production application, so development data does not pollute normal user data.
+Create manual snapshots from time to time based on how frequently you use the app, or enable automatic snapshots. Automatic snapshots are checked when the application starts and run according to your settings. NetraFlow does not start automatically or register system-level scheduled tasks or wake events.
 
-0.9.9 does not automatically migrate old development `storage.json` data and no longer uses a `previous` recovery path. After login password protection is enabled, the login password is the decryption password for local `core.json`; NF does not store the login password or reusable decryption credentials on disk. While unlocked, only a session key is retained in main-process memory, and it is discarded after locking or exit. NetraFlow does not limit retry attempts and cannot recover encrypted local core data if the password is forgotten. New encrypted snapshots use the login password active at creation time. Changing or disabling the login password does not rewrite historical snapshots, so importing an older encrypted snapshot still requires the password used when that snapshot was created. Deleting or corrupting `security.json` does not affect the decryption parameters of existing encrypted core or snapshot files because those parameters are carried by the files themselves. NetraFlow 0.9.9 uses PBKDF2-HMAC-SHA-256 with 600,000 iterations. This parameter was finalized from extreme-data measurements with 48,000 history records plus conservative projection up to a 5x slower overall performance gap. This does not represent complete compatibility certification across all Windows hardware. Integrity mismatches are risk warnings, and user-initiated plaintext exports are not protected by the login password.
+When exporting data for use outside NetraFlow, moving data to another environment, or creating a general-purpose backup before uninstalling, disable login password protection or snapshot encryption and export a plaintext snapshot. Encrypted snapshots are intended mainly for restoration within NetraFlow and cannot be read directly by third-party applications.
 
-Example mode uses a temporary `.demo` directory next to the executable and cleans it on example exit or next startup. Example-mode operations do not write real `userdata/` and do not create real external snapshots; snapshot import/export and user-settings import/export are blocked while example mode is active.
+Please note:
 
-## Current Limitations
+- Disk failure, accidental deletion, uninstallation, or data clearing may result in data loss
+- Data protected by a login password may be unrecoverable if the password is forgotten
+- Older encrypted snapshots may require the password that was used when they were created
+- Plaintext exports are not protected by the login password and must be stored securely
+- Before major changes, bulk imports, device migration, or uninstallation, create a snapshot and copy it to another location
 
-- The application is primarily built for Windows; macOS and Linux are not current release targets.
-- Windows builds are not code signed, so the system may display security warnings.
-- Automatic updates are not provided. Users need to download new versions from Releases manually.
-- Asset data is mainly entered manually or imported from local files. Automatic bank, brokerage, or market account sync is not provided.
-- Local current data is not the same as a cloud backup. Export snapshots regularly and keep them somewhere safe.
-- The Setup uninstaller checks local user-data deletion by default. If the user clears that option, user data is kept according to the installer's existing behavior.
+### File Integrity Warnings
 
-## Development
+NetraFlow checks the integrity of local data and imported files within the application's managed directories.
+
+If NetraFlow detects changes that may not have been produced through normal application operations, or finds inconsistent content, it displays a risk warning and avoids overwriting existing data while the state is uncertain. When this happens, keep the current files and any existing snapshots before verifying the source and contents of the data.
+
+### Clearing Local Data
+
+The in-app Clear All feature removes the `userdata/` and `runtime/` directories managed by NetraFlow, then exits the application.
+
+The following also applies to each distribution format:
+
+- The Windows installer uninstaller selects local user-data removal by default; clear that option to retain the data
+- In the Windows portable build, `userdata/` and `runtime/` are stored in the extracted directory and can also be removed manually after exiting the application, either by deleting those directories or the entire portable folder
+- On macOS and Linux, use Clear All in the application before uninstalling if you also need to remove local data
+- Removing the application itself and removing local data are separate actions; confirm whether snapshots need to be retained before uninstalling
+
+## Uninstallation
+
+Before uninstalling, read the clearing and backup guidance in Data and Privacy.
+
+### Windows
+
+The installer build can be removed through Windows Settings → Apps or from the uninstall entry in the Start menu.
+
+For the portable build, exit the application and delete the extracted directory.
+
+### macOS
+
+Exit NetraFlow, then move `NetraFlow.app` from the Applications folder to the Trash.
+
+### Linux
+
+For the AppImage build, exit the application and delete the AppImage file.
+
+For the DEB build:
+
+```bash
+sudo apt remove netraflow
+```
+
+---
+
+## Source Development and Self-Building
+
+NetraFlow is built with Electron, React, TypeScript, and Vite. Windows, macOS, and Linux share a single business-code base.
 
 ### Requirements
 
-- Node.js 22 LTS
+- Node.js 22
 - npm
-- A Windows environment for validating the Windows desktop app and building Windows artifacts
+- The target operating system for the package being built
+
+Release packages should be built and verified on their respective target platforms.
 
 ### Get the Source
 
 ```bash
 git clone https://github.com/umucatt/NetraFlow.git
 cd NetraFlow
-```
-
-### Install Dependencies
-
-```bash
 npm ci
 ```
 
-### Start the Development Environment
+### Development and Checks
 
 ```bash
 npm run dev
-```
-
-This command starts the Vite renderer development server, then launches Electron after the server is ready. Development runs with a separate application identity, runtime, and userdata.
-
-### Type Checking
-
-```bash
 npm run typecheck
-```
-
-### Run Tests
-
-```bash
 npm test
-```
-
-### Production Build
-
-```bash
 npm run build
 ```
 
-This command runs TypeScript checks, builds with Vite, and generates build outputs for the Electron main process and preload script.
-
-### Local Release Check
+Additional pre-release checks:
 
 ```bash
 npm run release:check
-```
-
-Use the strict release check before publishing:
-
-```bash
 npm run release:check -- --strict
 ```
 
-Non-strict mode reports a dirty worktree as a warning. Strict mode treats a dirty worktree as an error.
+Strict checks also validate the release context and Git state.
 
-### Windows Artifacts
+### Local Builds
 
-Run the production build first:
+Run the following before packaging:
 
 ```bash
 npm run build
 ```
 
-Then build the artifacts as needed:
+Windows:
 
 ```bash
 npm run dist:installer
 npm run dist:portable
 ```
 
-Default artifact names are:
+macOS:
 
-- `release/installer/<version>/NetraFlow_<version>_Setup.exe`
-- `release/portable/<version>/NetraFlow_<version>_Portable.zip`
+```bash
+npm run dist:mac
+```
 
-If an output directory for the same version already exists, the release scripts append a numeric suffix to the directory name.
+Linux:
 
-### Versioning Rules
+```bash
+npm run dist:linux
+npm run dist:deb
+```
 
-- Versions in `package.json` and `package-lock.json` must stay in sync.
-- Release versions use `major.minor.patch` and may include a suffix.
-- Release tags use `v<version>` and must point to the release commit.
-- When the version is lower than `1.0.0`, or the suffix contains `beta` / `rc`, the Release is marked as a Pre-release.
+Windows, macOS, and Linux release packages should each be built and verified on their corresponding platform.
 
-### Automated Workflows
-
-- A normal push to `main`, a pull request targeting `main`, or a manual dispatch runs Verify Windows.
-- Verify Windows uses Node.js 22 and runs `npm ci`, `npm run typecheck`, `npm test`, and `npm run build` in order.
-- Version tags matching `v*.*.*` or `v*.*.*-*` trigger Release Windows.
-- Release Windows validates the tag and version, runs `npm run release:check -- --strict`, type checks, tests, builds, creates Setup and Portable artifacts, and verifies release files.
-- GitHub Releases are created as Draft by default.
-- Versions lower than `1.0.0`, or version suffixes containing `beta` / `rc`, are created as Pre-release.
-
-## Project Structure
+## Main Directories
 
 | Path | Description |
 | --- | --- |
-| `electron/` | Electron main process, preload script, local storage, and window-related logic |
-| `src/` | React renderer, pages, feature modules, styles, and tests |
-| `public/icons/` | Formal icon resources: `netraflow.svg` is the sole source; Windows uses `netraflow.ico`, macOS uses `netraflow.icns`, and Linux uses the `linux/` PNG layers |
-| `docs/assets/` | Assets used by README and documentation |
-| `scripts/` | Development startup, release checks, packaging, artifact verification, and release-note scripts |
-| `build/` | Installer script resources and license files bundled with releases |
-| `.github/workflows/` | Windows verification and release workflows |
+| `electron/` | Electron main process and desktop platform integration |
+| `src/` | Application UI and shared business logic |
+| `src/assets/brand/` | Brand source files |
+| `public/` | Static assets and platform icons |
+| `scripts/` | Development, checks, build, and packaging tools |
+| `build/` | Packaging configuration and release resources |
+| `.github/workflows/` | Automated checks and release workflows |
 
-## Extension Development Notes
+## Development Notes
 
-- Changes to the local data structure need to preserve the four-file boundary, schema versioning, future-schema refusal, and the no-`previous` recovery path.
-- Do not package development runtime, userdata, caches, logs, or user data into release artifacts.
-- `public/icons/netraflow.svg` is the sole production icon source; the README renders it directly and every platform asset is generated from it.
-- After changing the icon source, run `npm run generate:icons` to regenerate the Windows ICO, macOS ICNS, Linux PNG layers, and visual preview.
-- Release-flow changes should update `scripts/`, `.github/workflows/`, related tests, and README documentation together.
-- Import, snapshot, and security-related features should continue to prioritize format validation, integrity checks, and recoverability tests.
+- Keep a single shared business-code base and centralize platform-specific behavior
+- Do not break existing platform behavior when adding support for another platform
+- Consider compatibility and migration when changing data formats or data directories
+- Do not include user data, test data, caches, or logs in release packages
+- Do not rely on privilege elevation or hidden scripts during normal application runtime
+- Confirm that new dependencies are necessary and keep the lockfile consistent
+- Run at least type checking, tests, and a production build after making changes
+- Validate platform-specific behavior and release packages on the target platform
+- Read [AGENTS.md](AGENTS.md) before contributing
+
+## Development and Test Platforms
+
+The following environments are used for the project's primary development and testing. They are not minimum system requirements and do not indicate complete compatibility coverage for all similar devices.
+
+| Platform | Primary Environment |
+| --- | --- |
+| Windows | Windows 11 IoT Enterprise LTSC 2024 (24H2), Intel Core i5-13600KF, 32 GB RAM |
+| macOS | MacBook Pro, Apple M1 Pro, 16 GB RAM |
+| Linux | Ubuntu 26.04 LTS x64, dual-booted on the same machine as Windows |
 
 ## License
 
-NetraFlow is licensed under GPL-3.0-only. See [LICENSE](LICENSE) for details.
+NetraFlow is licensed under the [GNU General Public License v3.0 only](LICENSE).

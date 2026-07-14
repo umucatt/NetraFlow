@@ -133,9 +133,9 @@ test('global settings security and about copy match the current release text', (
   };
 
   assert.equal(settingsPageSource.includes('是否开启登陆密码保护'), true);
-  assert.equal(packageJson.version, '0.9.9');
-  assert.equal(packageLockJson.version, '0.9.9');
-  assert.equal(packageLockJson.packages?.['']?.version, '0.9.9');
+  assert.equal(packageJson.version, '0.9.10');
+  assert.equal(packageLockJson.version, '0.9.10');
+  assert.equal(packageLockJson.packages?.['']?.version, '0.9.10');
   assert.equal(appSource.includes('APP_VERSION'), true);
   assert.equal(appSource.includes('0.9.1'), false);
   assert.equal(aboutPanelSource.includes('获取信息'), true);
@@ -2011,7 +2011,7 @@ test('release packaging scripts use versioned output folders and safe release cl
     resourcePatchSource
   ].join('\n');
 
-  assert.equal(packageJson.version, '0.9.9');
+  assert.equal(packageJson.version, '0.9.10');
   assert.equal(packageJson.scripts?.['clean:release'], 'node scripts/clean-release.mjs');
   assert.equal(packageJson.scripts?.['dist:installer'], 'node scripts/package-installer.mjs');
   assert.equal(packageJson.scripts?.['dist:portable'], 'node scripts/package-portable.mjs');
@@ -3009,7 +3009,7 @@ test('popup and system prompt copy removes sentence periods without touching dot
     ),
     false
   );
-  assert.equal(packageJson.version, '0.9.9');
+  assert.equal(packageJson.version, '0.9.10');
   assert.equal(
     userSettingsLogicSource.includes(
       'netraflow-settings-${year}${month}${day}-${hour}${minute}${second}.netraflow-settings.json'
@@ -3027,7 +3027,7 @@ test('release documentation keeps packaging notes scoped to changelog', () => {
 
   assert.equal(zhReadmeSource.includes('README_EN.md'), true);
   assert.equal(enReadmeSource.includes('README.md'), true);
-  assert.equal(combinedReadmeSource.includes('public/icons/netraflow.svg'), true);
+  assert.equal(combinedReadmeSource.includes('src/assets/brand/netraflow-logo.svg'), true);
   assert.equal(changelogSource.includes('## 0.9.2'), true);
   assert.equal(changelogSource.includes('## 0.9.3'), true);
   assert.equal(combinedReadmeSource.includes('0.9.3'), false);
