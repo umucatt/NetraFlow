@@ -2,7 +2,7 @@ import {
   type KeyboardEvent,
   type MutableRefObject,
   type UIEvent,
-  useEffect,
+  useLayoutEffect,
   useMemo,
   useRef
 } from 'react';
@@ -24,19 +24,28 @@ import SearchResultList from './SearchResultList';
 export type GlobalSearchPanelProps = {
   output: GlobalSearchOutput;
   query: string;
+  isComposing: boolean;
+  statusText: string | null;
+  isRefreshing: boolean;
+  isInitialSearching: boolean;
+  canInteractWithResults: boolean;
+  resultPresentationVersion: number;
   selectedCategory: SearchCategory;
+  visibleCategory: SearchCategory;
   categoryLockedByUser: boolean;
-  focusedItemId: string;
+  selectedItemId: string;
   hoveredItemId: string;
   resultLimit: number;
   scrollTop: number;
   lastOpenedResultId: string;
   inputRef: MutableRefObject<HTMLInputElement | null>;
-  onQueryChange: (value: string) => void;
+  onQueryChange: (value: string, nativeIsComposing?: boolean) => void;
+  onCompositionStart: () => void;
+  onCompositionEnd: (value: string) => void;
   onClearQuery: () => void;
   onSelectCategory: (category: SearchCategory) => void;
   onShowAll: () => void;
-  onFocusItem: (itemId: string) => void;
+  onSelectItem: (itemId: string) => void;
   onHoverItem: (itemId: string) => void;
   onClearHover: () => void;
   onLoadMoreResults: (minimum?: number) => void;
@@ -48,19 +57,28 @@ export type GlobalSearchPanelProps = {
 function GlobalSearchPanel({
   output,
   query,
+  isComposing,
+  statusText,
+  isRefreshing,
+  isInitialSearching,
+  canInteractWithResults,
+  resultPresentationVersion,
   selectedCategory,
+  visibleCategory,
   categoryLockedByUser,
-  focusedItemId,
+  selectedItemId,
   hoveredItemId,
   resultLimit,
   scrollTop,
   lastOpenedResultId,
   inputRef,
   onQueryChange,
+  onCompositionStart,
+  onCompositionEnd,
   onClearQuery,
   onSelectCategory,
   onShowAll,
-  onFocusItem,
+  onSelectItem,
   onHoverItem,
   onClearHover,
   onLoadMoreResults,
@@ -71,17 +89,18 @@ function GlobalSearchPanel({
   const panelRef = useRef<HTMLElement | null>(null);
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
-  const visibleCategory = selectedCategory;
   const keyboardEntries = useMemo(
-    () => getSearchKeyboardEntries(output, visibleCategory, resultLimit),
-    [output, visibleCategory, resultLimit]
+    () => statusText || !canInteractWithResults
+      ? []
+      : getSearchKeyboardEntries(output, visibleCategory, resultLimit),
+    [canInteractWithResults, output, visibleCategory, resultLimit, statusText]
   );
   const fullKeyboardEntries = useMemo(
-    () => getSearchKeyboardEntries(output, visibleCategory),
-    [output, visibleCategory]
+    () => statusText || !canInteractWithResults
+      ? []
+      : getSearchKeyboardEntries(output, visibleCategory),
+    [canInteractWithResults, output, statusText, visibleCategory]
   );
-  const keyboardEntryKey = keyboardEntries.map((entry) => entry.id).join('|');
-
   const registerItemRef = (itemId: string) => (element: HTMLButtonElement | null) => {
     if (element) {
       itemRefs.current.set(itemId, element);
@@ -91,8 +110,8 @@ function GlobalSearchPanel({
     itemRefs.current.delete(itemId);
   };
 
-  const focusItem = (itemId: string) => {
-    onFocusItem(itemId);
+  const selectItem = (itemId: string) => {
+    onSelectItem(itemId);
     window.requestAnimationFrame(() => {
       itemRefs.current.get(itemId)?.focus();
     });
@@ -108,17 +127,7 @@ function GlobalSearchPanel({
     onSelectCategory(nextCategory);
   };
 
-  useEffect(() => {
-    if (!focusedItemId) {
-      return;
-    }
-
-    if (!keyboardEntries.some((entry) => entry.id === focusedItemId)) {
-      onFocusItem('');
-    }
-  }, [focusedItemId, keyboardEntries, keyboardEntryKey, onFocusItem]);
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     const resultsElement = resultsRef.current;
 
     if (!resultsElement) {
@@ -126,10 +135,10 @@ function GlobalSearchPanel({
     }
 
     resultsElement.scrollTo({ top: scrollTop });
-  }, []);
+  }, [resultPresentationVersion, visibleCategory]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.nativeEvent.isComposing) {
+    if (isComposing || event.nativeEvent.isComposing) {
       return;
     }
 
@@ -141,7 +150,7 @@ function GlobalSearchPanel({
       return;
     }
 
-    if (event.key === 'Escape' && visibleCategory !== 'all') {
+    if (event.key === 'Escape' && selectedCategory !== 'all') {
       event.preventDefault();
       event.stopPropagation();
       onShowAll();
@@ -157,7 +166,20 @@ function GlobalSearchPanel({
       event.stopPropagation();
       onPointerIntent();
 
-      const activeItemId = hoveredItemId || focusedItemId;
+      const activeItemId = hoveredItemId || selectedItemId;
+      const activeIndex = fullKeyboardEntries.findIndex((entry) => entry.id === activeItemId);
+
+      if (
+        event.key === 'ArrowDown' &&
+        activeIndex === fullKeyboardEntries.length - 1 &&
+        fullKeyboardEntries.length < output.counts[visibleCategory]
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        onLoadMoreResults(fullKeyboardEntries.length + 1);
+        return;
+      }
+
       const nextEntry = getNextKeyboardEntry(
         fullKeyboardEntries,
         activeItemId,
@@ -172,7 +194,7 @@ function GlobalSearchPanel({
         }
 
         onClearHover();
-        focusItem(nextEntry.id);
+        selectItem(nextEntry.id);
       }
 
       return;
@@ -184,7 +206,7 @@ function GlobalSearchPanel({
 
     const enterResolution = getSearchEnterResolution(
       fullKeyboardEntries,
-      hoveredItemId || focusedItemId,
+      hoveredItemId || selectedItemId,
       output
     );
 
@@ -205,7 +227,7 @@ function GlobalSearchPanel({
     onScrollChange(element.scrollTop);
 
     if (element.scrollHeight - element.scrollTop - element.clientHeight <= 120) {
-      const totalResults = getSearchResultsForCategory(output, visibleCategory).length;
+      const totalResults = output.counts[visibleCategory];
 
       if (resultLimit < totalResults) {
         onLoadMoreResults();
@@ -238,7 +260,14 @@ function GlobalSearchPanel({
           aria-label="搜索账户、历史记录、快照或设置项"
           placeholder="搜索账户、历史记录、快照或设置项"
           value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
+          onChange={(event) =>
+            onQueryChange(
+              event.target.value,
+              Boolean((event.nativeEvent as InputEvent).isComposing)
+            )
+          }
+          onCompositionStart={onCompositionStart}
+          onCompositionEnd={(event) => onCompositionEnd(event.currentTarget.value)}
         />
         {query ? (
           <button
@@ -272,24 +301,39 @@ function GlobalSearchPanel({
         ref={resultsRef}
         className="search-results"
         aria-live="polite"
+        aria-busy={isRefreshing || isInitialSearching}
         onWheel={onPointerIntent}
         onMouseLeave={onClearHover}
         onScroll={handleResultsScroll}
       >
-        <SearchResultList
-          output={output}
-          visibleCategory={visibleCategory}
-          focusedItemId={focusedItemId}
-          hoveredItemId={hoveredItemId}
-          resultLimit={resultLimit}
-          lastOpenedResultId={lastOpenedResultId}
-          registerItemRef={registerItemRef}
-          onSelectItem={onFocusItem}
-          onHoverItem={onHoverItem}
-          onClearHover={onClearHover}
-          onPointerIntent={onPointerIntent}
-          onOpenResult={onOpenResult}
-        />
+        <div
+          key={resultPresentationVersion}
+          className="search-results__content"
+          data-result-entering={
+            resultPresentationVersion > 0 && !statusText && output.hasQuery
+              ? 'true'
+              : undefined
+          }
+        >
+          {statusText ? (
+            <p className="search-empty">{statusText}</p>
+          ) : (
+            <SearchResultList
+              output={output}
+              visibleCategory={visibleCategory}
+              selectedItemId={selectedItemId}
+              hoveredItemId={hoveredItemId}
+              resultLimit={resultLimit}
+              lastOpenedResultId={lastOpenedResultId}
+              registerItemRef={registerItemRef}
+              onSelectItem={onSelectItem}
+              onHoverItem={onHoverItem}
+              onClearHover={onClearHover}
+              onPointerIntent={onPointerIntent}
+              onOpenResult={onOpenResult}
+            />
+          )}
+        </div>
       </div>
     </section>
   );

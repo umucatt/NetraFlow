@@ -4,8 +4,7 @@ import { getSearchResultItemId } from '../../search/searchNavigation';
 
 type SearchResultItemProps = {
   result: GlobalSearchResult;
-  selected: boolean;
-  hovered: boolean;
+  active: boolean;
   recentlyOpened: boolean;
   registerItemRef: (itemId: string) => (element: HTMLButtonElement | null) => void;
   onSelectItem: (itemId: string) => void;
@@ -125,8 +124,7 @@ function SearchResultMark({ result }: { result: GlobalSearchResult }) {
 
 function SearchResultItem({
   result,
-  selected,
-  hovered,
+  active,
   registerItemRef,
   onSelectItem,
   onHoverItem,
@@ -135,7 +133,6 @@ function SearchResultItem({
   onOpen
 }: SearchResultItemProps) {
   const itemId = getSearchResultItemId(result.target);
-  const isPreviewed = selected || hovered;
   const matchText = result.matchLabel === 'hit' ? '命中' : '推断';
 
   return (
@@ -144,8 +141,8 @@ function SearchResultItem({
       type="button"
       data-search-item-id={itemId}
       className={`search-result-button search-result-button--${result.matchLabel}${
-        isPreviewed ? ' search-result-button--focused' : ''
-      }${hovered ? ' search-result-button--hovered' : ''}`}
+        active ? ' search-result-button--active' : ''
+      }`}
       onFocus={() => onSelectItem(itemId)}
       onMouseEnter={() => onHoverItem(itemId)}
       onMouseLeave={onClearHover}

@@ -1,5 +1,13 @@
-import type { SearchCategory, SearchNavigationTarget } from './searchTypes';
+import type {
+  SearchCategory,
+  SearchNavigationTarget,
+  SearchResultLimitsByCategory
+} from './searchTypes';
 import { SEARCH_INITIAL_RESULT_LIMIT, SEARCH_RESULT_LOAD_STEP } from './searchWeights';
+import {
+  createInitialSearchInputCompositionState,
+  reduceSearchInputComposition
+} from './searchInputComposition';
 
 export type SearchNavigationState<TSnapshot = unknown> = {
   returnSnapshot: TSnapshot;
@@ -9,14 +17,16 @@ export type SearchNavigationState<TSnapshot = unknown> = {
 
 export type SearchState<TSnapshot = unknown> = {
   isOpen: boolean;
-  query: string;
+  draftQuery: string;
+  committedQuery: string;
+  isComposing: boolean;
   selectedCategory: SearchCategory;
   categoryLockedByUser: boolean;
   weakMode: boolean;
-  focusedResultId: string;
+  selectedResultIdsByCategory: Record<SearchCategory, string>;
   hoveredResultId: string;
-  resultLimit: number;
-  scrollTop: number;
+  resultLimitsByCategory: SearchResultLimitsByCategory;
+  scrollTopByCategory: Record<SearchCategory, number>;
   floatingNavigation: SearchNavigationState<TSnapshot> | null;
   lastOpenedResultId: string;
 };
@@ -25,10 +35,14 @@ export type SearchStateAction<TSnapshot = unknown> =
   | { type: 'open' }
   | { type: 'close-and-reset' }
   | { type: 'hide-for-navigation' }
-  | { type: 'query-changed'; query: string }
+  | { type: 'composition-start' }
+  | { type: 'draft-query-changed'; query: string }
+  | { type: 'commit-query'; query: string }
+  | { type: 'composition-end'; query: string }
   | { type: 'clear-query' }
   | { type: 'select-category'; category: SearchCategory; lock: boolean }
-  | { type: 'focus-item'; itemId: string }
+  | { type: 'select-item'; itemId: string }
+  | { type: 'reconcile-selection'; category: SearchCategory; itemIds: string[] }
   | { type: 'hover-item'; itemId: string }
   | { type: 'clear-hover' }
   | { type: 'load-more-results'; minimum?: number }
@@ -43,16 +57,40 @@ export type SearchStateAction<TSnapshot = unknown> =
   | { type: 'return-from-navigation' }
   | { type: 'clear-navigation' };
 
+const createInitialResultLimitsByCategory = (): SearchResultLimitsByCategory => ({
+  all: SEARCH_INITIAL_RESULT_LIMIT,
+  account: SEARCH_INITIAL_RESULT_LIMIT,
+  history: SEARCH_INITIAL_RESULT_LIMIT,
+  snapshot: SEARCH_INITIAL_RESULT_LIMIT,
+  settings: SEARCH_INITIAL_RESULT_LIMIT
+});
+
+const createInitialScrollTopByCategory = (): Record<SearchCategory, number> => ({
+  all: 0,
+  account: 0,
+  history: 0,
+  snapshot: 0,
+  settings: 0
+});
+
+const createInitialSelectedResultIdsByCategory = (): Record<SearchCategory, string> => ({
+  all: '',
+  account: '',
+  history: '',
+  snapshot: '',
+  settings: ''
+});
+
 export const createInitialSearchState = <TSnapshot = unknown>(): SearchState<TSnapshot> => ({
   isOpen: false,
-  query: '',
+  ...createInitialSearchInputCompositionState(),
   selectedCategory: 'all',
   categoryLockedByUser: false,
   weakMode: false,
-  focusedResultId: '',
+  selectedResultIdsByCategory: createInitialSelectedResultIdsByCategory(),
   hoveredResultId: '',
-  resultLimit: SEARCH_INITIAL_RESULT_LIMIT,
-  scrollTop: 0,
+  resultLimitsByCategory: createInitialResultLimitsByCategory(),
+  scrollTopByCategory: createInitialScrollTopByCategory(),
   floatingNavigation: null,
   lastOpenedResultId: ''
 });
@@ -65,14 +103,14 @@ const resetSearchState = <TSnapshot>(
   state: SearchState<TSnapshot>
 ): SearchState<TSnapshot> => ({
   ...state,
-  query: '',
+  ...createInitialSearchInputCompositionState(),
   selectedCategory: 'all',
   categoryLockedByUser: false,
   weakMode: false,
-  focusedResultId: '',
+  selectedResultIdsByCategory: createInitialSelectedResultIdsByCategory(),
   hoveredResultId: '',
-  resultLimit: SEARCH_INITIAL_RESULT_LIMIT,
-  scrollTop: 0,
+  resultLimitsByCategory: createInitialResultLimitsByCategory(),
+  scrollTopByCategory: createInitialScrollTopByCategory(),
   lastOpenedResultId: ''
 });
 
@@ -97,42 +135,81 @@ export const searchStateReducer = <TSnapshot>(
         ...state,
         isOpen: false
       };
-    case 'query-changed':
+    case 'composition-start':
       return {
         ...state,
-        query: action.query,
+        ...reduceSearchInputComposition(state, { type: 'composition-start' })
+      };
+    case 'draft-query-changed':
+      return {
+        ...state,
+        ...reduceSearchInputComposition(state, {
+          type: 'draft-changed',
+          query: action.query
+        }),
         weakMode: false,
-        focusedResultId: '',
-        hoveredResultId: '',
-        resultLimit: SEARCH_INITIAL_RESULT_LIMIT,
-        scrollTop: 0
+        resultLimitsByCategory: createInitialResultLimitsByCategory(),
+        scrollTopByCategory: createInitialScrollTopByCategory()
+      };
+    case 'commit-query':
+      return {
+        ...state,
+        ...reduceSearchInputComposition(state, { type: 'commit', query: action.query })
+      };
+    case 'composition-end':
+      return {
+        ...state,
+        ...reduceSearchInputComposition(state, {
+          type: 'composition-end',
+          query: action.query
+        }),
+        weakMode: false,
+        resultLimitsByCategory: createInitialResultLimitsByCategory(),
+        scrollTopByCategory: createInitialScrollTopByCategory()
       };
     case 'clear-query':
       return {
         ...state,
-        query: '',
+        ...reduceSearchInputComposition(state, { type: 'clear' }),
         weakMode: false,
-        focusedResultId: '',
+        selectedResultIdsByCategory: createInitialSelectedResultIdsByCategory(),
         hoveredResultId: '',
-        resultLimit: SEARCH_INITIAL_RESULT_LIMIT,
-        scrollTop: 0
+        resultLimitsByCategory: createInitialResultLimitsByCategory(),
+        scrollTopByCategory: createInitialScrollTopByCategory()
       };
     case 'select-category':
       return {
         ...state,
         selectedCategory: action.category,
-        categoryLockedByUser: action.lock,
-        focusedResultId: '',
-        hoveredResultId: '',
-        resultLimit: SEARCH_INITIAL_RESULT_LIMIT,
-        scrollTop: 0
+        categoryLockedByUser: action.lock
       };
-    case 'focus-item':
+    case 'select-item':
       return {
         ...state,
-        focusedResultId: action.itemId,
+        selectedResultIdsByCategory: {
+          ...state.selectedResultIdsByCategory,
+          [state.selectedCategory]: action.itemId
+        },
         hoveredResultId: ''
       };
+    case 'reconcile-selection': {
+      const currentItemId = state.selectedResultIdsByCategory[action.category];
+      const nextItemId = action.itemIds.includes(currentItemId)
+        ? currentItemId
+        : action.itemIds[0] ?? '';
+
+      if (nextItemId === currentItemId) {
+        return state;
+      }
+
+      return {
+        ...state,
+        selectedResultIdsByCategory: {
+          ...state.selectedResultIdsByCategory,
+          [action.category]: nextItemId
+        }
+      };
+    }
     case 'hover-item':
       return {
         ...state,
@@ -145,19 +222,25 @@ export const searchStateReducer = <TSnapshot>(
       };
     case 'load-more-results': {
       const nextLimit = Math.max(
-        state.resultLimit + SEARCH_RESULT_LOAD_STEP,
+        state.resultLimitsByCategory[state.selectedCategory] + SEARCH_RESULT_LOAD_STEP,
         action.minimum ?? 0
       );
 
       return {
         ...state,
-        resultLimit: nextLimit
+        resultLimitsByCategory: {
+          ...state.resultLimitsByCategory,
+          [state.selectedCategory]: nextLimit
+        }
       };
     }
     case 'scroll':
       return {
         ...state,
-        scrollTop: action.scrollTop
+        scrollTopByCategory: {
+          ...state.scrollTopByCategory,
+          [state.selectedCategory]: action.scrollTop
+        }
       };
     case 'set-weak-mode':
       return {
@@ -210,7 +293,7 @@ export const getSearchEscapeAction = <TSnapshot>(
     return { type: 'select-category', category: 'all', lock: false };
   }
 
-  if (state.query.length > 0) {
+  if (state.draftQuery.length > 0) {
     return { type: 'clear-query' };
   }
 

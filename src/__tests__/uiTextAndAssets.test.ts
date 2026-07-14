@@ -656,6 +656,19 @@ test('global search includes manual settings category without old result contain
   assert.equal(searchItemSource.includes("settings: '设置项'"), false);
   assert.equal(searchItemSource.includes('search-result-mark--icon'), false);
   assert.match(stylesSource, /\.search-results\s*\{[^}]*grid-auto-rows: max-content;[^}]*align-content: start;[^}]*\}/s);
+  assert.match(
+    stylesSource,
+    /\.search-results__content\[data-result-entering='true'\]\s*\{[^}]*animation: search-results-enter 140ms cubic-bezier\(0\.2, 0, 0, 1\);[^}]*\}/s
+  );
+  assert.match(
+    stylesSource,
+    /@keyframes search-results-enter\s*\{[\s\S]*opacity: 0\.72;[\s\S]*translateY\(3px\)[\s\S]*opacity: 1;[\s\S]*translateY\(0\)/
+  );
+  assert.match(
+    stylesSource,
+    /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.search-results__content\[data-result-entering='true'\]\s*\{[^}]*animation: none;/s
+  );
+  assert.equal(searchPanelSource.includes('key={resultPresentationVersion}'), true);
   assert.match(stylesSource, /\.search-section__list\s*\{[^}]*grid-auto-rows: max-content;[^}]*align-content: start;[^}]*\}/s);
   assert.match(stylesSource, /\.search-result-button\s*\{[^}]*align-self: start;[^}]*min-height: 60px;[^}]*\}/s);
   assert.equal(searchListSource.includes('AssetStructurePanel'), false);
