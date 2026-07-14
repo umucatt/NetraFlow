@@ -144,8 +144,14 @@ const PINYIN_BY_CHAR: Record<string, string> = {
   本: 'ben'
 };
 
-const pinyinCache = new Map<string, { full: string; initials: string }>();
-const normalizedTextCache = new Map<string, NormalizedTextIndex>();
+const EMPTY_NORMALIZED_TEXT_INDEX: NormalizedTextIndex = {
+  original: '',
+  normalized: '',
+  compact: '',
+  normalizedToOriginal: [],
+  compactToOriginal: []
+};
+const EMPTY_PINYIN_PARTS = { full: '', initials: '' };
 
 export const isPureLetterToken = (value: string) => /^[a-z]+$/i.test(value);
 
@@ -235,29 +241,21 @@ const createNormalizedTextIndex = (value: string): NormalizedTextIndex => {
   };
 };
 
-export const getNormalizedTextIndex = (value: string | null | undefined) => {
+const createNormalizedTextIndexForValue = (value: string | null | undefined) => {
   const text = String(value ?? '');
-  const cached = normalizedTextCache.get(text);
 
-  if (cached) {
-    return cached;
-  }
-
-  const index = createNormalizedTextIndex(text);
-  normalizedTextCache.set(text, index);
-
-  return index;
+  return text ? createNormalizedTextIndex(text) : EMPTY_NORMALIZED_TEXT_INDEX;
 };
+
+export const getNormalizedTextIndex = createNormalizedTextIndexForValue;
 
 export const normalizeSearchText = (value: string) => getNormalizedTextIndex(value).normalized;
 
 export const compactSearchText = (value: string) => getNormalizedTextIndex(value).compact;
 
-export const getPinyinParts = (value: string) => {
-  const cached = pinyinCache.get(value);
-
-  if (cached) {
-    return cached;
+const createPinyinParts = (value: string) => {
+  if (!value) {
+    return EMPTY_PINYIN_PARTS;
   }
 
   const syllables = Array.from(value)
@@ -276,7 +274,52 @@ export const getPinyinParts = (value: string) => {
     initials: syllables.map((syllable) => syllable[0] ?? '').join('').toLocaleLowerCase('zh-CN')
   };
 
-  pinyinCache.set(value, parts);
-
   return parts;
+};
+
+export const getPinyinParts = createPinyinParts;
+
+export type SearchTextIndexer = {
+  getNormalizedTextIndex: typeof getNormalizedTextIndex;
+  getPinyinParts: typeof getPinyinParts;
+};
+
+export const createSearchTextIndexer = (): SearchTextIndexer => {
+  const normalizedTextCache = new Map<string, NormalizedTextIndex>();
+  const pinyinCache = new Map<string, { full: string; initials: string }>();
+
+  return {
+    getNormalizedTextIndex: (value) => {
+      const text = String(value ?? '');
+
+      if (!text) {
+        return EMPTY_NORMALIZED_TEXT_INDEX;
+      }
+
+      const cached = normalizedTextCache.get(text);
+
+      if (cached) {
+        return cached;
+      }
+
+      const index = createNormalizedTextIndex(text);
+      normalizedTextCache.set(text, index);
+      return index;
+    },
+    getPinyinParts: (value) => {
+      if (!value) {
+        return EMPTY_PINYIN_PARTS;
+      }
+
+      const cached = pinyinCache.get(value);
+
+      if (cached) {
+        return cached;
+      }
+
+      const parts = createPinyinParts(value);
+      pinyinCache.set(value, parts);
+      return parts;
+    }
+  };
 };
