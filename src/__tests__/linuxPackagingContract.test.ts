@@ -138,7 +138,7 @@ test('Linux AppImage packaging validates its host before any build work', async 
   );
   assert.equal(
     getAppImageArtifactName({ productName: 'NetraFlow', version: '0.9.9' }),
-    'NetraFlow_0.9.9_x86_64.AppImage'
+    'NetraFlow_0.9.9_x64.AppImage'
   );
 });
 
@@ -154,7 +154,7 @@ test('Linux AppImage command rejects this non-Linux host without generating an a
   }
 
   const outputDir = path.join(rootDir, 'release', 'linux', packageJson.version);
-  const artifactPath = path.join(outputDir, `NetraFlow_${packageJson.version}_x86_64.AppImage`);
+  const artifactPath = path.join(outputDir, `NetraFlow_${packageJson.version}_x64.AppImage`);
   const artifactExistedBefore = existsSync(artifactPath);
 
   t.after(() => {

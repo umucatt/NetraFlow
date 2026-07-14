@@ -47,7 +47,7 @@ export const assertDebBuildHost = ({
 };
 
 export const getDebArtifactName = ({ productName, version }) =>
-  `${productName}_${version}_${DEB_ARCHITECTURE}.deb`;
+  `${productName}_${version}_x64.deb`;
 
 export const createDebControl = ({ version, installedSizeKiB }) => `Package: ${DEB_PACKAGE}
 Version: ${version}

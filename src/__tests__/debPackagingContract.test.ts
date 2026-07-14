@@ -29,7 +29,7 @@ test('DEB metadata and artifact identity are exact and versioned from package.js
   assert.match(control, /^Maintainer: umucatt <62979687\+umucatt@users\.noreply\.github\.com>$/m);
   assert.match(control, /^Homepage: https:\/\/github\.com\/umucatt\/NetraFlow$/m);
   assert.match(control, /^Description: \S.+$/m);
-  assert.equal(logic.getDebArtifactName({ productName: 'NetraFlow', version: packageJson.version }), 'NetraFlow_0.9.9_amd64.deb');
+  assert.equal(logic.getDebArtifactName({ productName: 'NetraFlow', version: packageJson.version }), 'NetraFlow_0.9.10_x64.deb');
   assert.equal(logic.DEB_DEPENDS.every((dependency: string) => /^[a-z0-9][a-z0-9+.-]*(?::[a-z0-9-]+)?$/.test(dependency)), true);
 });
 

@@ -18,6 +18,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import { Arch } from 'electron-builder';
+import { getAppImageTools } from 'app-builder-lib/out/toolsets/linux.js';
 import { assertPackagedRendererLoader } from './packaged-renderer-loader-logic.mjs';
 import {
   APPIMAGE_DESKTOP_ENTRY,
@@ -54,17 +56,6 @@ const run = (command, args, options = {}) =>
       else reject(new Error(`${command} failed (${signal ?? code}).`));
     });
   });
-
-const findAppImageRuntime = () => {
-  const candidates = [
-    path.join(os.homedir(), '.cache', 'electron-builder', 'appimage', 'appimage-12.0.1', 'runtime-x64')
-  ];
-  const runtime = candidates.find((candidate) => existsSync(candidate));
-  if (!runtime) {
-    throw new Error('The locked local x64 AppImage runtime is unavailable; refusing to download one.');
-  }
-  return runtime;
-};
 
 assertLinuxX64BuildHost();
 for (const [requiredPath, label] of [
@@ -124,10 +115,11 @@ try {
   copyFileSync(iconPath, path.join(appDir, 'netraflow.png'));
   copyFileSync(iconPath, path.join(appDir, '.DirIcon'));
 
-  const runtimePath = findAppImageRuntime();
+  const appImageTools = await getAppImageTools(Arch.x64);
+  const runtimePath = appImageTools.runtime;
   const runtimeSize = statSync(runtimePath).size;
   rmSync(artifactPath, { force: true });
-  await run('mksquashfs', [
+  await run(appImageTools.mksquashfs, [
     appDir,
     artifactPath,
     '-offset', String(runtimeSize),

@@ -54,9 +54,10 @@ test('Windows shows after document load while packaged Linux also waits for rend
   assert.equal(canShowNormalAppWindow(false, true, true), false);
   assert.equal(canShowNormalAppWindow(true, false, true), false);
   assert.equal(canShowNormalAppWindow(true, true, true), true);
+  const deferredShowStart = main.indexOf('if (deferInitialShow) {');
   const deferredShowBlock = main.slice(
-    main.indexOf('if (deferInitialShow) {'),
-    main.indexOf("if (process.platform !== 'darwin')")
+    deferredShowStart,
+    main.indexOf("if (process.platform !== 'darwin')", deferredShowStart)
   );
   assert.equal(deferredShowBlock.includes('canShowNormalAppWindow('), true);
   assert.equal(deferredShowBlock.includes('waitForStableRendererFrame'), true);
@@ -106,7 +107,7 @@ test('normal readiness uses lifecycle-specific roots, fonts, theme, and two pain
 });
 
 test('plain second-instance activation never enters the protected lock action', () => {
-  assert.match(main, /app\.on\('second-instance',[\s\S]+if \(argv\.includes\('--lock'\)\)[\s\S]+requestRendererLock\(\);[\s\S]+return;[\s\S]+requestWindowActivation\(\);/);
+  assert.match(main, /app\.on\('second-instance',[\s\S]+if \(argv\.includes\('--lock'\)\)[\s\S]+requestRendererLockCommand\(\);[\s\S]+return;[\s\S]+requestWindowActivation\(\);/);
   assert.equal(main.includes('requestProductInstanceActivation = requestWindowActivation;'), true);
   assert.match(main, /if \(!mainWindowFirstFrameReady\) \{\s+pendingWindowActivation = true;\s+return;/);
   assert.equal(main.includes("createdWindow.webContents.send('netraflow-lock')"), true);

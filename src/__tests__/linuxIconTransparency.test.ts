@@ -115,12 +115,13 @@ test('every Linux install icon has transparent corners and a useful content scal
 
 test('Linux icons are reproducibly generated from the controlled SVG without changing platform assets', () => {
   const generator = readFileSync(path.join(process.cwd(), 'scripts', 'generate-linux-icons.mjs'), 'utf8');
-  assert.equal(generator.includes("'public', 'icons', 'netraflow.svg'"), true);
+  assert.equal(generator.includes("'src', 'assets', 'brand', 'netraflow-logo.svg'"), true);
+  assert.equal(generator.includes('copyFileSync(sourcePath, publicSvgPath)'), true);
   assert.equal(generator.includes('gdk-pixbuf-csource'), true);
   assert.equal(generator.includes('lanczos'), true);
   assert.equal(generator.includes('normalizedAlpha'), true);
   const sha256 = (filePath: string) => createHash('sha256').update(readFileSync(filePath)).digest('hex');
-  assert.equal(sha256(path.join(process.cwd(), 'public/icons/netraflow.ico')), '36d4bd56127ac789e6194b8c84ba43e126a44262f5957f3a1e7f5989fe8658c1');
+  assert.equal(sha256(path.join(process.cwd(), 'public/icons/netraflow.ico')), '20fb90f614c92987146c5589f4fa8cd9475e6d128ab8cc13565df4cabba09f16');
   assert.equal(sha256(path.join(process.cwd(), 'public/icons/netraflow.icns')), '553f1d11cdd364b1e3d945578929ecae431f657f25f86049ec0ac62bd6f16a03');
 });
 
