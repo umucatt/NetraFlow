@@ -1,199 +1,240 @@
 <p align="center">
-  <img src="public/icons/netraflow.svg" alt="NetraFlow 图标" width="128" />
+  <img src="src/assets/brand/netraflow-logo.svg" alt="NetraFlow" width="128" />
 </p>
 
 <h1 align="center">NetraFlow</h1>
 
-<p align="center">
-  本地资产变化记录工具
-</p>
+<p align="center">本地资产变化记录桌面工具</p>
 
 <p align="center">
   <strong>简体中文</strong> · <a href="README_EN.md">English</a>
 </p>
 
-## 项目简介
+## 项目介绍
 
-NetraFlow（净流）是一款主要面向 Windows 的本地资产变化记录应用，用于记录账户余额、资产变动与历史轨迹。它适合希望把资产数据保存在本机、手动维护资产状态，并按时间查看变化的人。
+NetraFlow（净流）是一款本地资产变化记录桌面工具，用于手动维护资产与负债账户、记录余额和净值变化，并通过历史记录和图表了解资产在不同时间的变化
 
-应用基于 Electron、React、TypeScript 与 Vite 构建，使用 npm 管理依赖、开发、测试和打包流程。
+本项目使用 Codex 进行辅助开发，且为本人的第一个项目（个人需求导向）
 
 ## 主要功能
 
-- 管理资产、负债账户类型，以及每个类型下的账户。
-- 记录账户创建、修改余额、删除、归档和重新启用等变动历史。
-- 查看首页资产统计、资产结构、资产趋势和账户详情图表。
-- 通过单账户快速记录和「闪记」批量补录多日余额或净值变动。
-- 导入外部整理后的汇总 JSON，并在本地完成账户匹配和风险确认。
-- 使用全局搜索查找账户、历史记录、快照记录和设置项。
-- 导出、导入手动快照，配置自动快照；启用登录密码后，新的加密快照使用创建时的登录密码加密。
-- 配置主题、图表、搜索、数据备份和安全相关选项。
+- 管理资产、负债分类及其账户
+- 记录余额、净值和历史变化
+- 查看资产结构、趋势和账户明细
+- 使用快速记录和闪记补充多日数据
+- 导入整理后的汇总数据
+- 搜索账户、历史记录、快照和设置
+- 创建手动快照和自动快照
+- 使用登录密码保护本地数据
+- 使用加密快照保存重要备份
+- 配置主题、图表、备份和安全选项
+- 通过示例模式体验功能，不影响正式数据
 
 ## 下载与安装
 
-普通用户建议从 [GitHub Releases](https://github.com/umucatt/NetraFlow/releases) 下载已经发布的版本。
+普通用户可从 [GitHub Releases](https://github.com/umucatt/NetraFlow/releases) 下载发行版本
 
-Windows 版本提供两类产物：
+NetraFlow 提供 64 位桌面版本；macOS 仅提供 Apple Silicon 版本
 
-- Setup：`NetraFlow_<version>_Setup.exe`，适合使用安装向导安装。
-- Portable：`NetraFlow_<version>_Portable.zip`，解压后运行其中的 `NetraFlow.exe`。
+| 平台 | 架构 | 形式 | 文件名 |
+| --- | --- | --- | --- |
+| Windows | x64 | 安装版 | `NetraFlow_<version>_x64_Setup.exe` |
+| Windows | x64 | 便携版 | `NetraFlow_<version>_x64_Portable.zip` |
+| macOS | Apple Silicon arm64 | DMG | `NetraFlow_<version>_arm64.dmg` |
+| Linux | x64 | AppImage | `NetraFlow_<version>_x64.AppImage` |
+| Linux | x64 | DEB | `NetraFlow_<version>_x64.deb` |
 
-Setup 卸载流程默认勾选删除本地用户数据；取消勾选时会保留原安装目录下的 `userdata/`，重新安装到相同目录会继续读取保留的数据。Portable 版本的数据也位于解压目录下，直接删除整个解压目录会同时删除数据，请先自行备份。
+### Windows
 
-当前 Windows 构建未启用代码签名。首次运行时，Windows 或安全软件可能显示来源提示，请确认下载来源为本仓库的 Releases 页面后再继续。
+安装版通过安装向导完成安装
 
-## 基本使用
+便携版解压后运行 `NetraFlow.exe`，无需安装
 
-1. 创建资产或负债账户类型，再在类型下添加账户。
-2. 通过账户变更、单账户快速记录或闪记录入余额和变动。
-3. 在首页、资产总览、账户详情和历史记录中查看变化。
-4. 使用图表查看资产结构、资产趋势和账户趋势。
-5. 在进行较大变更或导入前导出快照，需要时再从快照恢复。
-6. 使用汇总导入时，先确认 JSON 格式、账户匹配结果和导入风险，再写入本地数据。
+### macOS
+
+打开 DMG，将 NetraFlow 拖入“应用程序”目录后运行
+
+### Linux
+
+AppImage：
+
+```bash
+chmod +x NetraFlow_<version>_x64.AppImage
+./NetraFlow_<version>_x64.AppImage
+```
+
+DEB：
+
+```bash
+sudo apt install ./NetraFlow_<version>_x64.deb
+```
+
+安装 DEB 时需要系统包管理权限，NetraFlow 日常运行不需要管理员或 root 权限
 
 ## 数据与隐私
 
-NetraFlow 的当前数据保存在本地，不提供云同步，也不会自动上传资产数据。用户可以通过手动快照和自动快照备份数据。
+NetraFlow 是一款本地工具，账户、历史记录、设置和快照等内容保存在设备上的 NetraFlow 数据目录中
 
-0.9.9 的当前本地数据继续使用四个正式 JSON 文件：`core.json` 保存账户类型、账户和历史记录，并在启用登录密码保护后使用该登录密码加密；`settings.json` 保存自动快照、图表和普通全局偏好；`state.json` 保存快照记录、导入记录、首次欢迎和主题解锁等运行状态；`security.json` 只保存自动锁定、是否强制启用快照加密等可重建行为设置。`security.json` 不保存登录密码、密码 hash、快照密码、密钥或任何解密既有文件所必需的参数。
+用户数据位于 `userdata/`，应用运行产生的缓存、日志等内容位于 `runtime/`；不同平台使用各自的本地目录，具体位置由应用管理
 
-安装版和便携版默认都把用户数据放在程序目录下的 `userdata/` 中；运行缓存、日志和 Electron profile 数据放在程序目录下的 `runtime/` 中。开发环境的 runtime 和 userdata 与正式应用隔离，避免开发调试数据污染正式使用数据。
+建议根据使用频率不定期创建手动快照，或开启自动快照；自动快照基于应用启动事件并根据设置检查是否需要执行，NetraFlow 没有自启动或注册系统定时任务/唤醒的功能
 
-0.9.9 不自动迁移旧开发版本的 `storage.json` 数据，也不再使用 `previous` 副本恢复路径。启用登录密码后，登录密码就是本地 `core.json` 的解密密码；NF 不在磁盘保存登录密码或可复用解密凭证，解锁期间仅在主进程内存中保留会话密钥，锁定或退出后即丢弃。NetraFlow 不限制密码输入次数，忘记登录密码时无法恢复已加密的本地 core 数据。新的加密快照统一使用创建时的登录密码；修改或关闭登录密码不会自动修改历史快照，导入历史加密快照仍需要输入创建该快照时使用的密码。删除或损坏 `security.json` 不影响既有加密 core 或加密快照的解密参数，因为这些参数由文件自身携带。NetraFlow 0.9.9 使用 PBKDF2-HMAC-SHA-256 进行 600,000 次迭代。该参数基于 48,000 条历史记录的极端数据实测，并按最高 5 倍性能差距进行保守推演后确定。该结果不代表对所有 Windows 硬件进行完整兼容认证。完整性校验异常只作为风险提示，主动明文导出的文件不受登录密码保护。
+需要将数据导出到 NetraFlow 之外查看、迁移，或在卸载前进行通用备份时，请关闭登录密码保护/快照加密功能后导出明文快照；加密快照主要用于 NetraFlow 内部恢复，第三方程序无法直接识别其中的数据
 
-示例模式使用程序同目录下临时 `.demo` 目录，退出示例或下次启动时会清理。示例模式中的操作不会写入真实 `userdata/`，也不会生成真实外部快照；快照导入导出和用户配置导入导出在示例模式中会被阻断。
+需要注意：
 
-## 当前限制
+- 本地磁盘损坏、误删除、卸载或清除数据都可能造成数据丢失
+- 忘记登录密码后，受密码保护的数据可能无法恢复
+- 历史加密快照可能需要创建该快照时使用的密码
+- 主动导出的明文文件不受登录密码保护，需要自行妥善保管
+- 进行较大修改、批量导入、迁移设备或卸载应用前，建议先创建并复制一份快照到其他位置
 
-- 主要面向 Windows；macOS 和 Linux 不是当前发布目标。
-- Windows 构建未启用代码签名，系统可能显示安全提示。
-- 不提供自动更新，需要用户从 Releases 手动获取新版本。
-- 资产数据主要由用户手动录入或从本地文件导入，不提供银行、券商或行情账户的自动同步。
-- 本地当前数据不等同于云备份，请定期导出快照并妥善保存。
-- 安装版卸载流程默认勾选删除本地用户数据；取消勾选时按安装器现有行为保留用户数据。
+### 文件完整性提示
 
-## 源码开发
+NetraFlow 会检查本应用目录下的本地数据和导入文件的完整性
+
+当检测到数据可能发生了并非由 NetraFlow 正常操作产生的变化，或内容存在不一致时，应用会给出风险提示，并避免在状态不明确时直接覆盖现有数据；遇到提示时，建议先保留当前文件和已有快照，再确认数据来源及内容
+
+### 清除本地数据
+
+应用内的“清除全部”功能用于清除 NetraFlow 管理的 `userdata/` 和 `runtime/`，完成后应用会退出
+
+不同发行形式还需注意：
+
+- Windows 安装版卸载时默认勾选清除本地用户数据；取消勾选可保留数据
+- Windows 便携版的 `userdata/` 和 `runtime/` 位于解压目录中，也可以在退出应用后手动删除对应目录或整个便携目录
+- macOS 和 Linux 卸载应用本体前，需要清除本地数据时，应先在应用内执行“清除全部”
+- 删除应用本体与删除本地数据是两个不同操作，卸载前请先确认是否需要保留快照
+
+## 卸载
+
+卸载应用前，请先阅读“数据与隐私”中的清除和备份说明
+
+### Windows
+
+安装版可通过 Windows“设置 → 应用”卸载，也可以使用开始菜单中的卸载入口
+
+便携版退出应用后，直接删除解压目录即可
+
+### macOS
+
+退出 NetraFlow 后，从“应用程序”目录将 `NetraFlow.app` 移到废纸篓
+
+### Linux
+
+AppImage 版本退出后，删除 AppImage 文件即可
+
+DEB 版本：
+
+```bash
+sudo apt remove netraflow
+```
+
+---
+
+## 源码开发与自行构建
+
+NetraFlow 使用 Electron、React、TypeScript 和 Vite 构建，Windows、macOS 和 Linux 共享同一套业务代码
 
 ### 环境要求
 
-- Node.js 22 LTS
+- Node.js 22
 - npm
-- Windows 环境用于验证 Windows 桌面应用和构建 Windows 产物
+- 与目标发行包对应的操作系统
+
+真实发行包应在对应平台上完成构建和验证
 
 ### 获取源码
 
 ```bash
 git clone https://github.com/umucatt/NetraFlow.git
 cd NetraFlow
-```
-
-### 安装依赖
-
-```bash
 npm ci
 ```
 
-### 启动开发环境
+### 开发与检查
 
 ```bash
 npm run dev
-```
-
-该命令启动 Vite 渲染进程开发服务器，并在就绪后启动 Electron。开发运行时使用独立的应用标识、runtime 和 userdata。
-
-### 类型检查
-
-```bash
 npm run typecheck
-```
-
-### 运行测试
-
-```bash
 npm test
-```
-
-### 生产构建
-
-```bash
 npm run build
 ```
 
-该命令执行 TypeScript 检查、Vite 构建，并生成 Electron 主进程与预加载脚本的构建输出。
-
-### 本地发布检查
+发布前还可以运行：
 
 ```bash
 npm run release:check
-```
-
-发布前的严格检查使用：
-
-```bash
 npm run release:check -- --strict
 ```
 
-非 strict 模式会报告工作区 dirty 警告；strict 模式会把 dirty 工作区视为错误。
+严格检查会同时验证发布上下文和 Git 状态
 
-### Windows 构建产物
+### 本地构建
 
-生成 Windows 产物前先运行：
+构建发行包前先运行：
 
 ```bash
 npm run build
 ```
 
-然后按需构建：
+Windows：
 
 ```bash
 npm run dist:installer
 npm run dist:portable
 ```
 
-默认产物名称为：
+macOS：
 
-- `release/installer/<version>/NetraFlow_<version>_Setup.exe`
-- `release/portable/<version>/NetraFlow_<version>_Portable.zip`
+```bash
+npm run dist:mac
+```
 
-如果同版本目录已存在，发布脚本会为输出目录追加序号。
+Linux：
 
-### 版本号规则
+```bash
+npm run dist:linux
+npm run dist:deb
+```
 
-- `package.json` 与 `package-lock.json` 中的版本号需要保持一致。
-- 发布版本号使用 `major.minor.patch`，可带后缀。
-- 发布 tag 使用 `v<version>`，并且需要指向当前发布提交。
-- 当版本号小于 `1.0.0`，或后缀包含 `beta` / `rc` 时，Release 会标记为 Pre-release。
-
-### 自动化验证
-
-- 普通 push 到 `main`、指向 `main` 的 pull request，以及手动触发会运行 Verify Windows。
-- Verify Windows 使用 Node.js 22，依次执行 `npm ci`、`npm run typecheck`、`npm test` 和 `npm run build`。
-- 版本 tag `v*.*.*` 或 `v*.*.*-*` 会触发 Release Windows。
-- Release Windows 会校验 tag 与版本、运行 `npm run release:check -- --strict`、类型检查、测试、构建、生成 Setup 和 Portable 产物，并验证发布文件。
-- GitHub Release 默认创建为 Draft。
-- `<1.0.0` 或版本后缀包含 `beta` / `rc` 时，Release 会创建为 Pre-release。
+Windows、macOS 和 Linux 的发行包应分别在对应平台上构建和验证
 
 ## 主要目录
 
 | 路径 | 说明 |
 | --- | --- |
-| `electron/` | Electron 主进程、预加载脚本、本地存储和窗口相关逻辑 |
-| `src/` | React 渲染进程、页面、功能模块、样式和测试 |
-| `public/icons/` | 正式图标资源：`netraflow.svg` 为唯一源，Windows 使用 `netraflow.ico`、macOS 使用 `netraflow.icns`、Linux 使用 `linux/` PNG 图层 |
-| `docs/assets/` | README 和文档展示资源 |
-| `scripts/` | 开发启动、发布检查、打包、产物验证和发布说明脚本 |
-| `build/` | 安装器脚本和随包许可证资源 |
-| `.github/workflows/` | Windows 验证与发布工作流 |
+| `electron/` | Electron 主进程与桌面平台集成 |
+| `src/` | 应用界面与共享业务逻辑 |
+| `src/assets/brand/` | 品牌源文件 |
+| `public/` | 静态资源与平台图标 |
+| `scripts/` | 开发、检查、构建和打包工具 |
+| `build/` | 打包配置与发行资源 |
+| `.github/workflows/` | 自动化检查与发行流程 |
 
-## 扩展开发注意事项
+## 开发注意事项
 
-- 修改本地数据结构时，需要维护四文件边界、schema 版本、future schema 拒绝策略和无 `previous` 恢复路径。
-- 不要把开发 runtime、userdata、缓存、日志或用户数据打入发布产物。
-- 生产图标唯一源文件为 `public/icons/netraflow.svg`；README 直接展示该 SVG，平台打包资源均由其生成。
-- 修改图标资源后运行 `npm run generate:icons`，以重新生成 Windows ICO、macOS ICNS、Linux PNG 图层和视觉预览。
-- 修改发布流程时，需要同步检查 `scripts/`、`.github/workflows/`、相关测试和 README 中的说明。
-- 导入、快照和安全相关功能应继续优先做格式校验、完整性校验和可恢复性测试。
+- 保持一套共享业务代码，平台差异集中处理
+- 不因支持新平台而破坏已有平台行为
+- 修改数据格式或数据目录时，应同时考虑兼容与迁移
+- 不把用户数据、测试数据、缓存或日志打入发行包
+- 不在应用运行时依赖提权或隐藏脚本
+- 新增依赖前应确认必要性，并保持 lockfile 一致
+- 修改完成后至少运行类型检查、测试和生产构建
+- 涉及平台行为或发行包时，应在目标平台上实际验证
+- 参与开发前请阅读 [AGENTS.md](AGENTS.md)
+
+## 开发/测试平台
+
+以下环境用于项目的主要开发和测试，不代表最低配置，也不表示所有同类设备均已完成兼容性验证
+
+| 平台 | 主要环境 |
+| --- | --- |
+| Windows | Windows 11 IoT Enterprise LTSC 2024（24H2），Intel Core i5-13600KF，32 GB 内存 |
+| macOS | MacBook Pro，Apple M1 Pro，16 GB 内存 |
+| Linux | Ubuntu 26.04 LTS x64，与 Windows 共用同一台双系统主机 |
+
 
 ## 许可证
 
-NetraFlow 使用 GPL-3.0-only 许可证。详情见 [LICENSE](LICENSE)。
+NetraFlow 使用 [GNU General Public License v3.0 only](LICENSE)
