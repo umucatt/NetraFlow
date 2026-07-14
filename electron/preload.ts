@@ -195,8 +195,17 @@ const electronAPI = {
       ipcRenderer.removeListener('netraflow-open-settings', handleNetraFlowOpenSettings);
     };
   },
-  setLockMenuState: (state: { canLock: boolean }) => {
+  setLockMenuState: (state: {
+    rendererReady: boolean;
+    applicationLockAllowed: boolean;
+    passwordProtectionEnabled: boolean;
+    isLocked: boolean;
+    isUnlocking: boolean;
+  }) => {
     ipcRenderer.send('app:lock-menu-state', state);
+  },
+  completeLockRequest: () => {
+    ipcRenderer.send('app:lock-request-complete');
   },
   onCloseRequest: (listener: () => void) => {
     const handleCloseRequest = () => {

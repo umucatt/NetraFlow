@@ -263,7 +263,6 @@ export const createResetDangerDialogLayerProps = (
 
 export type CreateLockScreenLayerPropsOptions = {
   state: LockScreenState;
-  productIconPath: string;
   password: string;
   error: string;
   isUnlocking: boolean;

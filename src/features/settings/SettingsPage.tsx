@@ -463,7 +463,6 @@ function renderSettingsContent(props: SettingsPageProps) {
   return (
     <AboutNetraFlowPanel
       appVersion={props.appVersion}
-      productIconPath={props.productIconPath}
       productNameZh={props.productNameZh}
       productNameEn={props.productNameEn}
       onOpenBilibili={props.onOpenBilibili}

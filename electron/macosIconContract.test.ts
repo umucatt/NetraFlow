@@ -4,30 +4,34 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const sha256 = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex');
+const normalizeLineEndings = (value: string) => value.replace(/\r\n/g, '\n');
 
 test('macOS icon generation isolates the macOS source and preserves the Windows asset', () => {
   const generatorSource = readFileSync('scripts/generate-icons.mjs', 'utf8');
   const macosPackagerSource = readFileSync('scripts/package-dmg.mjs', 'utf8');
-  const standardSvg = readFileSync('public/icons/netraflow.svg', 'utf8');
+  const canonicalSvg = readFileSync('src/assets/brand/netraflow-logo.svg', 'utf8');
+  const publicSvg = readFileSync('public/icons/netraflow.svg', 'utf8');
   const macosSvg = readFileSync('public/icons/netraflow-macos.svg', 'utf8');
   const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {
     build?: { mac?: { icon?: string } };
   };
 
-  assert.match(generatorSource, /const sourceSvg = .*netraflow\.svg/);
+  assert.match(generatorSource, /const sourceSvg = .*netraflow-logo\.svg/);
   assert.match(generatorSource, /const macosSourceSvg = .*netraflow-macos\.svg/);
   assert.equal(macosSvg.includes('stroke="#e8edf1"'), false);
   assert.equal(macosSvg.includes('<rect'), false);
   const nfPath = '<path d="M208 585V235c0-29 35-41 53-17l206 367c15 20 53 9 53-19V300c0-61 49-65 92-65h60" fill="none" stroke="#fff" stroke-width="80" stroke-linecap="round" stroke-linejoin="round"/>';
   const dot = '<circle cx="670" cy="430" r="34.2" fill="#fff"/>';
   assert.equal(macosSvg.includes(nfPath), true);
-  assert.equal(standardSvg.includes(nfPath), true);
+  assert.equal(canonicalSvg.includes(nfPath), true);
   assert.equal(macosSvg.includes(dot), true);
-  assert.equal(standardSvg.includes(dot), true);
+  assert.equal(canonicalSvg.includes(dot), true);
+  assert.equal(normalizeLineEndings(publicSvg), normalizeLineEndings(canonicalSvg));
+  assert.equal(generatorSource.includes("copyFile(sourceSvg, path.join(iconsDir, 'netraflow.svg'))"), true);
   assert.equal(packageJson.build?.mac?.icon, 'public/icons/netraflow.icns');
   assert.equal(macosPackagerSource.includes("'!dist/icons/netraflow.svg'"), false);
   assert.equal(macosPackagerSource.includes("'!public/icons/netraflow.svg'"), false);
-  assert.equal(sha256('public/icons/netraflow.ico'), '36d4bd56127ac789e6194b8c84ba43e126a44262f5957f3a1e7f5989fe8658c1');
+  assert.equal(sha256('public/icons/netraflow.ico'), '20fb90f614c92987146c5589f4fa8cd9475e6d128ab8cc13565df4cabba09f16');
 });
 
 test('the regenerated macOS ICNS has a 1024-pixel Retina layer and differs from the prior icon', () => {

@@ -131,7 +131,6 @@ test('DashboardPage renders home stats, chart previews, and overview rows', () =
         draggingGroupId: '',
         groupDropIndicator: null,
         legendColorByName: new Map([['现金', '#9a6b2f']]),
-        productIconPath: 'icons/netraflow.ico',
         productNameZh: '净流',
         productNameEn: 'NetraFlow',
         productTagline: '资产变化记录工具',

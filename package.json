@@ -138,6 +138,7 @@
     "dist:linux": "node scripts/package-appimage.mjs",
     "dist:deb": "node scripts/package-deb.mjs",
     "generate:icons": "node scripts/generate-icons.mjs",
+    "generate:windows-icon": "node scripts/generate-windows-icon.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

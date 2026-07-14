@@ -5,6 +5,7 @@ import type {
 } from 'react';
 
 import type { Account } from '../../app/types';
+import NetraFlowLogo from '../../app/branding/NetraFlowLogo';
 import AccountMark from '../../components/AccountMark';
 import NfTooltip from '../../components/tooltip/NfTooltip';
 import type { AssetOverviewGroup } from './assetOverviewLogic';
@@ -26,7 +27,6 @@ export type AssetOverviewPageProps = {
   draggingGroupId: string;
   groupDropIndicator: AssetOverviewDropIndicator;
   legendColorByName: Map<string, string>;
-  productIconPath: string;
   productNameZh: string;
   productNameEn: string;
   productTagline: string;
@@ -56,7 +56,6 @@ function AssetOverviewPage({
   draggingGroupId,
   groupDropIndicator,
   legendColorByName,
-  productIconPath,
   productNameZh,
   productNameEn,
   productTagline,
@@ -282,19 +281,7 @@ function AssetOverviewPage({
           color: 'var(--text-muted)'
         }}
       >
-        <img
-          src={productIconPath}
-          alt=""
-          aria-hidden="true"
-          style={{
-            width: 28,
-            height: 28,
-            display: 'block',
-            objectFit: 'contain',
-            borderRadius: 0,
-            flex: '0 0 auto'
-          }}
-        />
+        <NetraFlowLogo className="asset-overview__brand-logo" />
         <span style={{ display: 'grid', gap: 2 }}>
           <strong style={{ color: 'var(--text-main)', fontSize: '0.94rem' }}>
             {productNameZh} {productNameEn}

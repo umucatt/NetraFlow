@@ -183,6 +183,41 @@ test('active state reports normal activation without waiting for takeover', asyn
   await waitFor(() => activated);
 });
 
+test('product instance lock requests stay distinct from ordinary activation', async (t) => {
+  const directory = await mkdtemp(path.join(process.cwd(), '.tmp-tests', 'netraflow-lock-command-'));
+  const pipePath = process.platform === 'win32' ? createTaskPipePath() : path.join(directory, 'instance.sock');
+  let activations = 0;
+  let locks = 0;
+  const errors: Array<{ code?: unknown }> = [];
+  const owner = createProductInstanceCoordinator({
+    pipePath,
+    expectedSocketPath: pipePath,
+    onActivate: () => { activations += 1; },
+    onLock: () => { locks += 1; },
+    logger: { error: (_message, details) => errors.push(details as { code?: unknown }) }
+  });
+  const lockContender = createProductInstanceCoordinator({
+    pipePath,
+    expectedSocketPath: pipePath,
+    message: 'lock'
+  });
+  t.after(async () => {
+    await lockContender.release();
+    await owner.release();
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  const acquired = await owner.acquire();
+  if (!acquired && errors.some((error) => error.code === 'EPERM')) {
+    t.skip('Unix socket listeners are unavailable in the test sandbox');
+    return;
+  }
+  assert.equal(acquired, true);
+  assert.equal(await lockContender.acquire(), false);
+  await waitFor(() => locks === 1);
+  assert.equal(activations, 0);
+});
+
 test('POSIX stale socket recovery validates type owner and exact path', async (t) => {
   if (process.platform === 'win32' || !process.getuid) return;
   if (posixSocketUnavailable) {

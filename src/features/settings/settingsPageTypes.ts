@@ -33,7 +33,6 @@ export type SettingsPageProps = {
   selectedExampleTemplateId: ExampleTemplateId;
   isExampleMode: boolean;
   appVersion: string;
-  productIconPath: string;
   productNameZh: string;
   productNameEn: string;
   autoLockMinutesInput: string;
