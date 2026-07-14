@@ -14,6 +14,42 @@ export class ReleaseNotesError extends Error {
   }
 }
 
+const releaseAssetLabel = (name) => name.endsWith('_Setup.exe')
+  ? 'Windows x64 Setup'
+  : name.endsWith('_Portable.zip')
+    ? 'Windows x64 Portable'
+    : name.endsWith('_arm64.dmg')
+      ? 'macOS arm64 DMG'
+      : name.endsWith('.AppImage')
+        ? 'Linux x64 AppImage'
+        : 'Linux x64 DEB';
+
+export const createBundleReleaseNotesText = ({ manifest, changelogSection }) => {
+  const macManifest = manifest.manifests.find((entry) => entry.platform === 'macos');
+  const assetLines = manifest.assets.map((asset) =>
+    `- ${releaseAssetLabel(asset.name)}: \`${asset.name}\` — ${asset.size} bytes — SHA-256 \`${asset.sha256}\``
+  );
+  return [
+    `# NetraFlow ${manifest.version}`,
+    '',
+    `- Tag: \`${manifest.tag}\``,
+    `- Commit: \`${manifest.commit}\``,
+    '',
+    '## Changes',
+    '',
+    changelogSection,
+    '',
+    '## Release artifacts',
+    '',
+    ...assetLines,
+    '',
+    `macOS signing/notarization: ${macManifest?.signing ?? 'unsigned; not notarized'}.`,
+    '',
+    'Source code archives (zip and tar.gz) are provided automatically by GitHub.',
+    ''
+  ].join('\n');
+};
+
 const normalizeNewlines = (text) => String(text ?? '').replace(/\r\n?/g, '\n');
 
 const parseVersionHeading = (line, lineIndex) => {

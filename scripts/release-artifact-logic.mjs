@@ -65,8 +65,8 @@ const toReleaseRelativePath = (rootDir, filePath) =>
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export const getExpectedReleaseArtifactNames = ({ productName = 'NetraFlow', version }) => ({
-  installerName: `${productName}_${version}_Setup.exe`,
-  portableName: `${productName}_${version}_Portable.zip`
+  installerName: `${productName}_${version}_x64_Setup.exe`,
+  portableName: `${productName}_${version}_x64_Portable.zip`
 });
 
 const walkFiles = (directoryPath) => {
@@ -339,8 +339,8 @@ export const verifyReleaseArtifacts = ({
   const installerRoot = path.join(releaseRoot, 'installer');
   const portableRoot = path.join(releaseRoot, 'portable');
   const { installerName, portableName } = getExpectedReleaseArtifactNames({ productName, version });
-  const installerPattern = new RegExp(`^${escapeRegExp(productName)}_.+_Setup\\.exe(?:\\..+)?$`);
-  const portablePattern = new RegExp(`^${escapeRegExp(productName)}_.+_Portable\\.zip$`);
+  const installerPattern = new RegExp(`^${escapeRegExp(productName)}_.+_x64_Setup\\.exe(?:\\..+)?$`);
+  const portablePattern = new RegExp(`^${escapeRegExp(productName)}_.+_x64_Portable\\.zip$`);
   const unexpectedInstallerArtifacts = findUnexpectedVersionArtifacts({
     searchRoot: installerRoot,
     productName,

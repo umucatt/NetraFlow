@@ -1313,7 +1313,7 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
     filter: ['LICENSE.NotoSansCJK.txt', 'LICENSE.NotoSansSymbols2.txt']
   });
   assert.equal(packageJson.build?.win?.icon, 'public/icons/netraflow.ico');
-  assert.equal(packageJson.build?.win?.artifactName, 'NetraFlow_${version}_Setup.${ext}');
+  assert.equal(packageJson.build?.win?.artifactName, 'NetraFlow_${version}_${arch}_Setup.${ext}');
   assert.equal(packageJson.build?.win?.executableName, 'NetraFlow');
   assert.equal(packageJson.build?.win?.signAndEditExecutable, false);
   assert.equal(JSON.stringify(packageJson.build?.win?.target).includes('"target":"nsis"'), true);
@@ -1398,7 +1398,7 @@ test('confirmation dialog and Windows app identity use restrained UI and NetraFl
   assert.equal(packageInstallerScriptSource.includes("path.join(unpackedResourcesDir, 'app')"), true);
   assert.equal(packageInstallerScriptSource.includes("path.join(unpackedResourcesDir, 'app.asar.unpacked', 'node_modules')"), true);
   assert.equal(packageInstallerScriptSource.includes("'builder-debug.yml', 'latest.yml'"), true);
-  assert.equal(packageInstallerScriptSource.includes('`${productName}_${version}_Setup.exe`'), true);
+  assert.equal(packageInstallerScriptSource.includes('`${productName}_${version}_x64_Setup.exe`'), true);
   assert.equal(/node:child_process|spawnSync|powershell|cmd(?:\.exe)?|icacls|ExecWait|nsExec::|\.ps1|\.cmd|\.bat/i.test(packageInstallerScriptSource), false);
 });
 
@@ -1906,7 +1906,7 @@ test('portable Windows package script creates an isolated zip bundle without ins
 
   assert.equal(packageJson.scripts?.['dist:portable'], 'node scripts/package-portable.mjs');
   assert.equal(portableScriptSource.includes("prepareVersionedReleaseDir('portable', version)"), true);
-  assert.equal(portableScriptSource.includes('`${bundleName}_Portable.zip`'), true);
+  assert.equal(portableScriptSource.includes('`${productName}_${version}_x64_Portable.zip`'), true);
   assert.equal(portableScriptSource.includes('writeFileSync(portableFlagPath'), true);
   assert.equal(mainSource.includes("path.join(app.getAppPath(), 'portable.flag')"), true);
   assert.equal(mainSource.includes("path.join(process.resourcesPath, 'app', 'portable.flag')"), false);
@@ -2071,14 +2071,14 @@ test('release packaging scripts use versioned output folders and safe release cl
   assert.equal(installerScriptSource.includes("path.join(unpackedResourcesDir, 'app.asar.unpacked', 'node_modules')"), true);
   assert.equal(installerScriptSource.includes("'builder-debug.yml', 'latest.yml'"), true);
   assert.equal(installerScriptSource.includes('if (!isDiagnosticsRun)'), true);
-  assert.equal(installerScriptSource.includes('`${productName}_${version}_Setup.exe`'), true);
+  assert.equal(installerScriptSource.includes('`${productName}_${version}_x64_Setup.exe`'), true);
   assert.equal(installerScriptSource.includes('unexpectedInstallerArtifacts'), true);
   assert.equal(installerScriptSource.includes('`${productName}_${version}_1_Setup.exe`'), false);
   assert.equal(portableScriptSource.includes("prepareVersionedReleaseDir('portable', version)"), true);
   assert.equal(portableScriptSource.includes("Platform.WINDOWS.createTarget(['dir'], Arch.x64)"), true);
   assert.equal(portableScriptSource.includes("packagedAppDir = path.join(stagingOutputDir, 'win-unpacked')"), true);
-  assert.equal(portableScriptSource.includes('const bundleName = `${productName}_${version}`;'), true);
-  assert.equal(portableScriptSource.includes('`${bundleName}_Portable.zip`'), true);
+  assert.equal(portableScriptSource.includes('const bundleName = `${productName}_${version}_x64`;'), true);
+  assert.equal(portableScriptSource.includes('`${productName}_${version}_x64_Portable.zip`'), true);
   assert.equal(portableScriptSource.includes('`${productName}_${version}_Portable.zip`'), false);
   assert.equal(portableScriptSource.includes('`${productName}_${version}_1`'), false);
   assert.equal(resourcePatchSource.includes("node_modules', 'electron-winstaller', 'vendor', 'rcedit.exe'"), true);

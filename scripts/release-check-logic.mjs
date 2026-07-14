@@ -214,8 +214,8 @@ export const createReleaseMetadataFromTag = (releaseTag, productName = 'NetraFlo
     releaseVersion,
     isPrerelease: isPrereleaseVersion(releaseVersion),
     title: `${productName} ${releaseVersion}`,
-    installerName: `${productName}_${releaseVersion}_Setup.exe`,
-    portableName: `${productName}_${releaseVersion}_Portable.zip`
+    installerName: `${productName}_${releaseVersion}_x64_Setup.exe`,
+    portableName: `${productName}_${releaseVersion}_x64_Portable.zip`
   };
 };
 
@@ -263,8 +263,8 @@ export const getReleaseTagFromEnv = (env = {}) => {
 };
 
 export const getExpectedReleaseArtifacts = ({ productName, version }) => ({
-  installer: `${productName}_${version}_Setup.exe`,
-  portable: `${productName}_${version}_Portable.zip`
+  installer: `${productName}_${version}_x64_Setup.exe`,
+  portable: `${productName}_${version}_x64_Portable.zip`
 });
 
 const checkVersions = (input, report) => {
@@ -388,7 +388,7 @@ const checkArtifactNaming = (input, report) => {
   const artifacts = getExpectedReleaseArtifacts({ productName, version });
   const setupNameFromTemplate =
     typeof artifactNameTemplate === 'string'
-      ? artifactNameTemplate.replaceAll('${version}', version).replaceAll('${ext}', 'exe')
+      ? artifactNameTemplate.replaceAll('${version}', version).replaceAll('${arch}', 'x64').replaceAll('${ext}', 'exe')
       : '';
 
   if (setupNameFromTemplate !== artifacts.installer) {
@@ -409,8 +409,8 @@ const checkArtifactNaming = (input, report) => {
   const portableSource = input.scriptSources.portable ?? '';
 
   if (
-    portableSource.includes('const bundleName = `${productName}_${version}`;') &&
-    portableSource.includes('`${bundleName}_Portable.zip`')
+    portableSource.includes('const bundleName = `${productName}_${version}_x64`;') &&
+    portableSource.includes('`${productName}_${version}_x64_Portable.zip`')
   ) {
     pass(report, `portable artifact name: ${artifacts.portable}`);
   } else {

@@ -99,7 +99,7 @@
         }
       ],
       "icon": "public/icons/netraflow.ico",
-      "artifactName": "NetraFlow_${version}_Setup.${ext}",
+      "artifactName": "NetraFlow_${version}_${arch}_Setup.${ext}",
       "executableName": "NetraFlow",
       "signAndEditExecutable": false
     },
