@@ -14,7 +14,6 @@ const renderLockScreen = (state: LockScreenState) =>
   renderToStaticMarkup(
     <LockScreenLayer
       state={state}
-      productIconPath="/icons/netraflow.svg"
       password=""
       error=""
       isUnlocking={state === 'authenticating'}

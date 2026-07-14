@@ -87,7 +87,11 @@ test('product single instance lock is product-wide and acquired before persisten
   assert.ok(rootsIndex < electronLockIndex);
   assert.equal(productLockSource.includes('export const PRODUCT_INSTANCE_PIPE_PATH ='), true);
   assert.equal(productLockSource.includes('netraflow-com-netraflow-app-single-instance'), true);
-  assert.equal(productLockSource.includes("const PRODUCT_INSTANCE_MESSAGE = 'activate';"), true);
+  assert.equal(
+    productLockSource.includes("const PRODUCT_INSTANCE_ACTIVATE_MESSAGE = 'activate';"),
+    true
+  );
+  assert.equal(productLockSource.includes("const PRODUCT_INSTANCE_LOCK_MESSAGE = 'lock';"), true);
   assert.equal(productLockSource.includes("initial.code !== 'EADDRINUSE'"), true);
   assert.equal(productLockSource.includes("existing.code !== 'ECONNREFUSED'"), true);
   assert.equal(productLockSource.includes('removeVerifiedStaleSocket'), true);

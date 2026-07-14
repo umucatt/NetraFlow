@@ -1,11 +1,11 @@
 import type { PointerEvent } from 'react';
+import NetraFlowLogo from '../../app/branding/NetraFlowLogo';
 import bilibiliIcon from '../../assets/Bilibili_tv_a.svg';
 import { NfGithubIcon } from '../../assets/icons';
 import NfSvgIcon from '../../components/NfSvgIcon';
 
 export type AboutNetraFlowPanelProps = {
   appVersion: string;
-  productIconPath: string;
   productNameZh: string;
   productNameEn: string;
   onOpenBilibili: () => void;
@@ -16,7 +16,6 @@ export type AboutNetraFlowPanelProps = {
 
 function AboutNetraFlowPanel({
   appVersion,
-  productIconPath,
   productNameZh,
   productNameEn,
   onOpenBilibili,
@@ -46,7 +45,7 @@ function AboutNetraFlowPanel({
   return (
     <section className="about-netraflow">
       <div className="about-netraflow__summary">
-        <img src={productIconPath} alt="净流图标" />
+        <NetraFlowLogo className="about-netraflow__logo" />
         <div>
           <h2>{productNameZh}</h2>
           <p>{productNameEn}</p>

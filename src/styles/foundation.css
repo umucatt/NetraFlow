@@ -464,6 +464,12 @@ code,
   color: inherit;
 }
 
+.netraflow-logo {
+  display: block;
+  aspect-ratio: 1;
+  line-height: 0;
+}
+
 .nf-tooltip-trigger {
   display: inline-flex;
   align-items: center;

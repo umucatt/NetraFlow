@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react';
+import NetraFlowLogo from '../branding/NetraFlowLogo';
 import InlineErrorSlot from '../../components/InlineErrorSlot';
 import { isLockScreenPanelExiting, isLockScreenVisible } from './lockScreenLogic';
 import type { LockScreenLayerProps } from './lockScreenTypes';
 
 export function LockScreenLayer({
   state,
-  productIconPath,
   password,
   error,
   isUnlocking,
@@ -68,7 +68,7 @@ export function LockScreenLayer({
         onSubmit={onSubmit}
       >
         <div className="lock-screen__brand">
-          <img src={productIconPath} alt="" aria-hidden="true" />
+          <NetraFlowLogo className="lock-screen__brand-logo" />
           <div>
             <p className="eyebrow">NetraFlow</p>
             <h2 id="lock-title">已锁定</h2>

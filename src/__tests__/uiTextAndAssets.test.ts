@@ -2170,6 +2170,11 @@ test('Windows taskbar lock uses Jump List IPC without tray or background hiding'
     'src/features/security/useSecuritySettingsController.tsx'
   );
   const rendererLockSource = `${appSource}\n${securityControllerSource}`;
+  const rendererLockHandlerStart = securityControllerSource.indexOf('api.onNetraFlowLock(() => {');
+  const rendererLockHandlerSource = securityControllerSource.slice(
+    rendererLockHandlerStart,
+    securityControllerSource.indexOf('\n  }, [', rendererLockHandlerStart)
+  );
   const typesSource = readProjectFile('src/vite-env.d.ts');
 
   assert.equal(mainSource.includes('new Tray'), false);
@@ -2181,16 +2186,18 @@ test('Windows taskbar lock uses Jump List IPC without tray or background hiding'
   assert.equal(mainSource.includes("process.platform !== 'darwin'"), true);
   assert.equal(mainSource.includes('app.quit();'), true);
   assert.equal(mainSource.includes('app.setUserTasks(['), true);
+  assert.equal(mainSource.includes('const cleared = app.setUserTasks([])'), true);
+  assert.equal(mainSource.includes('if (!cleared)'), true);
+  assert.equal(mainSource.includes('const registered = app.setUserTasks(['), true);
+  assert.equal(mainSource.includes('if (!registered)'), true);
   assert.equal(mainSource.includes("title: '锁定'"), true);
   assert.equal(mainSource.includes("description: '锁定 NetraFlow'"), true);
   assert.equal(mainSource.includes("const lockArguments = app.isPackaged ? '--lock'"), true);
   assert.equal(mainSource.includes('`"${app.getAppPath()}" --lock`'), true);
   assert.equal(mainSource.includes('arguments: lockArguments'), true);
-  assert.equal(
-    mainSource.includes(
-      'iconPath: app.isPackaged\n        ? process.execPath\n        : getAppIconPath({'
-    ),
-    true
+  assert.match(
+    mainSource,
+    /iconPath: app\.isPackaged\s*\? process\.execPath\s*: getAppIconPath\(\{/
   );
   assert.equal(mainSource.includes('app.requestSingleInstanceLock()'), true);
   assert.equal(mainSource.includes("app.on('second-instance'"), true);
@@ -2216,6 +2223,15 @@ test('Windows taskbar lock uses Jump List IPC without tray or background hiding'
   );
   assert.equal(rendererLockSource.includes('lockCoreDocument();'), true);
   assert.equal(rendererLockSource.includes("setLockScreenState('locked');"), true);
+  assert.equal(mainSource.includes("webContents.on('before-input-event'"), true);
+  assert.equal(mainSource.includes('globalShortcut'), false);
+  assert.equal(mainSource.includes('requestRendererLockCommand'), true);
+  assert.equal(mainSource.includes('rendererPasswordProtectionEnabled'), true);
+  assert.equal(mainSource.includes('rendererIsLocked'), true);
+  assert.equal(mainSource.includes('rendererIsUnlocking'), true);
+  assert.equal(mainSource.includes("ipcMain.on('app:lock-request-complete'"), true);
+  assert.equal(rendererLockHandlerSource.includes("showToast('未启用登录密码保护', 'info')"), true);
+  assert.equal(rendererLockHandlerSource.includes('请先启用登录密码保护'), false);
   assert.equal(rendererLockSource.includes('unlockCoreDocument(unlockPasswordInput);'), true);
   assert.equal(rendererLockSource.includes('verifyPassword('), false);
   assert.equal(rendererLockSource.includes('globalSettings.passwordHash'), false);

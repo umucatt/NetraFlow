@@ -7,6 +7,7 @@ import {
   installMacosApplicationMenu,
   resolveMacosMenuLanguage
 } from './macosApplicationMenu.js';
+import { LOCK_ACCELERATOR } from './applicationLockShortcut.js';
 
 const createMenuCallbacks = () => ({
   onOpenSettings: () => undefined,
@@ -58,7 +59,8 @@ test('macOS application menu gives every visible standard command an explicit si
 
   const lockItem = appSubmenu.find((item) => item.label === '锁定 NetraFlow');
   assert.ok(lockItem);
-  assert.equal(lockItem.accelerator, 'Shift+Command+L');
+  assert.equal(lockItem.accelerator, LOCK_ACCELERATOR);
+  assert.equal(lockItem.accelerator, 'CommandOrControl+Shift+L');
   (lockItem.click as (() => void) | undefined)?.();
   assert.equal(lockCalls, 1);
 

@@ -4,8 +4,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { createIco } from './windows-icon-format.mjs';
+
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const sourceSvg = path.join(rootDir, 'public', 'icons', 'netraflow.svg');
+const sourceSvg = path.join(rootDir, 'src', 'assets', 'brand', 'netraflow-logo.svg');
 const macosSourceSvg = path.join(rootDir, 'public', 'icons', 'netraflow-macos.svg');
 const iconsDir = path.join(rootDir, 'public', 'icons');
 const linuxIconsDir = path.join(iconsDir, 'linux');
@@ -50,25 +52,6 @@ const run = (command, args) =>
 const pngPathFor = (renderRoot, size, sourcePath) =>
   path.join(renderRoot, String(size), `${path.basename(sourcePath)}.png`);
 
-const createIco = (entries) => {
-  const header = Buffer.alloc(6);
-  header.writeUInt16LE(1, 2);
-  header.writeUInt16LE(entries.length, 4);
-  let offset = header.length + entries.length * 16;
-  const directories = entries.map(({ size, data }) => {
-    const directory = Buffer.alloc(16);
-    directory.writeUInt8(size === 256 ? 0 : size, 0);
-    directory.writeUInt8(size === 256 ? 0 : size, 1);
-    directory.writeUInt16LE(1, 4);
-    directory.writeUInt16LE(32, 6);
-    directory.writeUInt32LE(data.length, 8);
-    directory.writeUInt32LE(offset, 12);
-    offset += data.length;
-    return directory;
-  });
-  return Buffer.concat([header, ...directories, ...entries.map(({ data }) => data)]);
-};
-
 const createIcns = (entries) => {
   const chunks = entries.map(({ type, data }) => {
     const header = Buffer.alloc(8);
@@ -104,6 +87,7 @@ const createPreviewSvg = (svg) => {
 const main = async () => {
   await stat(sourceSvg);
   await stat(macosSourceSvg);
+  await copyFile(sourceSvg, path.join(iconsDir, 'netraflow.svg'));
   const workDir = await mkdtemp(path.join(os.tmpdir(), 'netraflow-icons-'));
   const renderRoot = path.join(workDir, 'rendered');
   const macosRenderRoot = path.join(workDir, 'macos-rendered');

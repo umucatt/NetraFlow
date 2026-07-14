@@ -25,6 +25,10 @@ import {
   type MacosApplicationMenuController
 } from './macosApplicationMenu.js';
 import { createMacosAboutPanelOptions } from './macosAboutPanel.js';
+import {
+  canRequestRendererLockCommand,
+  isApplicationLockShortcut
+} from './applicationLockShortcut.js';
 import { createStorageLayout } from './storageLayout.js';
 import { getAppIconPath, getPlatformWindowOptions } from './windowPlatformOptions.js';
 import {
@@ -85,9 +89,12 @@ let pendingWindowActivation = false;
 let mainWindowFirstFrameReady = !shouldDeferNormalAppFirstShow(process.platform, app.isPackaged);
 const forceClosingWindows = new WeakSet<BrowserWindow>();
 let macosApplicationMenu: MacosApplicationMenuController | null = null;
-let rendererIsReadyForApplicationMenu = false;
-let rendererCanLockFromApplicationMenu = false;
-let macosMenuLockRequestInProgress = false;
+let rendererReadyForLockCommand = false;
+let rendererApplicationLockAllowed = false;
+let rendererPasswordProtectionEnabled = false;
+let rendererIsLocked = false;
+let rendererIsUnlocking = false;
+let lockRequestInProgress = false;
 const appendValidationDiagnostic = (
   event: string,
   details: Record<string, unknown> = {}
@@ -242,27 +249,39 @@ const isAppQuitInProgress = () => appShutdownState.isAppQuitInProgress();
 const refreshMacosApplicationMenu = () => {
   macosApplicationMenu?.refresh();
 };
-const resetRendererApplicationMenuState = () => {
-  rendererIsReadyForApplicationMenu = false;
-  rendererCanLockFromApplicationMenu = false;
-  macosMenuLockRequestInProgress = false;
+const resetRendererLockCommandState = () => {
+  rendererReadyForLockCommand = false;
+  rendererApplicationLockAllowed = false;
+  rendererPasswordProtectionEnabled = false;
+  rendererIsLocked = false;
+  rendererIsUnlocking = false;
+  lockRequestInProgress = false;
   refreshMacosApplicationMenu();
 };
-const isMacosApplicationMenuWindowReady = () =>
+const isRendererLockCommandWindowReady = () =>
   Boolean(
-    mainWindow &&
+      mainWindow &&
       !mainWindow.isDestroyed() &&
-      rendererIsReadyForApplicationMenu &&
+      rendererReadyForLockCommand &&
       !isDestructiveShutdown() &&
       !isAppQuitInProgress()
   );
-const isMacosApplicationMenuLockEnabled = () =>
-  isMacosApplicationMenuWindowReady() &&
-  rendererCanLockFromApplicationMenu &&
-  !macosMenuLockRequestInProgress;
+const isRendererLockCommandEnabled = () =>
+  canRequestRendererLockCommand({
+    rendererReady: rendererReadyForLockCommand,
+    applicationLockAllowed: rendererApplicationLockAllowed,
+    passwordProtectionEnabled: rendererPasswordProtectionEnabled,
+    isLocked: rendererIsLocked,
+    isUnlocking: rendererIsUnlocking,
+    lockRequestInProgress,
+    isDestructiveShutdown: isDestructiveShutdown(),
+    isAppQuitInProgress: isAppQuitInProgress(),
+    hasUsableWindow: Boolean(mainWindow && !mainWindow.isDestroyed())
+  });
 let requestProductInstanceActivation = () => {
   pendingWindowActivation = true;
 };
+let requestProductInstanceLock: () => void = () => undefined;
 
 app.setName(APP_NAME);
 
@@ -292,7 +311,12 @@ const storageLayout = createStorageLayout({
 });
 
 const productInstanceCoordinator = createProductInstanceCoordinator({
+  message: process.argv.includes('--lock') ? 'lock' : 'activate',
   onActivate: () => requestProductInstanceActivation(),
+  onLock: () => {
+    // Leave the pipe data callback before focusing the window and sending renderer IPC.
+    setTimeout(() => requestProductInstanceLock(), 0);
+  },
   getState: () => isDestructiveShutdown() ? 'resetting' : 'active',
   logger: console
 });
@@ -730,21 +754,34 @@ const registerWindowsUserTasks = () => {
 
   const lockArguments = app.isPackaged ? '--lock' : `"${app.getAppPath()}" --lock`;
 
-  app.setUserTasks([
-    {
-      program: process.execPath,
-      arguments: lockArguments,
-      iconPath: app.isPackaged
-        ? process.execPath
-        : getAppIconPath({
-            platform: process.platform,
-            appResourceRoot: app.getAppPath()
-          }),
-      iconIndex: 0,
-      title: '锁定',
-      description: '锁定 NetraFlow'
+  try {
+    const cleared = app.setUserTasks([]);
+    if (!cleared) {
+      console.warn('[NetraFlow shell] Existing Windows user tasks were not cleared.');
     }
-  ]);
+
+    const registered = app.setUserTasks([
+      {
+        program: process.execPath,
+        arguments: lockArguments,
+        iconPath: app.isPackaged
+          ? process.execPath
+          : getAppIconPath({
+              platform: process.platform,
+              appResourceRoot: app.getAppPath()
+            }),
+        iconIndex: 0,
+        title: '锁定',
+        description: '锁定 NetraFlow'
+      }
+    ]);
+
+    if (!registered) {
+      console.warn('[NetraFlow shell] Windows user tasks were not registered.');
+    }
+  } catch (error) {
+    console.warn('[NetraFlow shell] Failed to register Windows user tasks.', error);
+  }
 };
 
 const sendRendererLock = (targetWindow: BrowserWindow) => {
@@ -815,18 +852,20 @@ const requestRendererLock = () => {
   sendRendererLock(targetWindow);
 };
 
-const requestMacosApplicationMenuLock = () => {
-  if (!isMacosApplicationMenuLockEnabled()) {
+const requestRendererLockCommand = () => {
+  if (!isRendererLockCommandEnabled()) {
     return;
   }
 
-  macosMenuLockRequestInProgress = true;
+  lockRequestInProgress = true;
   refreshMacosApplicationMenu();
   requestRendererLock();
 };
 
+requestProductInstanceLock = requestRendererLockCommand;
+
 const requestMacosApplicationMenuSettings = () => {
-  if (!isMacosApplicationMenuWindowReady() || !mainWindow) {
+  if (!isRendererLockCommandWindowReady() || !mainWindow) {
     return;
   }
 
@@ -849,7 +888,7 @@ if (!gotSingleInstanceLock) {
 } else {
   app.on('second-instance', (_event, argv) => {
     if (argv.includes('--lock')) {
-      requestRendererLock();
+      requestRendererLockCommand();
       return;
     }
 
@@ -937,19 +976,39 @@ ipcMain.on('app:lock-menu-state', (event, state: unknown) => {
     targetWindow !== mainWindow ||
     !state ||
     typeof state !== 'object' ||
-    !('canLock' in state) ||
-    typeof state.canLock !== 'boolean'
+    !('rendererReady' in state) ||
+    typeof state.rendererReady !== 'boolean' ||
+    !('applicationLockAllowed' in state) ||
+    typeof state.applicationLockAllowed !== 'boolean' ||
+    !('passwordProtectionEnabled' in state) ||
+    typeof state.passwordProtectionEnabled !== 'boolean' ||
+    !('isLocked' in state) ||
+    typeof state.isLocked !== 'boolean' ||
+    !('isUnlocking' in state) ||
+    typeof state.isUnlocking !== 'boolean'
   ) {
     return;
   }
 
-  rendererIsReadyForApplicationMenu = true;
-  rendererCanLockFromApplicationMenu = state.canLock;
+  rendererReadyForLockCommand = state.rendererReady;
+  rendererApplicationLockAllowed = state.applicationLockAllowed;
+  rendererPasswordProtectionEnabled = state.passwordProtectionEnabled;
+  rendererIsLocked = state.isLocked;
+  rendererIsUnlocking = state.isUnlocking;
 
-  if (!state.canLock) {
-    macosMenuLockRequestInProgress = false;
+  if (!state.rendererReady || state.isLocked || state.isUnlocking) {
+    lockRequestInProgress = false;
   }
 
+  refreshMacosApplicationMenu();
+});
+
+ipcMain.on('app:lock-request-complete', (event) => {
+  if (getEventWindow(event) !== mainWindow) {
+    return;
+  }
+
+  lockRequestInProgress = false;
   refreshMacosApplicationMenu();
 });
 
@@ -1236,7 +1295,7 @@ const destructiveCleanupCoordinator = createSingleRunCleanupCoordinator(
     writeResetLifecycleLog('persistence-generation-invalidated');
     pendingRendererLock = false;
     pendingWindowActivation = false;
-    resetRendererApplicationMenuState();
+    resetRendererLockCommandState();
 
     realPersistenceStore.lockCoreDocument();
     demoPersistenceStore.lockCoreDocument();
@@ -1379,7 +1438,18 @@ function createWindow() {
   });
   writeStartupStage('window-created');
   mainWindow = createdWindow;
-  resetRendererApplicationMenuState();
+  resetRendererLockCommandState();
+
+  if (process.platform !== 'darwin') {
+    createdWindow.webContents.on('before-input-event', (event, input) => {
+      if (!isApplicationLockShortcut(process.platform, input)) {
+        return;
+      }
+
+      event.preventDefault();
+      requestRendererLockCommand();
+    });
+  }
 
   if (process.env.NETRAFLOW_E2E_CLEAR_ALL === '1') {
     createdWindow.webContents.once('did-finish-load', () => {
@@ -1523,7 +1593,7 @@ function createWindow() {
       process.platform,
       app.isPackaged
     );
-    resetRendererApplicationMenuState();
+    resetRendererLockCommandState();
 
     if (shouldResumeAppQuit) {
       setTimeout(() => {
@@ -1532,7 +1602,7 @@ function createWindow() {
     }
   });
   createdWindow.webContents.on('did-start-loading', () => {
-    resetRendererApplicationMenuState();
+    resetRendererLockCommandState();
   });
   createdWindow.webContents.on('did-finish-load', () => {
     if (!pendingRendererLock || !mainWindow || !mainWindowFirstFrameReady) {
@@ -1636,9 +1706,9 @@ if (gotSingleInstanceLock) {
       appName: APP_NAME,
       menu: Menu,
       onOpenSettings: requestMacosApplicationMenuSettings,
-      onLock: requestMacosApplicationMenuLock,
-      isWindowReady: isMacosApplicationMenuWindowReady,
-      isLockEnabled: isMacosApplicationMenuLockEnabled,
+      onLock: requestRendererLockCommand,
+      isWindowReady: isRendererLockCommandWindowReady,
+      isLockEnabled: isRendererLockCommandEnabled,
       getPreferredLanguages: () => macosMenuPreferredLanguages,
       getFallbackLanguages: () => macosMenuFallbackLanguages
     });

@@ -1,4 +1,5 @@
 import type { MenuItemConstructorOptions } from 'electron';
+import { LOCK_ACCELERATOR } from './applicationLockShortcut.js';
 
 type ApplicationMenuAdapter<TMenu> = {
   buildFromTemplate: (template: MenuItemConstructorOptions[]) => TMenu;
@@ -172,7 +173,7 @@ export const createMacosApplicationMenuTemplate = (
         {
           id: 'mac-menu-lock',
           label: labels.lock(appName),
-          accelerator: 'Shift+Command+L',
+          accelerator: LOCK_ACCELERATOR,
           enabled: isLockEnabled(),
           click: onLock
         },

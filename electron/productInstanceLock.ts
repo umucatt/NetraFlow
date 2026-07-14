@@ -6,12 +6,14 @@ export const PRODUCT_INSTANCE_PIPE_PATH =
 const PRODUCT_INSTANCE_SOCKET_DIRECTORY = '/tmp';
 const PRODUCT_INSTANCE_SOCKET_FILE_PREFIX = 'netraflow-';
 const PRODUCT_INSTANCE_SOCKET_FILE_SUFFIX = '.sock';
-const PRODUCT_INSTANCE_MESSAGE = 'activate';
+const PRODUCT_INSTANCE_ACTIVATE_MESSAGE = 'activate';
+const PRODUCT_INSTANCE_LOCK_MESSAGE = 'lock';
 const PRODUCT_INSTANCE_ACTIVE_RESPONSE = 'state:active';
 const PRODUCT_INSTANCE_RESETTING_RESPONSE = 'state:resetting';
 const RESETTING_WAIT_TIMEOUT_MS = 15_000;
 
 export type ProductInstanceState = 'active' | 'resetting';
+export type ProductInstanceMessage = 'activate' | 'lock';
 
 export type InstanceLockPathOptions = {
   platform?: NodeJS.Platform;
@@ -47,7 +49,9 @@ export type ProductInstanceCoordinatorOptions = {
   expectedSocketPath?: string;
   platform?: NodeJS.Platform;
   getuid?: () => number | undefined;
+  message?: ProductInstanceMessage;
   onActivate?: () => void;
+  onLock?: () => void;
   getState?: () => ProductInstanceState;
   onResettingWaiter?: () => void;
   logger?: Pick<Console, 'error'>;
@@ -64,7 +68,9 @@ export const createProductInstanceCoordinator = ({
   expectedSocketPath = getInstanceLockPath(),
   platform = process.platform,
   getuid = process.getuid,
+  message = 'activate',
   onActivate,
+  onLock,
   getState = () => 'active',
   onResettingWaiter,
   logger = console
@@ -102,7 +108,9 @@ export const createProductInstanceCoordinator = ({
       socket.setTimeout(1000);
       socket.once('connect', () => {
         didConnect = true;
-        socket.write(`${PRODUCT_INSTANCE_MESSAGE}\n`);
+        socket.write(
+          `${message === 'lock' ? PRODUCT_INSTANCE_LOCK_MESSAGE : PRODUCT_INSTANCE_ACTIVATE_MESSAGE}\n`
+        );
       });
       socket.on('data', (chunk) => {
         response += String(chunk);
@@ -166,15 +174,27 @@ export const createProductInstanceCoordinator = ({
         socket.once('close', () => connectedSockets.delete(socket));
         socket.setEncoding('utf8');
         let handled = false;
-        socket.on('data', (message) => {
-          if (!handled && message.includes(PRODUCT_INSTANCE_MESSAGE)) {
+        let requestBuffer = '';
+        socket.on('data', (requestChunk) => {
+          requestBuffer += requestChunk;
+          const requestLine = requestBuffer.split('\n', 1)[0];
+          if (
+            !handled &&
+            requestBuffer.includes('\n') &&
+            (requestLine === PRODUCT_INSTANCE_ACTIVATE_MESSAGE ||
+              requestLine === PRODUCT_INSTANCE_LOCK_MESSAGE)
+          ) {
             handled = true;
             const state = getState();
             socket.write(`${state === 'resetting' ? PRODUCT_INSTANCE_RESETTING_RESPONSE : PRODUCT_INSTANCE_ACTIVE_RESPONSE}\n`);
             if (state === 'active') socket.end();
             if (state === 'resetting') onResettingWaiter?.();
             if (state === 'active') {
-            onActivate?.();
+              if (requestLine === PRODUCT_INSTANCE_LOCK_MESSAGE) {
+                onLock?.();
+              } else {
+                onActivate?.();
+              }
             }
           }
         });

@@ -30,6 +30,7 @@ type ConfirmationRequest = {
 
 type SecuritySettingsControllerOptions = {
   globalSettings: GlobalSettings;
+  applicationLockAllowed: boolean;
   initialCoreProtectionLocked: boolean;
   autoBackupEnabled: boolean;
   getCurrentCoreDocument: () => CoreDocument;
@@ -62,15 +63,6 @@ type SecuritySettingsControllerOptions = {
   }) => void;
   showToast: (message: string, tone?: 'info' | 'success' | 'error') => string;
 };
-
-const PASSWORD_TRY_LEVELS = [
-  '密码强度：很弱',
-  '密码强度：较弱',
-  '密码强度：一般',
-  '密码强度：较强',
-  '密码强度：强',
-  '密码强度：很强'
-] as const;
 
 const isExternalCoreModificationError = (error: unknown) => {
   if (typeof error !== 'object' || error === null) {
@@ -139,43 +131,54 @@ export const resolveSnapshotEncryptionChangeAction = ({
   return 'noop';
 };
 
-const estimatePasswordTryLevel = (password: string) => {
-  const length = password.length;
-  const classes = [
-    /[a-z]/.test(password),
-    /[A-Z]/.test(password),
-    /\d/.test(password),
-    /[^A-Za-z0-9]/.test(password)
-  ].filter(Boolean).length;
-  const repeated = /^(.{1,4})\1+$/.test(password);
-  const sequential = 'abcdefghijklmnopqrstuvwxyz0123456789'.includes(password.toLowerCase());
-  const score = length + classes * 4 - (repeated ? 8 : 0) - (sequential ? 6 : 0);
+export type ApplicationLockRequestResolution =
+  | 'ignore'
+  | 'show-password-protection-disabled'
+  | 'lock';
 
-  if (score < 10) {
-    return PASSWORD_TRY_LEVELS[0];
+export const resolveApplicationLockRequest = ({
+  applicationLockAllowed,
+  passwordProtectionEnabled,
+  isLocked,
+  isUnlocking,
+  lockRequestInProgress
+}: {
+  applicationLockAllowed: boolean;
+  passwordProtectionEnabled: boolean;
+  isLocked: boolean;
+  isUnlocking: boolean;
+  lockRequestInProgress: boolean;
+}): ApplicationLockRequestResolution => {
+  if (!applicationLockAllowed || isLocked || isUnlocking || lockRequestInProgress) {
+    return 'ignore';
   }
 
-  if (score < 16) {
-    return PASSWORD_TRY_LEVELS[1];
+  return passwordProtectionEnabled ? 'lock' : 'show-password-protection-disabled';
+};
+
+export const executeApplicationLockRequest = (
+  resolution: ApplicationLockRequestResolution,
+  {
+    onPasswordProtectionDisabled,
+    onLock
+  }: {
+    onPasswordProtectionDisabled: () => void;
+    onLock: () => void;
+  }
+) => {
+  if (resolution === 'show-password-protection-disabled') {
+    onPasswordProtectionDisabled();
+    return;
   }
 
-  if (score < 22) {
-    return PASSWORD_TRY_LEVELS[2];
+  if (resolution === 'lock') {
+    onLock();
   }
-
-  if (score < 30) {
-    return PASSWORD_TRY_LEVELS[3];
-  }
-
-  if (score < 38) {
-    return PASSWORD_TRY_LEVELS[4];
-  }
-
-  return PASSWORD_TRY_LEVELS[5];
 };
 
 export function useSecuritySettingsController({
   globalSettings,
+  applicationLockAllowed,
   initialCoreProtectionLocked,
   autoBackupEnabled: _autoBackupEnabled,
   getCurrentCoreDocument,
@@ -192,6 +195,7 @@ export function useSecuritySettingsController({
 }: SecuritySettingsControllerOptions) {
   const autoLockTimerRef = useRef<number | null>(null);
   const unlockExitAnimationFrameRef = useRef<number | null>(null);
+  const lockRequestHandlingRef = useRef(false);
   const [lockScreenState, setLockScreenState] = useState<LockScreenState>(
     () =>
       shouldInitializeSecurityLocked({
@@ -255,22 +259,51 @@ export function useSecuritySettingsController({
     }
 
     return api.onNetraFlowLock(() => {
-      if (!globalSettings.passwordProtectionEnabled) {
-        showToast('请先启用登录密码保护', 'info');
+      const resolution = resolveApplicationLockRequest({
+        applicationLockAllowed,
+        passwordProtectionEnabled: globalSettings.passwordProtectionEnabled,
+        isLocked,
+        isUnlocking,
+        lockRequestInProgress: lockRequestHandlingRef.current
+      });
+
+      if (resolution === 'ignore') {
+        api.completeLockRequest?.();
         return;
       }
 
-      lockCoreDocument();
-      setUnlockPasswordInput('');
-      setUnlockError('');
-      if (unlockExitAnimationFrameRef.current !== null) {
-        window.cancelAnimationFrame(unlockExitAnimationFrameRef.current);
-        unlockExitAnimationFrameRef.current = null;
+      lockRequestHandlingRef.current = true;
+
+      try {
+        executeApplicationLockRequest(resolution, {
+          onPasswordProtectionDisabled: () => {
+            showToast('未启用登录密码保护', 'info');
+          },
+          onLock: () => {
+            lockCoreDocument();
+            setUnlockPasswordInput('');
+            setUnlockError('');
+            if (unlockExitAnimationFrameRef.current !== null) {
+              window.cancelAnimationFrame(unlockExitAnimationFrameRef.current);
+              unlockExitAnimationFrameRef.current = null;
+            }
+            setIsUnlocking(false);
+            setLockScreenState('locked');
+          }
+        });
+      } finally {
+        lockRequestHandlingRef.current = false;
+        api.completeLockRequest?.();
       }
-      setIsUnlocking(false);
-      setLockScreenState('locked');
     });
-  }, [globalSettings.passwordProtectionEnabled, lockCoreDocument, showToast]);
+  }, [
+    applicationLockAllowed,
+    globalSettings.passwordProtectionEnabled,
+    isLocked,
+    isUnlocking,
+    lockCoreDocument,
+    showToast
+  ]);
 
   useEffect(() => {
     const api = window.electronAPI ?? window.electronWindow;
@@ -280,14 +313,23 @@ export function useSecuritySettingsController({
     }
 
     api.setLockMenuState({
-      canLock:
-        globalSettings.passwordProtectionEnabled && !isLocked && !isUnlocking
+      rendererReady: true,
+      applicationLockAllowed,
+      passwordProtectionEnabled: globalSettings.passwordProtectionEnabled,
+      isLocked,
+      isUnlocking
     });
 
     return () => {
-      api.setLockMenuState?.({ canLock: false });
+      api.setLockMenuState?.({
+        rendererReady: false,
+        applicationLockAllowed: false,
+        passwordProtectionEnabled: globalSettings.passwordProtectionEnabled,
+        isLocked,
+        isUnlocking
+      });
     };
-  }, [globalSettings.passwordProtectionEnabled, isLocked, isUnlocking]);
+  }, [applicationLockAllowed, globalSettings.passwordProtectionEnabled, isLocked, isUnlocking]);
 
   useEffect(() => {
     if (!globalSettings.passwordProtectionEnabled || isLocked) {
@@ -561,7 +603,6 @@ export function useSecuritySettingsController({
             : currentSettings.snapshotEncryptionEnabled
       }));
       resetPasswordEditor();
-      showToast(estimatePasswordTryLevel(newPasswordInput), 'info');
     } catch (error) {
       if (isExternalCoreModificationError(error)) {
         setIsSavingPassword(false);
@@ -588,7 +629,6 @@ export function useSecuritySettingsController({
                     : currentSettings.snapshotEncryptionEnabled
               }));
               resetPasswordEditor();
-              showToast(estimatePasswordTryLevel(newPasswordInput), 'info');
             } catch (retryError) {
               if (isExternalCoreModificationError(retryError)) {
                 showCoreIntegrityDialog({
@@ -611,7 +651,6 @@ export function useSecuritySettingsController({
                           : currentSettings.snapshotEncryptionEnabled
                     }));
                     resetPasswordEditor();
-                    showToast(estimatePasswordTryLevel(newPasswordInput), 'info');
                   }
                 });
                 return;

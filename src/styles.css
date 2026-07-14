@@ -1763,13 +1763,19 @@
   align-items: center;
 }
 
+.asset-overview__brand-logo {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+}
+
 .about-netraflow__summary > div {
   display: grid;
   align-content: center;
   gap: 2px;
 }
 
-.about-netraflow__summary > img {
+.about-netraflow__summary > .netraflow-logo {
   width: 64px;
   height: 64px;
   display: block;
@@ -2337,6 +2343,28 @@
   box-shadow: var(--shadow-popover);
 }
 
+.password-editor-dialog__fields {
+  display: grid;
+  gap: 16px;
+}
+
+.password-editor-dialog__new-password {
+  display: grid;
+  gap: 7px;
+}
+
+.password-editor-dialog__strength,
+.password-protection-disable-dialog__description {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.password-protection-disable-dialog__description {
+  margin-bottom: 14px;
+  font-size: 0.94rem;
+}
+
 .modal-message {
   display: grid;
   gap: 8px;
@@ -2662,7 +2690,7 @@
   align-items: center;
 }
 
-.lock-screen__brand img {
+.lock-screen__brand .netraflow-logo {
   width: 48px;
   height: 48px;
   display: block;

@@ -11,7 +11,6 @@ import type { WindowFrameProps } from './windowFrameTypes';
 export function WindowFrame({
   children,
   className,
-  productIconPath,
   productName,
   contentInert = false,
   ...frameProps
@@ -36,7 +35,6 @@ export function WindowFrame({
       {showTitleBar ? (
         <WindowTitleBar
           controller={controller}
-          productIconPath={productIconPath}
           productName={productName}
           showBrand={showBrand}
           showWindowControls={showWindowControls}

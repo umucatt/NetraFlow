@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { getPlatformWindowOptions } from './windowPlatformOptions.js';
+import { getAppIconPath, getPlatformWindowOptions } from './windowPlatformOptions.js';
 
 const posixAppResourceRoot = '/opt/netraflow/resources/app.asar';
 const windowsAppResourceRoot = 'C:\\Program Files\\NetraFlow\\resources\\app.asar';
@@ -19,6 +19,10 @@ test('Linux BrowserWindow uses the PNG icon and leaves the native frame enabled'
 });
 
 test('Windows and macOS retain their established window options', () => {
+  assert.equal(
+    getAppIconPath({ platform: 'win32', appResourceRoot: windowsAppResourceRoot }),
+    `${windowsAppResourceRoot}\\public\\icons\\netraflow.ico`
+  );
   assert.deepEqual(getPlatformWindowOptions({ platform: 'win32', appResourceRoot: windowsAppResourceRoot }), {
     icon: `${windowsAppResourceRoot}\\public\\icons\\netraflow.ico`,
     frame: false
@@ -26,4 +30,14 @@ test('Windows and macOS retain their established window options', () => {
   assert.deepEqual(getPlatformWindowOptions({ platform: 'darwin', appResourceRoot: posixAppResourceRoot }), {
     titleBarStyle: 'hiddenInset'
   });
+});
+
+test('Windows BrowserWindow resolves only the controlled multi-layer ICO', () => {
+  const iconPath = getAppIconPath({
+    platform: 'win32',
+    appResourceRoot: windowsAppResourceRoot
+  });
+
+  assert.equal(iconPath.endsWith('\\public\\icons\\netraflow.ico'), true);
+  assert.equal(/default_app|electron\.ico/i.test(iconPath), false);
 });

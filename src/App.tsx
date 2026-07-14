@@ -237,7 +237,6 @@ import {
 import { useSnapshotBackupController } from './features/backup/useSnapshotBackupController';
 import { useSecuritySettingsController } from './features/security/useSecuritySettingsController';
 import { useUserSettingsFileController } from './features/userSettings/useUserSettingsFileController';
-import { getAppIconResource } from './app/branding/appIcon';
 import {
   resolveNormalAppFirstFrameState,
   useNormalAppFirstFrameReady
@@ -439,8 +438,6 @@ const PRODUCT_NAME_EN = 'NetraFlow';
 const PRODUCT_NAME_ZH = '净流';
 
 const PRODUCT_TAGLINE = '资产变化记录工具';
-
-const PRODUCT_ICON_PATH = getAppIconResource(window.appInfo?.platform);
 
 const APP_VERSION =
 
@@ -2661,6 +2658,7 @@ function App() {
     resetSecurityState
   } = useSecuritySettingsController({
     globalSettings,
+    applicationLockAllowed: firstWelcomeStage === null,
     initialCoreProtectionLocked: startupPersistenceSnapshot.coreProtection.locked,
     autoBackupEnabled: autoBackupSettings.enabled,
     getCurrentCoreDocument: () =>
@@ -6184,6 +6182,12 @@ function App() {
 
   globalSearchControllerRef.current = globalSearch;
 
+  useEffect(() => {
+    if (isLocked) {
+      globalSearch.closeSearch();
+    }
+  }, [globalSearch.closeSearch, isLocked]);
+
   const mainPageKey = flashNote.isOpen
 
     ? 'flash-note'
@@ -7253,7 +7257,6 @@ function App() {
     selectedExampleTemplateId,
     isExampleMode,
     appVersion: window.appInfo?.version ?? APP_VERSION,
-    productIconPath: PRODUCT_ICON_PATH,
     productNameZh: PRODUCT_NAME_ZH,
     productNameEn: PRODUCT_NAME_EN,
     autoLockMinutesInput,
@@ -7332,7 +7335,6 @@ function App() {
       draggingGroupId,
       groupDropIndicator,
       legendColorByName: homeGroupLegendColorByName,
-      productIconPath: PRODUCT_ICON_PATH,
       productNameZh: PRODUCT_NAME_ZH,
       productNameEn: PRODUCT_NAME_EN,
       productTagline: PRODUCT_TAGLINE,
@@ -7635,7 +7637,6 @@ function App() {
 
   const lockScreenLayerProps = createLockScreenLayerProps({
     state: lockScreenState,
-    productIconPath: PRODUCT_ICON_PATH,
     password: unlockPasswordInput,
     error: unlockError,
     isUnlocking,
@@ -7669,7 +7670,6 @@ function App() {
 
     <>
     <WindowFrame
-      productIconPath={PRODUCT_ICON_PATH}
       productName={window.appInfo?.name ?? PRODUCT_NAME_EN}
       contentInert={isLocked}
       data-theme-mode={globalSettings.themeMode}

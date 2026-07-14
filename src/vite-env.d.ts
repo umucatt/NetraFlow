@@ -43,7 +43,14 @@ type ElectronWindowApi = {
   }) => Promise<{ filePath: string }>;
   onNetraFlowLock?: (listener: () => void) => () => void;
   onNetraFlowOpenSettings?: (listener: () => void) => () => void;
-  setLockMenuState?: (state: { canLock: boolean }) => void;
+  setLockMenuState?: (state: {
+    rendererReady: boolean;
+    applicationLockAllowed: boolean;
+    passwordProtectionEnabled: boolean;
+    isLocked: boolean;
+    isUnlocking: boolean;
+  }) => void;
+  completeLockRequest?: () => void;
   onCloseRequest?: (listener: () => void) => () => void;
   onMaximizedChange: (listener: (isMaximized: boolean) => void) => () => void;
 };
