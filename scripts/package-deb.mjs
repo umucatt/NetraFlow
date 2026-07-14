@@ -91,7 +91,6 @@ const directorySize = (targetPath) => {
 };
 
 assertDebBuildHost();
-if (version !== '0.9.9') throw new Error(`Expected package.json version 0.9.9; received ${version}.`);
 for (const [requiredPath, label] of [
   [path.join(rootDir, 'dist', 'index.html'), 'Renderer build output'],
   [builtMainPath, 'Electron main build output'],

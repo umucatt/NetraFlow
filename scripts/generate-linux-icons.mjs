@@ -1,10 +1,11 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { deflateSync } from 'node:zlib';
 
 const root = path.resolve(import.meta.dirname, '..');
-const sourcePath = path.join(root, 'public', 'icons', 'netraflow.svg');
+const sourcePath = path.join(root, 'src', 'assets', 'brand', 'netraflow-logo.svg');
+const publicSvgPath = path.join(root, 'public', 'icons', 'netraflow.svg');
 const outputDirectory = path.join(root, 'public', 'icons', 'linux');
 const sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256, 512, 1024];
 
@@ -138,6 +139,7 @@ const encodePng = (size, pixels) => {
 };
 
 mkdirSync(outputDirectory, { recursive: true });
+copyFileSync(sourcePath, publicSvgPath);
 readFileSync(sourcePath);
 for (const size of sizes) {
   writeFileSync(path.join(outputDirectory, `${size}x${size}.png`), encodePng(size, resize(size)));
