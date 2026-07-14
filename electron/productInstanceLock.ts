@@ -79,6 +79,30 @@ export const createProductInstanceCoordinator = ({
   let ownsSocket = false;
   const connectedSockets = new Set<net.Socket>();
 
+  const inspectPosixEndpoint = async () => {
+    if (pipePath !== expectedSocketPath) return { state: 'unsafe' as const };
+
+    let uid: number;
+    try {
+      uid = getPosixUserId(getuid);
+    } catch {
+      return { state: 'unsafe' as const };
+    }
+
+    try {
+      const status = await lstat(pipePath);
+      if (status.isSymbolicLink() || !status.isSocket() || status.uid !== uid) {
+        return { state: 'unsafe' as const };
+      }
+      return { state: 'socket' as const };
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      return code === 'ENOENT'
+        ? { state: 'missing' as const }
+        : { state: 'error' as const, code };
+    }
+  };
+
   const connectToExisting = () =>
     new Promise<{
       connected: boolean;
@@ -144,16 +168,29 @@ export const createProductInstanceCoordinator = ({
   };
 
   const removeVerifiedStaleSocket = async () => {
-    if (platform === 'win32' || pipePath !== expectedSocketPath) return false;
-    const uid = getPosixUserId(getuid);
+    if (platform === 'win32') return false;
+
+    const endpoint = await inspectPosixEndpoint();
+    if (endpoint.state === 'missing') return true;
+    if (endpoint.state === 'unsafe') return false;
+    if (endpoint.state === 'error') {
+      logger.error('[NetraFlow single-instance] Failed to inspect instance socket.', {
+        code: endpoint.code
+      });
+      return false;
+    }
 
     try {
-      const status = await lstat(pipePath);
-      if (!status.isSocket() || status.isSymbolicLink() || status.uid !== uid) return false;
       await unlink(pipePath);
       return true;
     } catch (error) {
-      return (error as NodeJS.ErrnoException).code === 'ENOENT';
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT') {
+        logger.error('[NetraFlow single-instance] Failed to remove stale instance socket.', {
+          code
+        });
+      }
+      return code === 'ENOENT';
     }
   };
 
@@ -167,7 +204,7 @@ export const createProductInstanceCoordinator = ({
     }
   };
 
-  const listen = () =>
+  const listenWithoutPosixPreflight = () =>
     new Promise<{ listening: boolean; code?: string }>((resolve) => {
       const nextServer = net.createServer((socket) => {
         connectedSockets.add(socket);
@@ -218,10 +255,21 @@ export const createProductInstanceCoordinator = ({
       });
     });
 
+  const listen = async () => {
+    if (platform === 'win32') return listenWithoutPosixPreflight();
+
+    const endpoint = await inspectPosixEndpoint();
+    if (endpoint.state === 'missing') return listenWithoutPosixPreflight();
+    if (endpoint.state === 'socket') return { listening: false, code: 'EADDRINUSE' };
+    if (endpoint.state === 'unsafe') return { listening: false, code: 'EUNSAFEENDPOINT' };
+    return { listening: false, code: endpoint.code };
+  };
+
   const takeOverAfterRelease = async () => {
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const takeover = await listen();
       if (takeover.listening) return true;
+      if (takeover.code === 'EUNSAFEENDPOINT') return false;
       if (takeover.code !== 'EADDRINUSE') {
         logger.error('[NetraFlow single-instance] Failed to take over after reset.', {
           code: takeover.code
@@ -230,7 +278,9 @@ export const createProductInstanceCoordinator = ({
       }
       const winner = await connectToExisting();
       if (winner.connected) return false;
-      if (winner.code !== 'ECONNREFUSED' && winner.code !== 'ENOENT' && winner.code !== undefined) {
+      if (winner.code === 'ECONNREFUSED') {
+        if (!(await removeVerifiedStaleSocket())) return false;
+      } else if (winner.code !== 'ENOENT' && winner.code !== undefined) {
         return false;
       }
       await new Promise((resolve) => setTimeout(resolve, Math.min(5 + attempt * 2, 25)));
@@ -242,6 +292,7 @@ export const createProductInstanceCoordinator = ({
   const acquire = async () => {
     const initial = await listen();
     if (initial.listening) return true;
+    if (initial.code === 'EUNSAFEENDPOINT') return false;
     if (initial.code !== 'EADDRINUSE') {
       logger.error('[NetraFlow single-instance] Failed to acquire product instance lock.', {
         code: initial.code
@@ -298,15 +349,7 @@ export const createProductInstanceCoordinator = ({
       currentServer.close(async () => {
         if (ownsSocket && platform !== 'win32' && pipePath === expectedSocketPath) {
           ownsSocket = false;
-          try {
-            await unlink(pipePath);
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-              logger.error('[NetraFlow single-instance] Failed to clean instance socket.', {
-                code: (error as NodeJS.ErrnoException).code
-              });
-            }
-          }
+          await removeVerifiedStaleSocket();
         }
         resolve();
       });

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdtemp, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import test from 'node:test';
 
@@ -226,9 +226,20 @@ test('POSIX stale socket recovery validates type owner and exact path', async (t
   }
   const directory = await mkdtemp(path.join(process.cwd(), '.tmp-tests', 'netraflow-lock-stale-'));
   const socketPath = path.join(directory, 'instance.sock');
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  const coordinators: ReturnType<typeof createProductInstanceCoordinator>[] = [];
+  let child: ReturnType<typeof spawn> | undefined;
+  t.after(async () => {
+    const runningChild = child;
+    if (runningChild && runningChild.exitCode === null && runningChild.signalCode === null) {
+      const exited = new Promise<void>((resolve) => runningChild.once('exit', () => resolve()));
+      runningChild.kill('SIGKILL');
+      await exited;
+    }
+    await Promise.allSettled(coordinators.map((coordinator) => coordinator.release()));
+    await rm(directory, { recursive: true, force: true });
+  });
 
-  const child = spawn(process.execPath, ['-e', `
+  child = spawn(process.execPath, ['-e', `
     const net = require('node:net');
     const server = net.createServer();
     server.on('error', (error) => { process.stdout.write('unsupported:' + error.code + '\\n'); process.exit(0); });
@@ -246,27 +257,59 @@ test('POSIX stale socket recovery validates type owner and exact path', async (t
   assert.equal(childStatus, 'ready');
   child.kill('SIGKILL');
   await new Promise<void>((resolve) => child.once('exit', () => resolve()));
+  child = undefined;
+
+  const wrongOwner = createProductInstanceCoordinator({
+    pipePath: socketPath,
+    expectedSocketPath: socketPath,
+    getuid: () => process.getuid!() + 1
+  });
+  coordinators.push(wrongOwner);
+  assert.equal(await wrongOwner.acquire(), false);
+  assert.equal((await lstat(socketPath)).isSocket(), true);
 
   const recovered = createProductInstanceCoordinator({
     pipePath: socketPath,
     expectedSocketPath: socketPath
   });
+  coordinators.push(recovered);
   assert.equal(await recovered.acquire(), true);
   await recovered.release();
+  await recovered.release();
 
-  await writeFile(socketPath, 'not a socket');
+  const regularFileContents = 'not a socket';
+  await writeFile(socketPath, regularFileContents);
   const regularFile = createProductInstanceCoordinator({
     pipePath: socketPath,
     expectedSocketPath: socketPath
   });
+  coordinators.push(regularFile);
   assert.equal(await regularFile.acquire(), false);
+  assert.equal((await lstat(socketPath)).isFile(), true);
+  assert.equal(await readFile(socketPath, 'utf8'), regularFileContents);
   await rm(socketPath);
 
-  await symlink(path.join(directory, 'missing'), socketPath);
+  const symbolicLinkTarget = path.join(directory, 'target');
+  const symbolicLinkTargetContents = 'must remain unchanged';
+  await writeFile(symbolicLinkTarget, symbolicLinkTargetContents);
+  await symlink(symbolicLinkTarget, socketPath);
   const symbolicLink = createProductInstanceCoordinator({
     pipePath: socketPath,
     expectedSocketPath: socketPath
   });
+  coordinators.push(symbolicLink);
   assert.equal(await symbolicLink.acquire(), false);
+  assert.equal((await lstat(socketPath)).isSymbolicLink(), true);
+  assert.equal(await readlink(socketPath), symbolicLinkTarget);
+  assert.equal(await readFile(symbolicLinkTarget, 'utf8'), symbolicLinkTargetContents);
   await rm(socketPath);
+
+  const mismatchedSocketPath = path.join(directory, 'mismatched.sock');
+  const mismatched = createProductInstanceCoordinator({
+    pipePath: mismatchedSocketPath,
+    expectedSocketPath: socketPath
+  });
+  coordinators.push(mismatched);
+  assert.equal(await mismatched.acquire(), false);
+  await assert.rejects(lstat(mismatchedSocketPath), { code: 'ENOENT' });
 });
