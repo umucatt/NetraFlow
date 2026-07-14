@@ -280,6 +280,7 @@ import {
   resolveSearchNavigationTarget
 } from './search/searchNavigationLogic';
 import { useGlobalSearchController } from './search/useGlobalSearchController';
+import type { SearchIndexConfig } from './search/searchIndexConfig';
 
 import type {
   Account,
@@ -306,7 +307,6 @@ import type {
 } from './features/charts';
 import type { ExampleTemplateId } from './exampleData';
 import type {
-  CreateSearchIndexOptions,
   SearchNavigationTarget
 } from './search/searchTypes';
 import type {
@@ -6145,17 +6145,26 @@ function App() {
     backupRenderKey: backupRecords.length
   });
 
-  const searchIndexOptions = useMemo<CreateSearchIndexOptions>(
+  const searchIndexConfig = useMemo<SearchIndexConfig>(
     () => ({
-      getAccountNatureLabel,
-      getHistoryTypeLabel,
-      getBackupMethodLabel,
-      getAccountMark,
-      getHistoryChangeLabel: (record) => getAmountChange(record).label,
-      formatMoney,
-      formatShortTime: formatHistoryRecordDate,
-      formatPreciseBackupTime,
-      settingsItems: GLOBAL_SETTINGS_SEARCH_ITEMS
+      locale: 'zh-CN',
+      currency: 'CNY',
+      accountNatureLabels: {
+        asset: getAccountNatureLabel('asset'),
+        receivable: getAccountNatureLabel('receivable'),
+        liability: getAccountNatureLabel('liability')
+      },
+      historyTypeLabels: {
+        创建: getHistoryTypeLabel('创建'),
+        删除: getHistoryTypeLabel('删除'),
+        修改: getHistoryTypeLabel('修改'),
+        归档: getHistoryTypeLabel('归档'),
+        重新启用: getHistoryTypeLabel('重新启用')
+      },
+      backupMethodLabels: {
+        manual: getBackupMethodLabel('manual'),
+        auto: getBackupMethodLabel('auto')
+      }
     }),
     []
   );
@@ -6164,7 +6173,8 @@ function App() {
     groups,
     historyRecords: sortedHistory,
     backupRecords,
-    createIndexOptions: searchIndexOptions,
+    searchIndexConfig,
+    settingsItems: GLOBAL_SETTINGS_SEARCH_ITEMS,
     searchLogicMode: globalSettings.searchLogicMode,
     createNavigationSnapshot: createSearchNavigationSnapshot,
     restoreNavigationSnapshot: restoreSearchNavigationSnapshot,
@@ -7094,14 +7104,10 @@ function App() {
 
 
       if (globalSearch.isOpen) {
-
-        event.preventDefault();
-
-        event.stopPropagation();
-
-
-
-        globalSearch.handleEscape();
+        if (globalSearch.handleEscape(event.isComposing)) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
 
 
 

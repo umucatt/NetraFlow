@@ -15,6 +15,7 @@ import type {
   SearchIndexedTextField,
   SearchLogicMode,
   SearchMatchedAmount,
+  SearchNavigationTarget,
   SearchPrimaryMatch,
   SearchResultHighlights,
   SearchResultCategory,
@@ -22,7 +23,7 @@ import type {
   SnapshotSearchResult
 } from './searchTypes';
 import { parseSearchIntent } from './searchIntent';
-import { getNormalizedTextIndex, getPinyinParts } from './searchNormalize';
+import { createSearchTextIndexer, type SearchTextIndexer } from './searchNormalize';
 import {
   applySearchTypeAdjustment,
   compareSearchResults,
@@ -45,19 +46,26 @@ type HistoryBalanceSignLookup = {
   accountIds: Set<string>;
   accountNames: Set<string>;
 };
+type HistoryAmountDisplay = {
+  delta: string;
+  balanceBefore: string;
+  balanceAfter: string;
+  balanceRange: string;
+};
 
 const createIndexedTextField = (
   value: string | null | undefined,
   role: SearchIndexedTextField['role'],
   weight: number,
-  inferredKind?: SearchIndexedTextField['inferredKind']
+  inferredKind: SearchIndexedTextField['inferredKind'] | undefined,
+  textIndexer: SearchTextIndexer
 ): SearchIndexedTextField => ({
   value,
   role,
   weight,
   inferredKind,
-  index: getNormalizedTextIndex(value),
-  pinyin: getPinyinParts(String(value ?? ''))
+  index: textIndexer.getNormalizedTextIndex(value),
+  pinyin: textIndexer.getPinyinParts(String(value ?? ''))
 });
 
 const getTopScore = (results: Array<{ score: number }>) => results[0]?.score ?? 0;
@@ -144,22 +152,29 @@ const getResultMatchFields = (
 const createSourceText = (record: HistoryRecord) =>
   record.relatedTime ? '汇总导入' : record.note?.includes('闪记') ? '闪记' : '';
 
-const formatSearchCompactAmount = (amount: number, preserveNegativeSign = false) => {
-  const formattedAmount = new Intl.NumberFormat('zh-CN', {
+const createSearchCompactAmountFormatter = () => {
+  const formatter = new Intl.NumberFormat('zh-CN', {
     maximumFractionDigits: 0,
     minimumFractionDigits: 0
-  }).format(Math.round(Math.abs(amount)));
+  });
 
-  return preserveNegativeSign && amount < 0 ? `-${formattedAmount}` : formattedAmount;
+  return (amount: number, preserveNegativeSign = false) => {
+    const formattedAmount = formatter.format(Math.round(Math.abs(amount)));
+
+    return preserveNegativeSign && amount < 0 ? `-${formattedAmount}` : formattedAmount;
+  };
 };
 
-const formatSearchSignedAmount = (amount: number) => {
+const formatSearchSignedAmount = (
+  amount: number,
+  formatCompactAmount: ReturnType<typeof createSearchCompactAmountFormatter>
+) => {
   if (amount > 0) {
-    return `+${formatSearchCompactAmount(amount)}`;
+    return `+${formatCompactAmount(amount)}`;
   }
 
   if (amount < 0) {
-    return `-${formatSearchCompactAmount(amount)}`;
+    return `-${formatCompactAmount(amount)}`;
   }
 
   return '0';
@@ -167,19 +182,21 @@ const formatSearchSignedAmount = (amount: number) => {
 
 const formatSearchBalanceAmount = (
   amount: number | null | undefined,
-  preserveNegativeSign = false
+  preserveNegativeSign = false,
+  formatCompactAmount: ReturnType<typeof createSearchCompactAmountFormatter>
 ) => {
   if (typeof amount !== 'number' || !Number.isFinite(amount)) {
     return '-';
   }
 
-  return formatSearchCompactAmount(amount, preserveNegativeSign);
+  return formatCompactAmount(amount, preserveNegativeSign);
 };
 
 const getHistoryBalanceDisplayText = (
   record: HistoryRecord,
   matchedAmount: number,
-  preserveNegativeSign = false
+  preserveNegativeSign: boolean,
+  formatCompactAmount: ReturnType<typeof createSearchCompactAmountFormatter>
 ) => {
   const beforeAmount = record.beforeAmount;
   const afterAmount = record.afterAmount;
@@ -190,13 +207,14 @@ const getHistoryBalanceDisplayText = (
     typeof afterAmount === 'number' &&
     Number.isFinite(afterAmount)
   ) {
-    return `${formatSearchBalanceAmount(beforeAmount, preserveNegativeSign)} → ${formatSearchBalanceAmount(
+    return `${formatSearchBalanceAmount(beforeAmount, preserveNegativeSign, formatCompactAmount)} → ${formatSearchBalanceAmount(
       afterAmount,
-      preserveNegativeSign
+      preserveNegativeSign,
+      formatCompactAmount
     )}`;
   }
 
-  return formatSearchBalanceAmount(matchedAmount, preserveNegativeSign);
+  return formatSearchBalanceAmount(matchedAmount, preserveNegativeSign, formatCompactAmount);
 };
 
 const getHistoryAccountLookupKey = (groupName: string, accountName: string) =>
@@ -230,7 +248,7 @@ const shouldPreserveHistoryBalanceSign = (
 const getHistoryMatchedAmount = (
   record: HistoryRecord,
   match: SearchScoredTermMatch,
-  amountDisplay: SearchIndexedData['history'][number]['amountDisplay'],
+  amountDisplay: HistoryAmountDisplay,
   defaultValue: string
 ): SearchMatchedAmount | null => {
   if (
@@ -335,6 +353,50 @@ export const createGlobalSearchIndex = (
   options: CreateSearchIndexOptions
 ): SearchIndexedData => {
   const historyBalanceSignLookup = createHistoryBalanceSignLookup(groups);
+  const textIndexer = createSearchTextIndexer();
+  const formatCompactAmount = createSearchCompactAmountFormatter();
+  const accountNatureLabels = new Map<AssetGroupWithAccounts['nature'], string>();
+  const historyTypeLabels = new Map<HistoryRecord['type'], string>();
+  const backupMethodLabels = new Map<BackupRecord['method'], string>();
+  const indexTextField = (
+    value: string | null | undefined,
+    role: SearchIndexedTextField['role'],
+    weight: number,
+    inferredKind?: SearchIndexedTextField['inferredKind']
+  ) => createIndexedTextField(value, role, weight, inferredKind, textIndexer);
+  const getAccountNatureLabel = (nature: AssetGroupWithAccounts['nature']) => {
+    const cached = accountNatureLabels.get(nature);
+
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const label = options.getAccountNatureLabel(nature);
+    accountNatureLabels.set(nature, label);
+    return label;
+  };
+  const getHistoryTypeLabel = (type: HistoryRecord['type']) => {
+    const cached = historyTypeLabels.get(type);
+
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const label = options.getHistoryTypeLabel(type);
+    historyTypeLabels.set(type, label);
+    return label;
+  };
+  const getBackupMethodLabel = (method: BackupRecord['method']) => {
+    const cached = backupMethodLabels.get(method);
+
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const label = options.getBackupMethodLabel(method);
+    backupMethodLabels.set(method, label);
+    return label;
+  };
 
   return {
   accounts: groups.flatMap((group, groupIndex) =>
@@ -352,12 +414,12 @@ export const createGlobalSearchIndex = (
         index: groupIndex * 1000 + accountIndex,
         candidate: {
           textFields: [
-            createIndexedTextField(account.name, 'name', 1),
-            createIndexedTextField(group.name, 'detail', 0.7),
-            createIndexedTextField(options.getAccountNatureLabel(group.nature), 'detail', 0.6),
-            createIndexedTextField(account.alias, 'detail', 0.5),
-            createIndexedTextField(options.getAccountMark(account), 'detail', 0.5),
-            createIndexedTextField(archiveText, 'detail', 0.5)
+            indexTextField(account.name, 'name', 1),
+            indexTextField(group.name, 'detail', 0.7),
+            indexTextField(getAccountNatureLabel(group.nature), 'detail', 0.6),
+            indexTextField(account.alias, 'detail', 0.5),
+            indexTextField(options.getAccountMark(account), 'detail', 0.5),
+            indexTextField(archiveText, 'detail', 0.5)
           ],
           dateFields: [
             { value: account.createdAt, weight: 0.35 },
@@ -381,36 +443,25 @@ export const createGlobalSearchIndex = (
     const afterAmount = record.afterAmount ?? 0;
     const delta = afterAmount - beforeAmount;
     const sourceText = createSourceText(record);
-    const deltaDisplay = formatSearchSignedAmount(delta);
     const preserveBalanceSign = shouldPreserveHistoryBalanceSign(
       historyBalanceSignLookup,
       record
     );
-    const balanceBeforeDisplay = formatSearchBalanceAmount(record.beforeAmount, preserveBalanceSign);
-    const balanceAfterDisplay = formatSearchBalanceAmount(record.afterAmount, preserveBalanceSign);
+    const historyTypeLabel = getHistoryTypeLabel(record.type);
 
     return {
       record,
-      title: `${record.groupName} - ${record.accountName}`,
-      subtitle: `${options.getHistoryTypeLabel(record.type)} · ${options.formatShortTime(
-        record.time
-      )}`,
-      value: deltaDisplay,
-      amountDisplay: {
-        delta: deltaDisplay,
-        balanceBefore: balanceBeforeDisplay,
-        balanceAfter: balanceAfterDisplay,
-        balanceRange: getHistoryBalanceDisplayText(record, afterAmount, preserveBalanceSign)
-      },
+      historyTypeLabel,
+      preserveBalanceSign,
       index,
       candidate: {
         textFields: [
-          createIndexedTextField(record.accountName, 'name', 0.9),
-          createIndexedTextField(record.groupName, 'detail', 0.7),
-          createIndexedTextField(record.type, 'detail', 0.65),
-          createIndexedTextField(options.getHistoryTypeLabel(record.type), 'detail', 0.65),
-          createIndexedTextField(sourceText, 'detail', 0.58),
-          createIndexedTextField(record.note, 'weak', 0.45)
+          indexTextField(record.accountName, 'name', 0.9),
+          indexTextField(record.groupName, 'detail', 0.7),
+          indexTextField(record.type, 'detail', 0.65),
+          indexTextField(historyTypeLabel, 'detail', 0.65),
+          indexTextField(sourceText, 'detail', 0.58),
+          indexTextField(record.note, 'weak', 0.45)
         ],
         dateFields: [
           { value: record.time, weight: 0.78 },
@@ -438,15 +489,15 @@ export const createGlobalSearchIndex = (
   snapshots: snapshots.map((record, index) => ({
     record,
     title: options.formatPreciseBackupTime(record.backedUpAt),
-    subtitle: options.getBackupMethodLabel(record.method),
+    subtitle: getBackupMethodLabel(record.method),
     value: `${record.historyCount} / ${record.incrementCount}`,
     index,
     candidate: {
       textFields: [
-        createIndexedTextField(options.getBackupMethodLabel(record.method), 'name', 0.85),
-        createIndexedTextField('快照', 'name', 0.75),
-        createIndexedTextField('快照记录', 'detail', 0.75),
-        createIndexedTextField(record.method, 'weak', 0.35)
+        indexTextField(getBackupMethodLabel(record.method), 'name', 0.85),
+        indexTextField('快照', 'name', 0.75),
+        indexTextField('快照记录', 'detail', 0.75),
+        indexTextField(record.method, 'weak', 0.35)
       ],
       dateFields: [{ value: record.backedUpAt, weight: 0.8 }],
       amountFields: [
@@ -485,15 +536,15 @@ export const createGlobalSearchIndex = (
       index,
       candidate: {
         textFields: [
-          createIndexedTextField(item.title, 'name', titleWeight),
-          createIndexedTextField(sectionTitle, 'detail', sectionWeight),
-          createIndexedTextField(item.blockTitle, 'detail', 0.52),
-          createIndexedTextField(item.keywords?.join(' '), 'detail', keywordWeight),
-          createIndexedTextField(item.weakKeywords?.join(' '), 'weak', 0.24),
-          createIndexedTextField(item.description, 'weak', 0.34),
-          createIndexedTextField(summary, 'weak', summaryWeight),
-          createIndexedTextField(item.pinyinKeywords?.join(' '), 'weak', pinyinWeight, 'pinyin-full'),
-          createIndexedTextField(item.pinyinInitials?.join(' '), 'weak', pinyinWeight, 'pinyin-initials')
+          indexTextField(item.title, 'name', titleWeight),
+          indexTextField(sectionTitle, 'detail', sectionWeight),
+          indexTextField(item.blockTitle, 'detail', 0.52),
+          indexTextField(item.keywords?.join(' '), 'detail', keywordWeight),
+          indexTextField(item.weakKeywords?.join(' '), 'weak', 0.24),
+          indexTextField(item.description, 'weak', 0.34),
+          indexTextField(summary, 'weak', summaryWeight),
+          indexTextField(item.pinyinKeywords?.join(' '), 'weak', pinyinWeight, 'pinyin-full'),
+          indexTextField(item.pinyinInitials?.join(' '), 'weak', pinyinWeight, 'pinyin-initials')
         ],
         recencyDate: null
       }
@@ -504,7 +555,158 @@ export const createGlobalSearchIndex = (
     history: historyRecords.length,
     snapshot: snapshots.length,
     settings: options.settingsItems?.length ?? 0
+  },
+  formatters: {
+    formatShortTime: options.formatShortTime,
+    formatCompactAmount
   }
+  };
+};
+
+type AccountIndexItem = SearchIndexedData['accounts'][number];
+type HistoryIndexItem = SearchIndexedData['history'][number];
+type SnapshotIndexItem = SearchIndexedData['snapshots'][number];
+type SettingsIndexItem = SearchIndexedData['settings'][number];
+
+const createAccountResult = (
+  item: AccountIndexItem,
+  score: number,
+  scored: SearchScoredCandidate,
+  termCount: number
+): AccountSearchResult => {
+  const display = { title: item.title, subtitle: item.subtitle, value: item.value };
+  const matchedAmount = getGenericMatchedAmount(scored.bestMatch, display.value);
+
+  return {
+    id: item.account.id,
+    category: 'account',
+    group: item.group,
+    account: item.account,
+    target: createAccountSearchTarget(item.group.id, item.account.id),
+    title: display.title,
+    subtitle: display.subtitle,
+    value: display.value,
+    mark: item.mark,
+    score,
+    matchedTermCount: scored.matchedTermCount,
+    ...getResultMatchFields(scored, termCount, display),
+    primaryMatch: getPrimaryMatch(scored.bestMatch, display, matchedAmount),
+    ...(matchedAmount ? { matchedAmount } : {}),
+    index: item.index
+  };
+};
+
+const createHistoryResult = (
+  index: SearchIndexedData,
+  item: HistoryIndexItem,
+  score: number,
+  scored: SearchScoredCandidate,
+  termCount: number
+): HistorySearchResult => {
+  const beforeAmount = item.record.beforeAmount ?? 0;
+  const afterAmount = item.record.afterAmount ?? 0;
+  const defaultValue = formatSearchSignedAmount(
+    afterAmount - beforeAmount,
+    index.formatters.formatCompactAmount
+  );
+  const amountDisplay: HistoryAmountDisplay = {
+    delta: defaultValue,
+    balanceBefore: formatSearchBalanceAmount(
+      item.record.beforeAmount,
+      item.preserveBalanceSign,
+      index.formatters.formatCompactAmount
+    ),
+    balanceAfter: formatSearchBalanceAmount(
+      item.record.afterAmount,
+      item.preserveBalanceSign,
+      index.formatters.formatCompactAmount
+    ),
+    balanceRange: getHistoryBalanceDisplayText(
+      item.record,
+      afterAmount,
+      item.preserveBalanceSign,
+      index.formatters.formatCompactAmount
+    )
+  };
+  const matchedAmount = getHistoryMatchedAmount(
+    item.record,
+    scored.bestMatch,
+    amountDisplay,
+    defaultValue
+  );
+  const display = {
+    title: `${item.record.groupName} - ${item.record.accountName}`,
+    subtitle: `${item.historyTypeLabel} · ${index.formatters.formatShortTime(item.record.time)}`,
+    value: matchedAmount?.displayText ?? defaultValue
+  };
+
+  return {
+    id: item.record.id,
+    category: 'history',
+    record: item.record,
+    icon: 'history',
+    target: createHistorySearchTarget(item.record.id),
+    title: display.title,
+    subtitle: display.subtitle,
+    value: display.value,
+    score,
+    matchedTermCount: scored.matchedTermCount,
+    ...getResultMatchFields(scored, termCount, display),
+    primaryMatch: getPrimaryMatch(scored.bestMatch, display, matchedAmount),
+    ...(matchedAmount ? { matchedAmount } : {}),
+    index: item.index
+  };
+};
+
+const createSnapshotResult = (
+  item: SnapshotIndexItem,
+  score: number,
+  scored: SearchScoredCandidate,
+  termCount: number
+): SnapshotSearchResult => {
+  const display = { title: item.title, subtitle: item.subtitle, value: item.value };
+  const matchedAmount = getGenericMatchedAmount(scored.bestMatch, display.value);
+
+  return {
+    id: item.record.id,
+    category: 'snapshot',
+    record: item.record,
+    icon: 'snapshot',
+    target: createSnapshotSearchTarget(item.record.id),
+    title: display.title,
+    subtitle: display.subtitle,
+    value: display.value,
+    score,
+    matchedTermCount: scored.matchedTermCount,
+    ...getResultMatchFields(scored, termCount, display),
+    primaryMatch: getPrimaryMatch(scored.bestMatch, display, matchedAmount),
+    ...(matchedAmount ? { matchedAmount } : {}),
+    index: item.index
+  };
+};
+
+const createSettingsResult = (
+  item: SettingsIndexItem,
+  score: number,
+  scored: SearchScoredCandidate,
+  termCount: number
+): SettingsSearchResult => {
+  const display = { title: item.title, subtitle: item.subtitle, value: item.value };
+
+  return {
+    id: item.item.id,
+    category: 'settings',
+    item: item.item,
+    icon: 'settings',
+    target: createSettingsSearchTarget(item.item.id, item.item.section, item.item.blockId),
+    title: display.title,
+    subtitle: display.subtitle,
+    value: display.value,
+    score,
+    matchedTermCount: scored.matchedTermCount,
+    ...getResultMatchFields(scored, termCount, display),
+    primaryMatch: getPrimaryMatch(scored.bestMatch, display, null),
+    index: item.index
   };
 };
 
@@ -544,12 +746,354 @@ const makeScoredResults = <TInput, TResult extends GlobalSearchResult>(
     })
     .sort(compareSearchResults);
 
+type SearchMatchSummary = {
+  id: string;
+  category: SearchResultCategory;
+  target: SearchNavigationTarget;
+  score: number;
+  index: number;
+  matchLabel: SearchScoredCandidate['matchLabel'];
+};
+
+type BoundedSearchMatch =
+  | (SearchMatchSummary & {
+      category: 'account';
+      item: AccountIndexItem;
+      scored: SearchScoredCandidate;
+    })
+  | (SearchMatchSummary & {
+      category: 'history';
+      item: HistoryIndexItem;
+      scored: SearchScoredCandidate;
+    })
+  | (SearchMatchSummary & {
+      category: 'snapshot';
+      item: SnapshotIndexItem;
+      scored: SearchScoredCandidate;
+    })
+  | (SearchMatchSummary & {
+      category: 'settings';
+      item: SettingsIndexItem;
+      scored: SearchScoredCandidate;
+    });
+
+const insertBoundedSearchMatch = (
+  matches: BoundedSearchMatch[],
+  match: BoundedSearchMatch,
+  limit: number
+) => {
+  let low = 0;
+  let high = matches.length;
+
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+
+    if (compareSearchResults(match, matches[middle]) < 0) {
+      high = middle;
+    } else {
+      low = middle + 1;
+    }
+  }
+
+  if (low >= limit) {
+    return;
+  }
+
+  matches.splice(low, 0, match);
+
+  if (matches.length > limit) {
+    matches.pop();
+  }
+};
+
+const runBoundedGlobalSearch = (
+  index: SearchIndexedData,
+  query: string,
+  options: RunSearchOptions,
+  intent: ReturnType<typeof parseSearchIntent>
+): GlobalSearchOutput => {
+  const searchLogicMode = options.searchLogicMode ?? 'infer';
+  const fallbackResultLimit = Math.max(1, Math.floor(options.resultLimit ?? 1));
+  const resultLimitsByCategory = {
+    all: Math.max(1, Math.floor(options.resultLimitsByCategory?.all ?? fallbackResultLimit)),
+    account: Math.max(1, Math.floor(options.resultLimitsByCategory?.account ?? fallbackResultLimit)),
+    history: Math.max(1, Math.floor(options.resultLimitsByCategory?.history ?? fallbackResultLimit)),
+    snapshot: Math.max(1, Math.floor(options.resultLimitsByCategory?.snapshot ?? fallbackResultLimit)),
+    settings: Math.max(1, Math.floor(options.resultLimitsByCategory?.settings ?? fallbackResultLimit))
+  };
+  const termCount = intent.terms.length;
+  const allTopMatches: BoundedSearchMatch[] = [];
+  const topMatchesByCategory: Record<SearchResultCategory, BoundedSearchMatch[]> = {
+    account: [],
+    history: [],
+    snapshot: [],
+    settings: []
+  };
+  const diagnostics = options.diagnostics;
+  const matchCounts: Record<SearchResultCategory, number> = {
+    account: 0,
+    history: 0,
+    snapshot: 0,
+    settings: 0
+  };
+  const bestByCategory: Record<SearchResultCategory, SearchMatchSummary | null> = {
+    account: null,
+    history: null,
+    snapshot: null,
+    settings: null
+  };
+
+  const addMatch = (match: BoundedSearchMatch) => {
+    matchCounts[match.category] += 1;
+    const summary: SearchMatchSummary = {
+      id: match.id,
+      category: match.category,
+      target: match.target,
+      score: match.score,
+      index: match.index,
+      matchLabel: match.matchLabel
+    };
+    const currentBest = bestByCategory[match.category];
+
+    if (!currentBest || compareSearchResults(summary, currentBest) < 0) {
+      bestByCategory[match.category] = summary;
+    }
+
+    insertBoundedSearchMatch(allTopMatches, match, resultLimitsByCategory.all);
+    insertBoundedSearchMatch(
+      topMatchesByCategory[match.category],
+      match,
+      resultLimitsByCategory[match.category]
+    );
+  };
+
+  index.accounts.forEach((item) => {
+      if (diagnostics) {
+        diagnostics.scanned.account += 1;
+      }
+      const scored = scoreSearchCandidate(intent.terms, item.candidate, searchLogicMode, {
+        includeHighlights: false
+      });
+
+      if (!scored) {
+        return;
+      }
+
+      const score = applySearchTypeAdjustment(scored.score, 'account');
+
+      if (!passesSearchThreshold(score)) {
+        return;
+      }
+
+      addMatch({
+        id: item.account.id,
+        category: 'account',
+        target: createAccountSearchTarget(item.group.id, item.account.id),
+        score,
+        index: item.index,
+        matchLabel: scored.matchLabel,
+        item,
+        scored
+      });
+  });
+
+  index.history.forEach((item) => {
+      if (diagnostics) {
+        diagnostics.scanned.history += 1;
+      }
+      const scored = scoreSearchCandidate(intent.terms, item.candidate, searchLogicMode, {
+        includeHighlights: false
+      });
+
+      if (!scored) {
+        return;
+      }
+
+      const score = applySearchTypeAdjustment(scored.score, 'history');
+
+      if (!passesSearchThreshold(score)) {
+        return;
+      }
+
+      addMatch({
+        id: item.record.id,
+        category: 'history',
+        target: createHistorySearchTarget(item.record.id),
+        score,
+        index: item.index,
+        matchLabel: scored.matchLabel,
+        item,
+        scored
+      });
+  });
+
+  index.snapshots.forEach((item) => {
+      if (diagnostics) {
+        diagnostics.scanned.snapshot += 1;
+      }
+      const scored = scoreSearchCandidate(intent.terms, item.candidate, searchLogicMode, {
+        includeHighlights: false
+      });
+
+      if (!scored) {
+        return;
+      }
+
+      const score = applySearchTypeAdjustment(scored.score, 'snapshot');
+
+      if (!passesSearchThreshold(score)) {
+        return;
+      }
+
+      addMatch({
+        id: item.record.id,
+        category: 'snapshot',
+        target: createSnapshotSearchTarget(item.record.id),
+        score,
+        index: item.index,
+        matchLabel: scored.matchLabel,
+        item,
+        scored
+      });
+  });
+
+  index.settings.forEach((item) => {
+      if (diagnostics) {
+        diagnostics.scanned.settings += 1;
+      }
+      const scored = scoreSearchCandidate(intent.terms, item.candidate, searchLogicMode, {
+        includeHighlights: false
+      });
+
+      if (!scored) {
+        return;
+      }
+
+      const score = applySearchTypeAdjustment(scored.score, 'settings');
+
+      if (!passesSearchThreshold(score)) {
+        return;
+      }
+
+      addMatch({
+        id: item.item.id,
+        category: 'settings',
+        target: createSettingsSearchTarget(item.item.id, item.item.section, item.item.blockId),
+        score,
+        index: item.index,
+        matchLabel: scored.matchLabel,
+        item,
+        scored
+      });
+  });
+
+  const hydrateMatch = (match: BoundedSearchMatch): GlobalSearchResult => {
+    const rescored = scoreSearchCandidate(
+      intent.terms,
+      match.item.candidate,
+      searchLogicMode
+    ) ?? match.scored;
+
+    switch (match.category) {
+      case 'account':
+        return createAccountResult(match.item, match.score, rescored, termCount);
+      case 'history':
+        return createHistoryResult(index, match.item, match.score, rescored, termCount);
+      case 'snapshot':
+        return createSnapshotResult(match.item, match.score, rescored, termCount);
+      case 'settings':
+        return createSettingsResult(match.item, match.score, rescored, termCount);
+    }
+  };
+  const hydratedResultsByTarget = new Map<string, GlobalSearchResult>();
+  [
+    ...allTopMatches,
+    ...topMatchesByCategory.account,
+    ...topMatchesByCategory.history,
+    ...topMatchesByCategory.snapshot,
+    ...topMatchesByCategory.settings
+  ].forEach((match) => {
+    if (!hydratedResultsByTarget.has(match.target.key)) {
+      hydratedResultsByTarget.set(match.target.key, hydrateMatch(match));
+    }
+  });
+  const getHydratedResults = (matches: BoundedSearchMatch[]) =>
+    matches.map((match) => hydratedResultsByTarget.get(match.target.key) as GlobalSearchResult);
+  const allResults = getHydratedResults(allTopMatches);
+  const accountResults = getHydratedResults(topMatchesByCategory.account).filter(
+    (result): result is AccountSearchResult => result.category === 'account'
+  );
+  const historyResults = getHydratedResults(topMatchesByCategory.history).filter(
+    (result): result is HistorySearchResult => result.category === 'history'
+  );
+  const snapshotResults = getHydratedResults(topMatchesByCategory.snapshot).filter(
+    (result): result is SnapshotSearchResult => result.category === 'snapshot'
+  );
+  const settingsResults = getHydratedResults(topMatchesByCategory.settings).filter(
+    (result): result is SettingsSearchResult => result.category === 'settings'
+  );
+  if (diagnostics) {
+    diagnostics.hydrated = hydratedResultsByTarget.size;
+  }
+  const counts = matchCounts;
+  const resultsByCategory = {
+    account: accountResults,
+    history: historyResults,
+    snapshot: snapshotResults,
+    settings: settingsResults
+  };
+
+  return {
+    intent,
+    query,
+    hasQuery: true,
+    searchLogicMode,
+    allResults,
+    accountResults,
+    historyResults,
+    snapshotResults,
+    settingsResults,
+    resultsByCategory,
+    counts: {
+      all: counts.account + counts.history + counts.snapshot + counts.settings,
+      ...counts
+    },
+    topScores: {
+      account: bestByCategory.account?.score ?? 0,
+      history: bestByCategory.history?.score ?? 0,
+      snapshot: bestByCategory.snapshot?.score ?? 0,
+      settings: bestByCategory.settings?.score ?? 0
+    },
+    bestCategory: allTopMatches[0]?.category ?? null,
+    focusTarget: allResults[0]?.target ?? null,
+    weakMode: false,
+    sortedResultIds: {
+      all: allResults.map((result) => result.id),
+      account: accountResults.map((result) => result.id),
+      history: historyResults.map((result) => result.id),
+      snapshot: snapshotResults.map((result) => result.id),
+      settings: settingsResults.map((result) => result.id)
+    },
+    strongNavigationTargets: [...hydratedResultsByTarget.values()]
+      .sort(compareSearchResults)
+      .filter((result) => result.matchLabel === 'hit')
+      .map((result) => result.target)
+  };
+};
+
 const runGlobalSearchCore = (
   index: SearchIndexedData,
   query: string,
   options: RunSearchOptions = {}
 ): GlobalSearchOutput => {
   const searchLogicMode = options.searchLogicMode ?? 'infer';
+  if (options.diagnostics) {
+    options.diagnostics.scanned.account = 0;
+    options.diagnostics.scanned.history = 0;
+    options.diagnostics.scanned.snapshot = 0;
+    options.diagnostics.scanned.settings = 0;
+    options.diagnostics.hydrated = 0;
+  }
   const intent = parseSearchIntent(query);
   const termCount = intent.terms.length;
 
@@ -597,6 +1141,17 @@ const runGlobalSearchCore = (
     };
   }
 
+  if (
+    options.resultLimitsByCategory ||
+    (
+      typeof options.resultLimit === 'number' &&
+      Number.isFinite(options.resultLimit) &&
+      options.resultLimit > 0
+    )
+  ) {
+    return runBoundedGlobalSearch(index, query, options, intent);
+  }
+
   const accountResults = makeScoredResults(
     index.accounts,
     (item, score, scored): AccountSearchResult => {
@@ -633,16 +1188,42 @@ const runGlobalSearchCore = (
   const historyResults = makeScoredResults(
     index.history,
     (item, score, scored): HistorySearchResult => {
-      const defaultValue = item.value;
+      const beforeAmount = item.record.beforeAmount ?? 0;
+      const afterAmount = item.record.afterAmount ?? 0;
+      const defaultValue = formatSearchSignedAmount(
+        afterAmount - beforeAmount,
+        index.formatters.formatCompactAmount
+      );
+      const amountDisplay: HistoryAmountDisplay = {
+        delta: defaultValue,
+        balanceBefore: formatSearchBalanceAmount(
+          item.record.beforeAmount,
+          item.preserveBalanceSign,
+          index.formatters.formatCompactAmount
+        ),
+        balanceAfter: formatSearchBalanceAmount(
+          item.record.afterAmount,
+          item.preserveBalanceSign,
+          index.formatters.formatCompactAmount
+        ),
+        balanceRange: getHistoryBalanceDisplayText(
+          item.record,
+          afterAmount,
+          item.preserveBalanceSign,
+          index.formatters.formatCompactAmount
+        )
+      };
       const matchedAmount = getHistoryMatchedAmount(
         item.record,
         scored.bestMatch,
-        item.amountDisplay,
+        amountDisplay,
         defaultValue
       );
       const display = {
-        title: item.title,
-        subtitle: item.subtitle,
+        title: `${item.record.groupName} - ${item.record.accountName}`,
+        subtitle: `${item.historyTypeLabel} · ${index.formatters.formatShortTime(
+          item.record.time
+        )}`,
         value: matchedAmount?.displayText ?? defaultValue
       };
 
@@ -786,6 +1367,57 @@ const runGlobalSearchCore = (
     strongNavigationTargets
   };
 };
+
+export const createEmptyGlobalSearchOutput = (
+  query = '',
+  searchLogicMode: SearchLogicMode = 'infer',
+  totals: SearchIndexedData['totals'] = {
+    account: 0,
+    history: 0,
+    snapshot: 0,
+    settings: 0
+  }
+): GlobalSearchOutput => ({
+  intent: parseSearchIntent(query),
+  query,
+  hasQuery: false,
+  searchLogicMode,
+  allResults: [],
+  accountResults: [],
+  historyResults: [],
+  snapshotResults: [],
+  settingsResults: [],
+  resultsByCategory: {
+    account: [],
+    history: [],
+    snapshot: [],
+    settings: []
+  },
+  counts: {
+    all: totals.account + totals.history + totals.snapshot + totals.settings,
+    account: totals.account,
+    history: totals.history,
+    snapshot: totals.snapshot,
+    settings: totals.settings
+  },
+  topScores: {
+    account: 0,
+    history: 0,
+    snapshot: 0,
+    settings: 0
+  },
+  bestCategory: null,
+  focusTarget: null,
+  weakMode: false,
+  sortedResultIds: {
+    all: [],
+    account: [],
+    history: [],
+    snapshot: [],
+    settings: []
+  },
+  strongNavigationTargets: []
+});
 
 export const runGlobalSearch = (
   index: SearchIndexedData,

@@ -367,15 +367,8 @@ export type SearchIndexedData = {
   history: Array<{
     record: HistoryRecord;
     candidate: SearchCandidate;
-    title: string;
-    subtitle: string;
-    value: string;
-    amountDisplay: {
-      delta: string;
-      balanceBefore: string;
-      balanceAfter: string;
-      balanceRange: string;
-    };
+    historyTypeLabel: string;
+    preserveBalanceSign: boolean;
     index: number;
   }>;
   snapshots: Array<{
@@ -395,6 +388,10 @@ export type SearchIndexedData = {
     index: number;
   }>;
   totals: Record<SearchResultCategory, number>;
+  formatters: {
+    formatShortTime: (time: string) => string;
+    formatCompactAmount: (amount: number, preserveNegativeSign?: boolean) => string;
+  };
 };
 
 export type GlobalSearchOutput = {
@@ -417,6 +414,8 @@ export type GlobalSearchOutput = {
   strongNavigationTargets: SearchNavigationTarget[];
 };
 
+export type SearchResultLimitsByCategory = Record<SearchCategory, number>;
+
 export type CreateSearchIndexOptions = {
   getAccountNatureLabel: (nature: AccountTypeNature) => string;
   getHistoryTypeLabel: (type: HistoryType) => string;
@@ -430,8 +429,13 @@ export type CreateSearchIndexOptions = {
 };
 
 export type RunSearchOptions = {
-  selectedCategory?: SearchCategory;
   searchLogicMode?: SearchLogicMode;
+  resultLimitsByCategory?: SearchResultLimitsByCategory;
+  resultLimit?: number;
+  diagnostics?: {
+    scanned: Record<SearchResultCategory, number>;
+    hydrated: number;
+  };
 };
 
 export const SEARCH_CATEGORY_TABS: SearchCategory[] = [
