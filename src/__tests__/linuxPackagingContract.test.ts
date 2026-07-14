@@ -171,3 +171,21 @@ test('Linux AppImage command rejects this non-Linux host without generating an a
   assert.notEqual(result.status, 0);
   assert.match(`${result.stdout}\n${result.stderr}`, /Linux AppImage packaging must run on a Linux x64 host/);
 });
+
+test('Linux artifact verification requires one explicit package mode', () => {
+  const verificationPath = path.join(rootDir, 'scripts', 'verify-linux-artifacts.mjs');
+  const verification = readFileSync(verificationPath, 'utf8');
+  assert.equal(verification.includes("['appimage', 'deb'].includes(args[1])"), true);
+  assert.equal(verification.includes("mode === 'appimage'"), true);
+  assert.equal(verification.includes('etc/apparmor.d/opt.NetraFlow.netraflow'), true);
+  assert.match(verification, /\^\(userdata\|runtime\|src\|electron/);
+
+  for (const args of [[], ['--mode', 'unknown']]) {
+    const result = spawnSync(process.execPath, ['scripts/verify-linux-artifacts.mjs', ...args], {
+      cwd: rootDir,
+      encoding: 'utf8'
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(`${result.stdout}\n${result.stderr}`, /requires --mode appimage or --mode deb/);
+  }
+});

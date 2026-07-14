@@ -1,7 +1,7 @@
 /// <reference types="node" />
 
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test, { type TestContext } from 'node:test';
@@ -45,12 +45,12 @@ const writeZip = (zipPath: string) => {
 
 const createInput = (root: string) => {
   const input = path.join(root, 'input');
-  for (const platform of ['windows', 'macos', 'linux']) mkdirSync(path.join(input, platform), { recursive: true });
+  for (const platform of ['windows', 'macos', 'linux-appimage', 'linux-deb']) mkdirSync(path.join(input, platform), { recursive: true });
   writeFileSync(path.join(input, 'windows', `NetraFlow_${version}_x64_Setup.exe`), 'installer');
   writeZip(path.join(input, 'windows', `NetraFlow_${version}_x64_Portable.zip`));
   writeFileSync(path.join(input, 'macos', `NetraFlow_${version}_arm64.dmg`), 'dmg');
-  writeFileSync(path.join(input, 'linux', `NetraFlow_${version}_x64.AppImage`), 'appimage');
-  writeFileSync(path.join(input, 'linux', `NetraFlow_${version}_x64.deb`), 'deb');
+  writeFileSync(path.join(input, 'linux-appimage', `NetraFlow_${version}_x64.AppImage`), 'appimage');
+  writeFileSync(path.join(input, 'linux-deb', `NetraFlow_${version}_x64.deb`), 'deb');
   return input;
 };
 
@@ -59,7 +59,7 @@ const createBundleFixture = async (t: TestContext) => {
   const root = rootFor(t);
   const input = createInput(root);
   const downloads = path.join(root, 'downloads');
-  for (const platform of ['windows', 'macos', 'linux']) {
+  for (const platform of ['windows', 'macos', 'linux-appimage', 'linux-deb']) {
     logic.collectPlatformReleaseArtifacts({ platform, inputDir: path.join(input, platform), outputDir: path.join(downloads, platform), version, tag, commit, minSizeBytes: 1 });
   }
   return { logic, root, downloads };
@@ -73,23 +73,38 @@ test('bundle verifier accepts exactly five matching platform artifacts', async (
   ]);
 });
 
-test('bundle verifier rejects missing extra and empty formal assets', async (t) => {
-  for (const mutation of ['missing', 'extra', 'empty']) {
+test('bundle verifier rejects either missing Linux manifest', async (t) => {
+  for (const platform of ['linux-appimage', 'linux-deb']) {
     const { logic, root, downloads } = await createBundleFixture(t);
-    if (mutation === 'missing') rmSync(path.join(downloads, 'linux', `NetraFlow_${version}_x64.deb`));
-    if (mutation === 'extra') writeFileSync(path.join(downloads, 'linux', 'NetraFlow_0.9.8_x64.deb'), 'extra');
-    if (mutation === 'empty') writeFileSync(path.join(downloads, 'linux', `NetraFlow_${version}_x64.deb`), '');
+    rmSync(path.join(downloads, platform, `manifest-${platform}.json`));
     assert.throws(() => logic.verifyAndCollectReleaseBundle({ inputDir: downloads, outputDir: path.join(root, 'bundle'), version, tag, commit, minSizeBytes: 1 }));
   }
 });
 
-test('bundle verifier rejects manifest version commit and SHA-256 mismatches', async (t) => {
-  for (const mutation of ['version', 'commit', 'sha256']) {
+test('bundle verifier rejects duplicate, extra, missing, and empty formal assets', async (t) => {
+  for (const mutation of ['duplicate', 'extra', 'missing', 'empty']) {
     const { logic, root, downloads } = await createBundleFixture(t);
-    const manifestPath = path.join(downloads, 'linux', 'manifest-linux.json');
+    const debPath = path.join(downloads, 'linux-deb', `NetraFlow_${version}_x64.deb`);
+    if (mutation === 'duplicate') {
+      mkdirSync(path.join(downloads, 'duplicate'));
+      copyFileSync(debPath, path.join(downloads, 'duplicate', path.basename(debPath)));
+    }
+    if (mutation === 'extra') writeFileSync(path.join(downloads, 'linux-deb', 'NetraFlow_0.9.8_x64.deb'), 'extra');
+    if (mutation === 'missing') rmSync(debPath);
+    if (mutation === 'empty') writeFileSync(debPath, '');
+    assert.throws(() => logic.verifyAndCollectReleaseBundle({ inputDir: downloads, outputDir: path.join(root, 'bundle'), version, tag, commit, minSizeBytes: 1 }));
+  }
+});
+
+test('bundle verifier rejects manifest version tag commit architecture and SHA-256 mismatches', async (t) => {
+  for (const mutation of ['version', 'tag', 'commit', 'architecture', 'sha256']) {
+    const { logic, root, downloads } = await createBundleFixture(t);
+    const manifestPath = path.join(downloads, 'linux-appimage', 'manifest-linux-appimage.json');
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
     if (mutation === 'version') manifest.version = '0.9.8';
+    if (mutation === 'tag') manifest.tag = 'v0.9.8';
     if (mutation === 'commit') manifest.commit = 'b'.repeat(40);
+    if (mutation === 'architecture') manifest.architecture = 'arm64';
     if (mutation === 'sha256') manifest.assets[0].sha256 = '0'.repeat(64);
     writeFileSync(manifestPath, JSON.stringify(manifest));
     assert.throws(() => logic.verifyAndCollectReleaseBundle({ inputDir: downloads, outputDir: path.join(root, 'bundle'), version, tag, commit, minSizeBytes: 1 }));
